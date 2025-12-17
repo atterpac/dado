@@ -1,0 +1,282 @@
+package layout
+
+import (
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	// TODO: Update import path when extracted to separate repo
+	"github.com/atterpac/jig/components"
+	"github.com/atterpac/jig/nav"
+	"github.com/atterpac/jig/theme"
+)
+
+// AppConfig configures the application layout.
+type AppConfig struct {
+	// TopBar is shown at the top (e.g., status bar). Can be nil.
+	TopBar tview.Primitive
+
+	// ShowCrumbs enables the breadcrumb bar below TopBar.
+	ShowCrumbs bool
+
+	// BottomBar is shown at the bottom (e.g., Menu). Can be nil.
+	BottomBar tview.Primitive
+
+	// TopBarHeight is the height of the top bar (default: 3).
+	TopBarHeight int
+
+	// BottomBarHeight is the height of the bottom bar (default: 1).
+	BottomBarHeight int
+
+	// OnComponentChange is called when the active component changes.
+	// Useful for updating menu hints, crumbs, etc.
+	OnComponentChange func(nav.Component)
+}
+
+// App is the application root that manages the overall layout.
+type App struct {
+	app      *tview.Application
+	main     *tview.Flex
+	topBar   tview.Primitive
+	crumbs   *nav.Crumbs
+	pages    *nav.Pages
+	menu     *Menu
+	config   AppConfig
+}
+
+// NewApp creates a new application with the given configuration.
+func NewApp(config AppConfig) *App {
+	// Apply defaults
+	if config.TopBarHeight == 0 {
+		config.TopBarHeight = 3
+	}
+	if config.BottomBarHeight == 0 {
+		config.BottomBarHeight = 1
+	}
+
+	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	mainFlex.SetBackgroundColor(theme.Bg())
+
+	a := &App{
+		app:    tview.NewApplication(),
+		main:   mainFlex,
+		pages:  nav.NewPages(),
+		config: config,
+	}
+
+	// Register main flex for automatic theme updates
+	theme.Register(mainFlex)
+
+	// Register with theme system
+	theme.SetApp(a.app)
+
+	// Build layout
+	a.buildLayout()
+
+	// Set up page change handler
+	a.pages.SetOnChange(func(c nav.Component) {
+		// Update menu hints
+		if a.menu != nil && c != nil {
+			a.menu.SetHints(c.Hints())
+		}
+
+		// Notify app
+		if a.config.OnComponentChange != nil {
+			a.config.OnComponentChange(c)
+		}
+	})
+
+	return a
+}
+
+// buildLayout constructs the layout structure.
+func (a *App) buildLayout() {
+	// Top bar
+	if a.config.TopBar != nil {
+		a.topBar = a.config.TopBar
+		a.main.AddItem(a.topBar, a.config.TopBarHeight, 0, false)
+	}
+
+	// Crumbs
+	if a.config.ShowCrumbs {
+		a.crumbs = nav.NewCrumbs()
+		a.main.AddItem(a.crumbs, 1, 0, false)
+	}
+
+	// Pages (main content area)
+	a.main.AddItem(a.pages, 0, 1, true)
+
+	// Bottom bar (menu)
+	if a.config.BottomBar != nil {
+		if menu, ok := a.config.BottomBar.(*Menu); ok {
+			a.menu = menu
+		}
+		a.main.AddItem(a.config.BottomBar, a.config.BottomBarHeight, 0, false)
+	}
+
+	a.app.SetRoot(a.main, true)
+}
+
+// Run starts the application event loop.
+func (a *App) Run() error {
+	return a.app.Run()
+}
+
+// Stop stops the application.
+func (a *App) Stop() {
+	a.app.Stop()
+}
+
+// Pages returns the page manager.
+func (a *App) Pages() *nav.Pages {
+	return a.pages
+}
+
+// Crumbs returns the breadcrumb component (nil if disabled).
+func (a *App) Crumbs() *nav.Crumbs {
+	return a.crumbs
+}
+
+// Menu returns the menu component (nil if no Menu in BottomBar).
+func (a *App) Menu() *Menu {
+	return a.menu
+}
+
+// TopBar returns the top bar primitive.
+func (a *App) TopBar() tview.Primitive {
+	return a.topBar
+}
+
+// SetTopBar replaces the top bar.
+func (a *App) SetTopBar(bar tview.Primitive) *App {
+	// Remove old top bar
+	if a.topBar != nil {
+		a.main.RemoveItem(a.topBar)
+	}
+
+	a.topBar = bar
+	a.config.TopBar = bar
+
+	// Rebuild layout
+	a.main.Clear()
+	a.buildLayout()
+
+	return a
+}
+
+// SetBottomBar replaces the bottom bar.
+func (a *App) SetBottomBar(bar tview.Primitive) *App {
+	// Remove old bottom bar
+	if a.config.BottomBar != nil {
+		a.main.RemoveItem(a.config.BottomBar)
+	}
+
+	a.config.BottomBar = bar
+	if menu, ok := bar.(*Menu); ok {
+		a.menu = menu
+	} else {
+		a.menu = nil
+	}
+
+	// Rebuild layout
+	a.main.Clear()
+	a.buildLayout()
+
+	return a
+}
+
+// GetApplication returns the underlying tview.Application.
+func (a *App) GetApplication() *tview.Application {
+	return a.app
+}
+
+// SetFocus sets focus to a specific primitive.
+func (a *App) SetFocus(p tview.Primitive) *App {
+	a.app.SetFocus(p)
+	return a
+}
+
+// QueueUpdate queues a function to run on the main thread.
+func (a *App) QueueUpdate(fn func()) *App {
+	a.app.QueueUpdate(fn)
+	return a
+}
+
+// QueueUpdateDraw queues a function to run and then redraws.
+func (a *App) QueueUpdateDraw(fn func()) *App {
+	a.app.QueueUpdateDraw(fn)
+	return a
+}
+
+// Draw triggers a redraw.
+func (a *App) Draw() *App {
+	a.app.Draw()
+	return a
+}
+
+// SetInputCapture sets a function to capture input before it reaches focused primitive.
+func (a *App) SetInputCapture(capture func(*tcell.EventKey) *tcell.EventKey) *App {
+	a.app.SetInputCapture(capture)
+	return a
+}
+
+// UpdateMenuHints updates the menu with hints from a component.
+func (a *App) UpdateMenuHints(hints []components.KeyHint) {
+	if a.menu != nil {
+		a.menu.SetHints(hints)
+	}
+}
+
+// ShowModal displays a modal over the current content.
+func (a *App) ShowModal(modal *components.Modal) {
+	a.pages.Push(&modalWrapper{modal: modal, app: a})
+}
+
+// RefreshTheme updates all components to use current theme colors.
+// Call this after changing themes to ensure backgrounds update.
+func (a *App) RefreshTheme() {
+	a.main.SetBackgroundColor(theme.Bg())
+}
+
+// Suspend temporarily suspends the application, executes the given function,
+// and then resumes the application. This is useful for running external commands
+// that need direct terminal access.
+func (a *App) Suspend(fn func()) bool {
+	return a.app.Suspend(fn)
+}
+
+// modalWrapper wraps a Modal to implement nav.Component.
+type modalWrapper struct {
+	modal *components.Modal
+	app   *App
+}
+
+func (m *modalWrapper) Start() {
+	// Set up close handler to pop
+	m.modal.SetOnClose(func() {
+		m.app.pages.Pop()
+	})
+}
+
+func (m *modalWrapper) Stop() {}
+
+func (m *modalWrapper) Hints() []components.KeyHint {
+	return []components.KeyHint{
+		{Key: "Esc", Description: "Close"},
+	}
+}
+
+func (m *modalWrapper) Draw(screen tcell.Screen)       { m.modal.Draw(screen) }
+func (m *modalWrapper) GetRect() (int, int, int, int)  { return m.modal.GetRect() }
+func (m *modalWrapper) SetRect(x, y, w, h int)         { m.modal.SetRect(x, y, w, h) }
+func (m *modalWrapper) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+	return m.modal.InputHandler()
+}
+func (m *modalWrapper) Focus(delegate func(tview.Primitive)) { m.modal.Focus(delegate) }
+func (m *modalWrapper) Blur()                                { m.modal.Blur() }
+func (m *modalWrapper) HasFocus() bool                       { return m.modal.HasFocus() }
+func (m *modalWrapper) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
+	return m.modal.MouseHandler()
+}
+func (m *modalWrapper) PasteHandler() func(string, func(tview.Primitive)) {
+	return m.modal.PasteHandler()
+}

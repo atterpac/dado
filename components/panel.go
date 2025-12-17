@@ -1,0 +1,167 @@
+package components
+
+import (
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	// TODO: Update import path when extracted to separate repo
+	"github.com/atterpac/jig/theme"
+)
+
+// Panel is a container with rounded borders and optional title.
+// It delegates focus and input handling to its content.
+type Panel struct {
+	*tview.Box
+	content    tview.Primitive
+	title      string
+	titleColor tcell.Color // 0 means use theme default (Accent)
+}
+
+// NewPanel creates a new Panel container.
+func NewPanel() *Panel {
+	box := tview.NewBox()
+	box.SetBackgroundColor(theme.Bg())
+
+	p := &Panel{
+		Box: box,
+	}
+
+	// Register for automatic theme updates
+	theme.Register(box)
+
+	return p
+}
+
+// SetContent sets the inner content primitive.
+func (p *Panel) SetContent(content tview.Primitive) *Panel {
+	p.content = content
+	return p
+}
+
+// SetTitle sets the title displayed in the top border.
+func (p *Panel) SetTitle(title string) *Panel {
+	p.title = title
+	return p
+}
+
+// SetTitleColor overrides the title color. Pass 0 to use theme default.
+func (p *Panel) SetTitleColor(color tcell.Color) *Panel {
+	p.titleColor = color
+	return p
+}
+
+// GetContent returns the inner content primitive.
+func (p *Panel) GetContent() tview.Primitive {
+	return p.content
+}
+
+// Draw renders the panel with rounded borders.
+func (p *Panel) Draw(screen tcell.Screen) {
+	p.Box.DrawForSubclass(screen, p)
+
+	x, y, width, height := p.GetInnerRect()
+	if width < 2 || height < 2 {
+		return
+	}
+
+	// Get colors from theme at draw time
+	bgColor := theme.Bg()
+	borderColor := theme.PanelBorder()
+	titleColor := p.titleColor
+	if titleColor == 0 {
+		titleColor = theme.PanelTitle()
+	}
+
+	style := tcell.StyleDefault.Background(bgColor).Foreground(borderColor)
+	titleStyle := tcell.StyleDefault.Background(bgColor).Foreground(titleColor)
+
+	// Draw corners
+	screen.SetContent(x, y, '╭', nil, style)
+	screen.SetContent(x+width-1, y, '╮', nil, style)
+	screen.SetContent(x, y+height-1, '╰', nil, style)
+	screen.SetContent(x+width-1, y+height-1, '╯', nil, style)
+
+	// Draw horizontal borders
+	for i := x + 1; i < x+width-1; i++ {
+		screen.SetContent(i, y, '─', nil, style)
+		screen.SetContent(i, y+height-1, '─', nil, style)
+	}
+
+	// Draw vertical borders
+	for i := y + 1; i < y+height-1; i++ {
+		screen.SetContent(x, i, '│', nil, style)
+		screen.SetContent(x+width-1, i, '│', nil, style)
+	}
+
+	// Draw title in top border if set
+	if p.title != "" {
+		titleText := " " + p.title + " "
+		titleRunes := []rune(titleText)
+		titleStart := x + (width-len(titleRunes))/2
+
+		for i, r := range titleRunes {
+			if titleStart+i > x && titleStart+i < x+width-1 {
+				screen.SetContent(titleStart+i, y, r, nil, titleStyle)
+			}
+		}
+	}
+
+	// Fill background
+	bgStyle := tcell.StyleDefault.Background(bgColor)
+	for row := y + 1; row < y+height-1; row++ {
+		for col := x + 1; col < x+width-1; col++ {
+			screen.SetContent(col, row, ' ', nil, bgStyle)
+		}
+	}
+
+	// Draw content inside border
+	if p.content != nil {
+		p.content.SetRect(x+1, y+1, width-2, height-2)
+		p.content.Draw(screen)
+	}
+}
+
+// Focus delegates to content.
+func (p *Panel) Focus(delegate func(tview.Primitive)) {
+	if p.content != nil {
+		delegate(p.content)
+	}
+}
+
+// Blur delegates to content.
+func (p *Panel) Blur() {
+	if p.content != nil {
+		p.content.Blur()
+	}
+}
+
+// HasFocus delegates to content.
+func (p *Panel) HasFocus() bool {
+	if p.content != nil {
+		return p.content.HasFocus()
+	}
+	return false
+}
+
+// InputHandler delegates to content.
+func (p *Panel) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		if p.content != nil {
+			if handler := p.content.InputHandler(); handler != nil {
+				handler(event, setFocus)
+			}
+		}
+	})
+}
+
+// MouseHandler delegates to content.
+func (p *Panel) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
+	return p.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
+		if p.content != nil {
+			if handler := p.content.MouseHandler(); handler != nil {
+				return handler(action, event, setFocus)
+			}
+		}
+		return false, nil
+	})
+}
