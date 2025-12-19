@@ -274,8 +274,8 @@ func (t *Tree) Draw(screen tcell.Screen) {
 	bgColor := theme.Bg()
 	fgColor := theme.Fg()
 	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	highlightColor := theme.Highlight()
+	selectionBg := theme.SelectionBg()
+	selectionFg := theme.SelectionFg()
 
 	// Ensure selected index is valid
 	if t.selectedIndex >= len(t.flatNodes) {
@@ -301,9 +301,9 @@ func (t *Tree) Draw(screen tcell.Screen) {
 		// Determine style
 		style := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 		if t.offset+i == t.selectedIndex {
-			style = style.Background(accentColor).Foreground(bgColor)
+			style = style.Background(selectionBg).Foreground(selectionFg).Bold(true)
 		} else if t.selected[node] {
-			style = style.Background(highlightColor).Foreground(bgColor)
+			style = style.Background(selectionBg).Foreground(selectionFg)
 		}
 
 		// Clear row
@@ -361,7 +361,7 @@ func (t *Tree) Draw(screen tcell.Screen) {
 			if col < x+width {
 				iconStyle := lineStyle
 				if t.offset+i != t.selectedIndex && !t.selected[node] {
-					iconStyle = tcell.StyleDefault.Background(bgColor).Foreground(accentColor)
+					iconStyle = tcell.StyleDefault.Background(bgColor).Foreground(theme.Accent())
 				}
 				screen.SetContent(col, rowY, r, nil, iconStyle)
 				col++
