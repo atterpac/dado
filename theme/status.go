@@ -6,10 +6,14 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// ColorFunc is a function that returns a color dynamically from the current theme.
+type ColorFunc func() tcell.Color
+
 // StatusStyle defines visual appearance for a named status.
 type StatusStyle struct {
-	Color tcell.Color
-	Icon  string
+	Color     tcell.Color // Static color (used if ColorFunc is nil)
+	ColorFunc ColorFunc   // Dynamic color getter (takes precedence over Color)
+	Icon      string
 }
 
 var (
@@ -25,15 +29,33 @@ func RegisterStatus(name string, style StatusStyle) {
 	statusRegistry[name] = style
 }
 
+// RegisterStatusDynamic adds a named status with a dynamic color that updates with theme changes.
+func RegisterStatusDynamic(name string, colorFunc ColorFunc, icon string) {
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	statusRegistry[name] = StatusStyle{
+		ColorFunc: colorFunc,
+		Icon:      icon,
+	}
+}
+
 // StatusColor returns the color for a status name.
-// Returns FgDim() if status not found.
+// Returns a dim gray color if status not found (avoids theme lock for fallback).
 func StatusColor(name string) tcell.Color {
 	statusMu.RLock()
-	defer statusMu.RUnlock()
-	if style, ok := statusRegistry[name]; ok {
+	style, ok := statusRegistry[name]
+	statusMu.RUnlock()
+
+	if ok {
+		// Use dynamic color if available (call outside lock to avoid deadlock)
+		if style.ColorFunc != nil {
+			return style.ColorFunc()
+		}
 		return style.Color
 	}
-	return FgDim()
+	// Use direct color constant to avoid any potential lock contention
+	// when theme is being changed during status color lookup
+	return tcell.ColorGray
 }
 
 // StatusColorTag returns hex color for tview tags.

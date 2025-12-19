@@ -2,6 +2,7 @@ package theme
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -48,9 +49,17 @@ type Primitive interface {
 	SetBackgroundColor(tcell.Color) *tview.Box
 }
 
+// themeHolder wraps Theme interface for atomic.Value storage.
+// atomic.Value requires consistent concrete types - this wrapper ensures
+// we always store *themeHolder regardless of the underlying Theme implementation.
+type themeHolder struct {
+	theme Theme
+}
+
 var (
-	activeTheme Theme
-	themeMu     sync.RWMutex
+	// Use atomic.Value for lock-free theme reads to prevent deadlocks
+	// during Draw() cycles when SetProvider() is called from callbacks
+	activeTheme atomic.Value // stores *themeHolder
 
 	appInstance *tview.Application
 	appMu       sync.RWMutex
@@ -58,20 +67,28 @@ var (
 	// Registry of primitives that need background updates on theme change
 	registeredPrimitives []Primitive
 	primitivesMu         sync.RWMutex
+
+	// Callbacks to notify when theme changes
+	themeChangeCallbacks []func()
+	callbacksMu          sync.RWMutex
 )
 
 // SetProvider sets the active theme provider and updates tview global styles.
-// Also updates all registered primitives' background colors.
+// Also updates all registered primitives' background colors and notifies callbacks.
+// This function is safe to call from any goroutine including during Draw() cycles.
 func SetProvider(t Theme) {
-	themeMu.Lock()
-	activeTheme = t
-	themeMu.Unlock()
+	// Store theme atomically - lock-free for readers
+	// Wrap in themeHolder to ensure consistent concrete type for atomic.Value
+	activeTheme.Store(&themeHolder{theme: t})
 
 	// Update tview global styles for components using tcell.ColorDefault
 	applyGlobalStyles(t)
 
 	// Update all registered primitives' backgrounds
 	updateRegisteredPrimitives(t)
+
+	// Notify theme change callbacks
+	notifyThemeChange()
 }
 
 // applyGlobalStyles updates tview.Styles from the theme.
@@ -126,12 +143,13 @@ func Unregister(p Primitive) {
 	}
 }
 
-// Get returns the current theme (thread-safe).
+// Get returns the current theme (thread-safe, lock-free).
 // Returns nil if no theme has been set.
 func Get() Theme {
-	themeMu.RLock()
-	defer themeMu.RUnlock()
-	return activeTheme
+	if holder := activeTheme.Load(); holder != nil {
+		return holder.(*themeHolder).theme
+	}
+	return nil
 }
 
 // SetApp registers the tview application for queue operations.
@@ -173,6 +191,39 @@ func QueueUpdateDraw(fn func()) {
 	if app != nil {
 		app.QueueUpdateDraw(fn)
 	} else {
+		fn()
+	}
+}
+
+// OnThemeChange registers a callback to be called when the theme changes.
+// Returns an unregister function to remove the callback.
+func OnThemeChange(fn func()) func() {
+	callbacksMu.Lock()
+	defer callbacksMu.Unlock()
+	themeChangeCallbacks = append(themeChangeCallbacks, fn)
+
+	// Return unregister function
+	return func() {
+		callbacksMu.Lock()
+		defer callbacksMu.Unlock()
+		for i, cb := range themeChangeCallbacks {
+			// Compare function pointers (this works for the same function reference)
+			if &cb == &fn {
+				themeChangeCallbacks = append(themeChangeCallbacks[:i], themeChangeCallbacks[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// notifyThemeChange calls all registered theme change callbacks.
+func notifyThemeChange() {
+	callbacksMu.RLock()
+	callbacks := make([]func(), len(themeChangeCallbacks))
+	copy(callbacks, themeChangeCallbacks)
+	callbacksMu.RUnlock()
+
+	for _, fn := range callbacks {
 		fn()
 	}
 }
