@@ -1,0 +1,676 @@
+package components
+
+import (
+	"sync"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+
+	"github.com/atterpac/jig/theme"
+)
+
+// VirtualListItem represents a single item in the list
+type VirtualListItem struct {
+	ID     string // Unique identifier
+	Data   any    // User data
+	Height int    // Item height in rows (default 1)
+}
+
+// FetchFunc loads items on demand
+// - start: index of first item to load
+// - count: number of items to load
+// Returns the items and total count
+type FetchFunc func(start, count int) (items []VirtualListItem, total int)
+
+// RenderFunc renders a single item
+// - index: item index in the list
+// - item: the item data
+// - width: available width
+// - selected: whether this item is selected
+// Returns the string to display
+type RenderFunc func(index int, item VirtualListItem, width int, selected bool) string
+
+// VirtualList efficiently renders large lists using virtualization
+type VirtualList struct {
+	*tview.Box
+
+	// Data
+	items      []VirtualListItem
+	totalCount int
+	fetchFunc  FetchFunc
+	renderFunc RenderFunc
+
+	// State
+	selectedIndex int
+	offset        int // Scroll offset (first visible item)
+
+	// Cache
+	cache      map[int]*VirtualListItem
+	cacheStart int
+	cacheEnd   int
+	cacheMu    sync.RWMutex
+
+	// Options
+	overscan          int  // Items to render outside visible area
+	showScrollbar     bool
+	showIndex         bool
+	defaultItemHeight int
+	pageSize          int // Items per page for PgUp/PgDn (0 = visible height)
+
+	// Callbacks
+	onSelect    func(index int, item VirtualListItem)
+	onChange    func(index int, item VirtualListItem)
+	onScrollEnd func()
+}
+
+// NewVirtualList creates a new virtual list component
+func NewVirtualList() *VirtualList {
+	return &VirtualList{
+		Box:               tview.NewBox(),
+		cache:             make(map[int]*VirtualListItem),
+		overscan:          5,
+		showScrollbar:     true,
+		defaultItemHeight: 1,
+	}
+}
+
+// SetItems sets all items directly (for smaller lists)
+func (v *VirtualList) SetItems(items []VirtualListItem) *VirtualList {
+	v.items = items
+	v.totalCount = len(items)
+	v.fetchFunc = nil
+	v.clearCache()
+	return v
+}
+
+// SetTotalCount sets the total number of items (for lazy loading)
+func (v *VirtualList) SetTotalCount(count int) *VirtualList {
+	v.totalCount = count
+	return v
+}
+
+// SetFetchFunc sets the lazy loading function
+func (v *VirtualList) SetFetchFunc(fn FetchFunc) *VirtualList {
+	v.fetchFunc = fn
+	v.items = nil // Clear static items when using fetch
+	v.clearCache()
+	return v
+}
+
+// SetRenderFunc sets the custom render function
+func (v *VirtualList) SetRenderFunc(fn RenderFunc) *VirtualList {
+	v.renderFunc = fn
+	return v
+}
+
+// SetDefaultItemHeight sets height for items (default 1)
+func (v *VirtualList) SetDefaultItemHeight(height int) *VirtualList {
+	v.defaultItemHeight = height
+	return v
+}
+
+// SetShowScrollbar enables/disables scrollbar
+func (v *VirtualList) SetShowScrollbar(show bool) *VirtualList {
+	v.showScrollbar = show
+	return v
+}
+
+// SetShowIndex shows item index/number
+func (v *VirtualList) SetShowIndex(show bool) *VirtualList {
+	v.showIndex = show
+	return v
+}
+
+// SetOverscan sets how many items to render outside visible area
+func (v *VirtualList) SetOverscan(count int) *VirtualList {
+	v.overscan = count
+	return v
+}
+
+// SetPageSize sets items per page for PgUp/PgDn
+func (v *VirtualList) SetPageSize(size int) *VirtualList {
+	v.pageSize = size
+	return v
+}
+
+// SetOnSelect is called when Enter is pressed on an item
+func (v *VirtualList) SetOnSelect(fn func(index int, item VirtualListItem)) *VirtualList {
+	v.onSelect = fn
+	return v
+}
+
+// SetOnChange is called when selection changes
+func (v *VirtualList) SetOnChange(fn func(index int, item VirtualListItem)) *VirtualList {
+	v.onChange = fn
+	return v
+}
+
+// SetOnScrollEnd is called when scrolled to the end
+func (v *VirtualList) SetOnScrollEnd(fn func()) *VirtualList {
+	v.onScrollEnd = fn
+	return v
+}
+
+// GetSelectedIndex returns the currently selected index
+func (v *VirtualList) GetSelectedIndex() int {
+	return v.selectedIndex
+}
+
+// GetSelectedItem returns the currently selected item
+func (v *VirtualList) GetSelectedItem() *VirtualListItem {
+	return v.getItem(v.selectedIndex)
+}
+
+// SetSelectedIndex sets selection by index
+func (v *VirtualList) SetSelectedIndex(index int) *VirtualList {
+	if index >= 0 && index < v.totalCount {
+		v.selectedIndex = index
+		v.ensureVisible()
+		v.triggerOnChange()
+	}
+	return v
+}
+
+// SetSelectedID sets selection by item ID
+func (v *VirtualList) SetSelectedID(id string) *VirtualList {
+	for i := 0; i < v.totalCount; i++ {
+		item := v.getItem(i)
+		if item != nil && item.ID == id {
+			v.selectedIndex = i
+			v.ensureVisible()
+			v.triggerOnChange()
+			break
+		}
+	}
+	return v
+}
+
+// ScrollTo scrolls to show a specific index
+func (v *VirtualList) ScrollTo(index int) {
+	if index < 0 {
+		index = 0
+	}
+	if index >= v.totalCount {
+		index = v.totalCount - 1
+	}
+	v.offset = index
+}
+
+// ScrollToTop scrolls to the first item
+func (v *VirtualList) ScrollToTop() {
+	v.offset = 0
+	v.selectedIndex = 0
+	v.triggerOnChange()
+}
+
+// ScrollToBottom scrolls to the last item
+func (v *VirtualList) ScrollToBottom() {
+	_, _, _, height := v.GetInnerRect()
+	if height <= 0 {
+		height = 20
+	}
+	if v.totalCount > height {
+		v.offset = v.totalCount - height
+	}
+	v.selectedIndex = v.totalCount - 1
+	v.triggerOnChange()
+}
+
+// GetItem returns item at index (may trigger fetch)
+func (v *VirtualList) GetItem(index int) *VirtualListItem {
+	return v.getItem(index)
+}
+
+// GetVisibleRange returns currently visible index range
+func (v *VirtualList) GetVisibleRange() (start, end int) {
+	_, _, _, height := v.GetInnerRect()
+	start = v.offset
+	end = v.offset + height
+	if end > v.totalCount {
+		end = v.totalCount
+	}
+	return
+}
+
+// GetTotalCount returns total number of items
+func (v *VirtualList) GetTotalCount() int {
+	return v.totalCount
+}
+
+// Refresh re-fetches visible items and redraws
+func (v *VirtualList) Refresh() {
+	v.clearCache()
+}
+
+// Clear removes all items
+func (v *VirtualList) Clear() {
+	v.items = nil
+	v.totalCount = 0
+	v.selectedIndex = 0
+	v.offset = 0
+	v.clearCache()
+}
+
+func (v *VirtualList) clearCache() {
+	v.cacheMu.Lock()
+	v.cache = make(map[int]*VirtualListItem)
+	v.cacheStart = 0
+	v.cacheEnd = 0
+	v.cacheMu.Unlock()
+}
+
+func (v *VirtualList) getItem(index int) *VirtualListItem {
+	if index < 0 || index >= v.totalCount {
+		return nil
+	}
+
+	// Static items
+	if v.items != nil && index < len(v.items) {
+		return &v.items[index]
+	}
+
+	// Check cache
+	v.cacheMu.RLock()
+	if item, ok := v.cache[index]; ok {
+		v.cacheMu.RUnlock()
+		return item
+	}
+	v.cacheMu.RUnlock()
+
+	// Fetch if function available
+	if v.fetchFunc != nil {
+		// Fetch a batch around the requested index
+		batchSize := 50
+		start := index - batchSize/2
+		if start < 0 {
+			start = 0
+		}
+
+		items, total := v.fetchFunc(start, batchSize)
+		if total > 0 {
+			v.totalCount = total
+		}
+
+		v.cacheMu.Lock()
+		for i, item := range items {
+			itemCopy := item
+			v.cache[start+i] = &itemCopy
+		}
+		v.cacheMu.Unlock()
+
+		// Return the requested item
+		v.cacheMu.RLock()
+		item := v.cache[index]
+		v.cacheMu.RUnlock()
+		return item
+	}
+
+	return nil
+}
+
+func (v *VirtualList) ensureVisible() {
+	_, _, _, height := v.GetInnerRect()
+	if height <= 0 {
+		return
+	}
+
+	if v.selectedIndex < v.offset {
+		v.offset = v.selectedIndex
+	}
+	if v.selectedIndex >= v.offset+height {
+		v.offset = v.selectedIndex - height + 1
+	}
+}
+
+func (v *VirtualList) triggerOnChange() {
+	if v.onChange != nil {
+		item := v.getItem(v.selectedIndex)
+		if item != nil {
+			v.onChange(v.selectedIndex, *item)
+		}
+	}
+}
+
+// Draw renders the virtual list
+func (v *VirtualList) Draw(screen tcell.Screen) {
+	v.Box.DrawForSubclass(screen, v)
+	x, y, width, height := v.GetInnerRect()
+
+	if width <= 0 || height <= 0 || v.totalCount == 0 {
+		return
+	}
+
+	// Colors (read at draw time per jig rules)
+	bgColor := theme.Bg()
+	fgColor := theme.Fg()
+	fgDimColor := theme.FgDim()
+	accentColor := theme.Accent()
+
+	// Reserve space for scrollbar
+	contentWidth := width
+	if v.showScrollbar && v.totalCount > height {
+		contentWidth--
+	}
+
+	// Ensure selection is visible
+	v.ensureVisible()
+
+	// Pre-fetch items in visible range + overscan
+	startFetch := v.offset - v.overscan
+	if startFetch < 0 {
+		startFetch = 0
+	}
+	endFetch := v.offset + height + v.overscan
+	if endFetch > v.totalCount {
+		endFetch = v.totalCount
+	}
+
+	// Pre-load items
+	for i := startFetch; i < endFetch; i++ {
+		v.getItem(i)
+	}
+
+	// Index column width
+	indexWidth := 0
+	if v.showIndex {
+		indexWidth = len(string(rune(v.totalCount))) + 2 // "123 "
+		if indexWidth < 4 {
+			indexWidth = 4
+		}
+	}
+
+	// Draw visible items
+	for i := 0; i < height && v.offset+i < v.totalCount; i++ {
+		index := v.offset + i
+		item := v.getItem(index)
+		rowY := y + i
+		isSelected := index == v.selectedIndex
+
+		// Determine row style
+		rowStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
+		if isSelected {
+			rowStyle = tcell.StyleDefault.Background(accentColor).Foreground(bgColor)
+		}
+
+		// Clear row
+		for col := x; col < x+contentWidth; col++ {
+			screen.SetContent(col, rowY, ' ', nil, rowStyle)
+		}
+
+		col := x
+
+		// Draw index
+		if v.showIndex {
+			indexStyle := rowStyle
+			if !isSelected {
+				indexStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
+			}
+			indexStr := padLeft(itoa(index+1), indexWidth-1) + " "
+			for _, ch := range indexStr {
+				if col < x+contentWidth {
+					screen.SetContent(col, rowY, ch, nil, indexStyle)
+					col++
+				}
+			}
+		}
+
+		// Render item content
+		if item != nil {
+			var text string
+			if v.renderFunc != nil {
+				text = v.renderFunc(index, *item, contentWidth-indexWidth, isSelected)
+			} else {
+				// Default render: show ID or data
+				if item.ID != "" {
+					text = item.ID
+				} else if item.Data != nil {
+					text = toString(item.Data)
+				}
+			}
+
+			for _, ch := range text {
+				if col < x+contentWidth {
+					screen.SetContent(col, rowY, ch, nil, rowStyle)
+					col++
+				}
+			}
+		}
+	}
+
+	// Draw scrollbar
+	if v.showScrollbar && v.totalCount > height {
+		v.drawScrollbar(screen, x+width-1, y, height)
+	}
+
+	// Check if scrolled to end
+	if v.offset+height >= v.totalCount && v.onScrollEnd != nil {
+		v.onScrollEnd()
+	}
+}
+
+func (v *VirtualList) drawScrollbar(screen tcell.Screen, x, y, height int) {
+	bgColor := theme.BgLight()
+	thumbColor := theme.FgDim()
+
+	// Calculate thumb size and position
+	thumbSize := height * height / v.totalCount
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > height {
+		thumbSize = height
+	}
+
+	thumbPos := 0
+	if v.totalCount > height {
+		thumbPos = v.offset * (height - thumbSize) / (v.totalCount - height)
+	}
+
+	// Draw track
+	trackStyle := tcell.StyleDefault.Background(bgColor)
+	for i := 0; i < height; i++ {
+		screen.SetContent(x, y+i, ' ', nil, trackStyle)
+	}
+
+	// Draw thumb
+	thumbStyle := tcell.StyleDefault.Background(thumbColor)
+	for i := 0; i < thumbSize; i++ {
+		if thumbPos+i < height {
+			screen.SetContent(x, y+thumbPos+i, ' ', nil, thumbStyle)
+		}
+	}
+}
+
+// InputHandler handles keyboard input
+func (v *VirtualList) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+	return v.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		if v.totalCount == 0 {
+			return
+		}
+
+		prevIndex := v.selectedIndex
+
+		switch event.Key() {
+		case tcell.KeyDown:
+			v.moveDown()
+		case tcell.KeyUp:
+			v.moveUp()
+		case tcell.KeyHome:
+			v.selectedIndex = 0
+			v.ensureVisible()
+		case tcell.KeyEnd:
+			v.selectedIndex = v.totalCount - 1
+			v.ensureVisible()
+		case tcell.KeyPgDn:
+			v.pageDown()
+		case tcell.KeyPgUp:
+			v.pageUp()
+		case tcell.KeyEnter:
+			if v.onSelect != nil {
+				item := v.getItem(v.selectedIndex)
+				if item != nil {
+					v.onSelect(v.selectedIndex, *item)
+				}
+			}
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'j':
+				v.moveDown()
+			case 'k':
+				v.moveUp()
+			case 'g':
+				v.selectedIndex = 0
+				v.ensureVisible()
+			case 'G':
+				v.selectedIndex = v.totalCount - 1
+				v.ensureVisible()
+			}
+		case tcell.KeyCtrlD:
+			v.halfPageDown()
+		case tcell.KeyCtrlU:
+			v.halfPageUp()
+		}
+
+		if v.selectedIndex != prevIndex {
+			v.triggerOnChange()
+		}
+	})
+}
+
+func (v *VirtualList) moveDown() {
+	if v.selectedIndex < v.totalCount-1 {
+		v.selectedIndex++
+		v.ensureVisible()
+	}
+}
+
+func (v *VirtualList) moveUp() {
+	if v.selectedIndex > 0 {
+		v.selectedIndex--
+		v.ensureVisible()
+	}
+}
+
+func (v *VirtualList) pageDown() {
+	_, _, _, height := v.GetInnerRect()
+	pageSize := v.pageSize
+	if pageSize <= 0 {
+		pageSize = height
+	}
+	v.selectedIndex += pageSize
+	if v.selectedIndex >= v.totalCount {
+		v.selectedIndex = v.totalCount - 1
+	}
+	v.ensureVisible()
+}
+
+func (v *VirtualList) pageUp() {
+	_, _, _, height := v.GetInnerRect()
+	pageSize := v.pageSize
+	if pageSize <= 0 {
+		pageSize = height
+	}
+	v.selectedIndex -= pageSize
+	if v.selectedIndex < 0 {
+		v.selectedIndex = 0
+	}
+	v.ensureVisible()
+}
+
+func (v *VirtualList) halfPageDown() {
+	_, _, _, height := v.GetInnerRect()
+	v.selectedIndex += height / 2
+	if v.selectedIndex >= v.totalCount {
+		v.selectedIndex = v.totalCount - 1
+	}
+	v.ensureVisible()
+}
+
+func (v *VirtualList) halfPageUp() {
+	_, _, _, height := v.GetInnerRect()
+	v.selectedIndex -= height / 2
+	if v.selectedIndex < 0 {
+		v.selectedIndex = 0
+	}
+	v.ensureVisible()
+}
+
+// MouseHandler handles mouse input
+func (v *VirtualList) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
+	return v.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
+		_, y, _, _ := v.GetInnerRect()
+		mx, my := event.Position()
+
+		if !v.InRect(mx, my) {
+			return false, nil
+		}
+
+		switch action {
+		case tview.MouseLeftClick:
+			setFocus(v)
+			clickedIndex := v.offset + (my - y)
+			if clickedIndex >= 0 && clickedIndex < v.totalCount {
+				prevIndex := v.selectedIndex
+				v.selectedIndex = clickedIndex
+				if v.selectedIndex != prevIndex {
+					v.triggerOnChange()
+				}
+				return true, v
+			}
+		case tview.MouseLeftDoubleClick:
+			clickedIndex := v.offset + (my - y)
+			if clickedIndex >= 0 && clickedIndex < v.totalCount {
+				v.selectedIndex = clickedIndex
+				if v.onSelect != nil {
+					item := v.getItem(clickedIndex)
+					if item != nil {
+						v.onSelect(clickedIndex, *item)
+					}
+				}
+				return true, v
+			}
+		case tview.MouseScrollUp:
+			if v.offset > 0 {
+				v.offset--
+			}
+			return true, v
+		case tview.MouseScrollDown:
+			_, _, _, height := v.GetInnerRect()
+			if v.offset < v.totalCount-height {
+				v.offset++
+			}
+			return true, v
+		}
+
+		return false, nil
+	})
+}
+
+// Focus handles focus
+func (v *VirtualList) Focus(delegate func(tview.Primitive)) {
+	v.Box.Focus(delegate)
+}
+
+// HasFocus returns whether the component has focus
+func (v *VirtualList) HasFocus() bool {
+	return v.Box.HasFocus()
+}
+
+// Helper functions
+
+func padLeft(s string, length int) string {
+	for len(s) < length {
+		s = " " + s
+	}
+	return s
+}
+
+func toString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if s, ok := v.(interface{ String() string }); ok {
+		return s.String()
+	}
+	return ""
+}
