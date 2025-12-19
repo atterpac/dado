@@ -7,41 +7,24 @@ import (
 
 // ThemeSelectorModal displays a modal for selecting themes with live preview.
 type ThemeSelectorModal struct {
-	*tview.Flex
+	*tview.Box
 	table         *tview.Table
 	themes        []string
 	originalTheme string
 	currentIdx    int
 	onSelect      func(name string)
 	onCancel      func()
-	onPreview     func(name string) // Called when navigating for live preview
-	// Internal components for theme updates
-	innerFlex *tview.Flex
-	centerRow *tview.Flex
-	title     *tview.TextView
-	hints     *tview.TextView
+	onPreview     func(name string)
 }
 
 // NewThemeSelectorModal creates a new theme selector modal.
-// The themes parameter should be the list of available theme names (e.g., from themes.Names()).
-// The currentTheme parameter is the name of the currently active theme.
 func NewThemeSelectorModal(themes []string, currentTheme string) *ThemeSelectorModal {
-	flex := tview.NewFlex()
-	flex.SetBackgroundColor(Bg())
-	table := tview.NewTable()
-	table.SetBackgroundColor(Bg())
-
 	tsm := &ThemeSelectorModal{
-		Flex:          flex,
-		table:         table,
+		Box:           tview.NewBox(),
+		table:         tview.NewTable(),
 		themes:        themes,
 		originalTheme: currentTheme,
 	}
-
-	// Register for automatic theme updates
-	Register(flex)
-	Register(table)
-
 	tsm.setup()
 	return tsm
 }
@@ -59,7 +42,6 @@ func (tsm *ThemeSelectorModal) SetOnCancel(fn func()) *ThemeSelectorModal {
 }
 
 // SetOnPreview sets the callback for live theme preview during navigation.
-// This is called whenever the selection changes (j/k navigation).
 func (tsm *ThemeSelectorModal) SetOnPreview(fn func(name string)) *ThemeSelectorModal {
 	tsm.onPreview = fn
 	return tsm
@@ -67,12 +49,8 @@ func (tsm *ThemeSelectorModal) SetOnPreview(fn func(name string)) *ThemeSelector
 
 func (tsm *ThemeSelectorModal) setup() {
 	// Configure table
-	tsm.table.SetBackgroundColor(tcell.ColorDefault)
 	tsm.table.SetSelectable(true, false)
-	tsm.table.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(Fg()).
-		Background(Highlight()).
-		Bold(true))
+	tsm.table.SetSelectedStyle(SelectionStyle())
 
 	// Populate table
 	tsm.rebuildTable()
@@ -90,7 +68,6 @@ func (tsm *ThemeSelectorModal) setup() {
 	tsm.table.SetSelectionChangedFunc(func(row, col int) {
 		if row >= 0 && row < len(tsm.themes) {
 			tsm.currentIdx = row
-			// Trigger live preview
 			if tsm.onPreview != nil {
 				tsm.onPreview(tsm.themes[row])
 			}
@@ -106,85 +83,6 @@ func (tsm *ThemeSelectorModal) setup() {
 			}
 		}
 	})
-
-	// Input capture for navigation
-	tsm.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEscape:
-			tsm.restoreAndCancel()
-			return nil
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				tsm.moveDown()
-				return nil
-			case 'k':
-				tsm.moveUp()
-				return nil
-			case 'q':
-				tsm.restoreAndCancel()
-				return nil
-			}
-		}
-		return event
-	})
-
-	// Build modal layout
-	tsm.buildLayout()
-}
-
-func (tsm *ThemeSelectorModal) buildLayout() {
-	// Calculate dimensions
-	height := len(tsm.themes) + 4 // +4 for border and hints
-	if height < 10 {
-		height = 10
-	}
-	if height > 20 {
-		height = 20
-	}
-	width := 40
-
-	bg := Bg()
-
-	// Title bar
-	tsm.title = tview.NewTextView().
-		SetText(" Select Theme ").
-		SetTextAlign(tview.AlignCenter).
-		SetDynamicColors(true)
-	tsm.title.SetBackgroundColor(bg)
-
-	// Hints bar
-	tsm.hints = tview.NewTextView().
-		SetText(" j/k:Navigate  Enter:Select  Esc:Cancel ").
-		SetTextAlign(tview.AlignCenter).
-		SetDynamicColors(true)
-	tsm.hints.SetBackgroundColor(bg)
-
-	// Inner content
-	tsm.innerFlex = tview.NewFlex().SetDirection(tview.FlexRow)
-	tsm.innerFlex.SetBackgroundColor(bg)
-	tsm.innerFlex.AddItem(tsm.title, 1, 0, false)
-	tsm.innerFlex.AddItem(tsm.table, 0, 1, true)
-	tsm.innerFlex.AddItem(tsm.hints, 1, 0, false)
-
-	// Center the modal
-	tsm.Flex.SetDirection(tview.FlexRow)
-	tsm.Flex.AddItem(nil, 0, 1, false) // Top spacer
-
-	tsm.centerRow = tview.NewFlex().SetDirection(tview.FlexColumn)
-	tsm.centerRow.SetBackgroundColor(bg)
-	tsm.centerRow.AddItem(nil, 0, 1, false)          // Left spacer
-	tsm.centerRow.AddItem(tsm.innerFlex, width, 0, true)
-	tsm.centerRow.AddItem(nil, 0, 1, false)          // Right spacer
-
-	tsm.Flex.AddItem(tsm.centerRow, height, 0, true)
-	tsm.Flex.AddItem(nil, 0, 1, false) // Bottom spacer
-
-	// Register inner components for automatic theme updates
-	Register(tsm.title)
-	Register(tsm.hints)
-	Register(tsm.innerFlex)
-	Register(tsm.centerRow)
 }
 
 func (tsm *ThemeSelectorModal) rebuildTable() {
@@ -196,29 +94,8 @@ func (tsm *ThemeSelectorModal) rebuildTable() {
 			marker = "✓ "
 		}
 		cell := tview.NewTableCell(marker + name).
-			SetTextColor(tcell.ColorDefault).
-			SetBackgroundColor(tcell.ColorDefault)
+			SetExpansion(1)
 		tsm.table.SetCell(i, 0, cell)
-	}
-}
-
-func (tsm *ThemeSelectorModal) moveDown() {
-	if tsm.currentIdx < len(tsm.themes)-1 {
-		tsm.currentIdx++
-		tsm.table.Select(tsm.currentIdx, 0)
-	}
-}
-
-func (tsm *ThemeSelectorModal) moveUp() {
-	if tsm.currentIdx > 0 {
-		tsm.currentIdx--
-		tsm.table.Select(tsm.currentIdx, 0)
-	}
-}
-
-func (tsm *ThemeSelectorModal) restoreAndCancel() {
-	if tsm.onCancel != nil {
-		tsm.onCancel()
 	}
 }
 
@@ -235,32 +112,84 @@ func (tsm *ThemeSelectorModal) GetOriginalTheme() string {
 	return tsm.originalTheme
 }
 
-// Draw updates colors dynamically and draws the modal.
+// Draw renders the modal with border and centered content.
 func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
-	// Update all backgrounds from theme
+	// Don't call Box.DrawForSubclass - that would fill the entire screen as backdrop
+	// Only draw the centered modal box
+
+	// Get theme colors
 	bg := Bg()
 	fg := Fg()
-	accent := Accent()
+	borderColor := PanelBorder()
+	titleColor := PanelTitle()
 
-	// Update all flex containers
-	tsm.Flex.SetBackgroundColor(bg)
-	tsm.centerRow.SetBackgroundColor(bg)
-	tsm.innerFlex.SetBackgroundColor(bg)
+	// Calculate modal dimensions
+	screenWidth, screenHeight := screen.Size()
+	modalWidth := 42
+	modalHeight := len(tsm.themes) + 4
+	if modalHeight < 10 {
+		modalHeight = 10
+	}
+	if modalHeight > 22 {
+		modalHeight = 22
+	}
 
-	// Update title and hints
-	tsm.title.SetBackgroundColor(bg)
-	tsm.title.SetTextColor(accent)
-	tsm.hints.SetBackgroundColor(bg)
-	tsm.hints.SetTextColor(FgDim())
+	// Center the modal
+	x := (screenWidth - modalWidth) / 2
+	y := (screenHeight - modalHeight) / 2
 
-	// Update table
+	// Draw modal background only (no full-screen backdrop)
+	bgStyle := tcell.StyleDefault.Background(bg)
+	for row := y; row < y+modalHeight; row++ {
+		for col := x; col < x+modalWidth; col++ {
+			screen.SetContent(col, row, ' ', nil, bgStyle)
+		}
+	}
+
+	// Draw border
+	borderStyle := tcell.StyleDefault.Background(bg).Foreground(borderColor)
+	titleStyle := tcell.StyleDefault.Background(bg).Foreground(titleColor)
+
+	// Corners
+	screen.SetContent(x, y, '╭', nil, borderStyle)
+	screen.SetContent(x+modalWidth-1, y, '╮', nil, borderStyle)
+	screen.SetContent(x, y+modalHeight-1, '╰', nil, borderStyle)
+	screen.SetContent(x+modalWidth-1, y+modalHeight-1, '╯', nil, borderStyle)
+
+	// Horizontal borders
+	for i := x + 1; i < x+modalWidth-1; i++ {
+		screen.SetContent(i, y, '─', nil, borderStyle)
+		screen.SetContent(i, y+modalHeight-1, '─', nil, borderStyle)
+	}
+
+	// Vertical borders
+	for i := y + 1; i < y+modalHeight-1; i++ {
+		screen.SetContent(x, i, '│', nil, borderStyle)
+		screen.SetContent(x+modalWidth-1, i, '│', nil, borderStyle)
+	}
+
+	// Title
+	title := " Select Theme "
+	titleRunes := []rune(title)
+	titleStart := x + (modalWidth-len(titleRunes))/2
+	for i, r := range titleRunes {
+		screen.SetContent(titleStart+i, y, r, nil, titleStyle)
+	}
+
+	// Hints at bottom (left-aligned)
+	hints := "j/k:Navigate  Enter:Select  Esc:Cancel"
+	hintsStyle := tcell.StyleDefault.Background(bg).Foreground(FgDim())
+	hintsStart := x + 2
+	for i, r := range hints {
+		if hintsStart+i < x+modalWidth-1 {
+			screen.SetContent(hintsStart+i, y+modalHeight-2, r, nil, hintsStyle)
+		}
+	}
+
+	// Update table colors
 	tsm.table.SetBackgroundColor(bg)
-	tsm.table.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(fg).
-		Background(Highlight()).
-		Bold(true))
+	tsm.table.SetSelectedStyle(SelectionStyle())
 
-	// Update cell colors
 	for row := 0; row < tsm.table.GetRowCount(); row++ {
 		if cell := tsm.table.GetCell(row, 0); cell != nil {
 			cell.SetTextColor(fg)
@@ -268,9 +197,15 @@ func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
 		}
 	}
 
-	tsm.Flex.Draw(screen)
-}
+	// Draw table inside the border
+	tableX := x + 2
+	tableY := y + 1
+	tableWidth := modalWidth - 4
+	tableHeight := modalHeight - 4
 
+	tsm.table.SetRect(tableX, tableY, tableWidth, tableHeight)
+	tsm.table.Draw(screen)
+}
 
 // Focus delegates focus to the table.
 func (tsm *ThemeSelectorModal) Focus(delegate func(p tview.Primitive)) {
@@ -280,4 +215,72 @@ func (tsm *ThemeSelectorModal) Focus(delegate func(p tview.Primitive)) {
 // HasFocus returns whether the table has focus.
 func (tsm *ThemeSelectorModal) HasFocus() bool {
 	return tsm.table.HasFocus()
+}
+
+// InputHandler handles keyboard input.
+func (tsm *ThemeSelectorModal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+	return tsm.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			if tsm.onCancel != nil {
+				tsm.onCancel()
+			}
+			return
+		case tcell.KeyEnter:
+			if tsm.onSelect != nil {
+				selected := tsm.GetSelectedTheme()
+				if selected != "" {
+					tsm.onSelect(selected)
+				}
+			}
+			return
+		case tcell.KeyDown:
+			if tsm.currentIdx < len(tsm.themes)-1 {
+				tsm.currentIdx++
+				tsm.table.Select(tsm.currentIdx, 0)
+			}
+			return
+		case tcell.KeyUp:
+			if tsm.currentIdx > 0 {
+				tsm.currentIdx--
+				tsm.table.Select(tsm.currentIdx, 0)
+			}
+			return
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'j':
+				if tsm.currentIdx < len(tsm.themes)-1 {
+					tsm.currentIdx++
+					tsm.table.Select(tsm.currentIdx, 0)
+				}
+				return
+			case 'k':
+				if tsm.currentIdx > 0 {
+					tsm.currentIdx--
+					tsm.table.Select(tsm.currentIdx, 0)
+				}
+				return
+			case 'q':
+				if tsm.onCancel != nil {
+					tsm.onCancel()
+				}
+				return
+			}
+		}
+
+		// Delegate to table for other input
+		if handler := tsm.table.InputHandler(); handler != nil {
+			handler(event, setFocus)
+		}
+	})
+}
+
+// MouseHandler delegates mouse events.
+func (tsm *ThemeSelectorModal) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
+	return tsm.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
+		if handler := tsm.table.MouseHandler(); handler != nil {
+			return handler(action, event, setFocus)
+		}
+		return false, nil
+	})
 }
