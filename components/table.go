@@ -66,7 +66,8 @@ func (t *Table) SetHeaders(headers ...string) *Table {
 	for col, header := range headers {
 		cell := tview.NewTableCell(header).
 			SetSelectable(false).
-			SetAlign(tview.AlignLeft)
+			SetAlign(tview.AlignLeft).
+			SetExpansion(1)
 		t.Table.SetCell(0, col, cell)
 	}
 
@@ -82,6 +83,7 @@ func (t *Table) AddRow(cells ...string) *Table {
 		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(row, col, cell)
 	}
@@ -101,6 +103,7 @@ func (t *Table) AddColoredRow(cells []string, colors []tcell.Color) *Table {
 		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(row, col, cell)
 	}
@@ -222,11 +225,15 @@ func (t *Table) IsRowSelected(row int) bool {
 }
 
 // SetOnSelect sets callback for row selection (Enter key).
+// The callback receives the 0-based data row index (excluding header).
 func (t *Table) SetOnSelect(fn func(row int)) *Table {
 	t.onSelect = fn
 	t.Table.SetSelectedFunc(func(row, column int) {
 		if fn != nil {
-			fn(row)
+			dataIdx := t.tableRowToDataIndex(row)
+			if dataIdx >= 0 {
+				fn(dataIdx)
+			}
 		}
 	})
 	return t
@@ -240,8 +247,16 @@ func (t *Table) SetOnSelectionChange(fn func(rows []int)) *Table {
 
 // Draw renders the table with theme colors.
 func (t *Table) Draw(screen tcell.Screen) {
+	// Cache theme colors once at start to avoid lock contention in loops
+	bg := theme.Bg()
+	accent := theme.Accent()
+	selectionStyle := theme.SelectionStyle()
+
+	// Build a cache of status colors to avoid repeated lock acquisitions
+	statusColorCache := make(map[string]tcell.Color)
+
 	// Update table background color from theme
-	t.Table.SetBackgroundColor(theme.Bg())
+	t.Table.SetBackgroundColor(bg)
 
 	// Update all cell backgrounds for theme changes
 	rowCount := t.Table.GetRowCount()
@@ -256,13 +271,23 @@ func (t *Table) Draw(screen tcell.Screen) {
 		for col := 0; col < colCount; col++ {
 			cell := t.Table.GetCell(0, col)
 			if cell != nil {
-				cell.SetTextColor(theme.Accent())
-				cell.SetBackgroundColor(theme.Bg())
+				cell.SetTextColor(accent)
+				cell.SetBackgroundColor(bg)
 			}
 		}
 	}
 
-	// Update data cell backgrounds (unless multi-selected)
+	// Helper to get status color with caching
+	getStatusColor := func(status string) tcell.Color {
+		if color, ok := statusColorCache[status]; ok {
+			return color
+		}
+		color := theme.StatusColor(status)
+		statusColorCache[status] = color
+		return color
+	}
+
+	// Update data cell backgrounds and refresh text colors for theme changes
 	for row := startRow; row < rowCount; row++ {
 		if t.multiSelect && t.selectedRows[row] {
 			continue // Skip multi-selected rows, handled below
@@ -270,15 +295,21 @@ func (t *Table) Draw(screen tcell.Screen) {
 		for col := 0; col < colCount; col++ {
 			cell := t.Table.GetCell(row, col)
 			if cell != nil {
-				cell.SetBackgroundColor(theme.Bg())
+				cell.SetBackgroundColor(bg)
+				// Only refresh text color for cells with a stored status reference.
+				// Cells without a reference keep their original color (set via AddRowWithColor, etc.)
+				if ref, ok := cell.GetReference().(string); ok && ref != "" {
+					// Cell has a stored status reference - use cached color lookup
+					cell.SetTextColor(getStatusColor(ref))
+				}
+				// Note: We intentionally don't set fg for cells without a reference,
+				// as that would overwrite custom colors set via AddRowWithColor().
 			}
 		}
 	}
 
-	// Update selected style
-	t.Table.SetSelectedStyle(tcell.StyleDefault.
-		Background(theme.Highlight()).
-		Foreground(theme.Bg()))
+	// Update selected style with high-contrast colors
+	t.Table.SetSelectedStyle(selectionStyle)
 
 	// Mark multi-selected rows
 	if t.multiSelect {
@@ -287,8 +318,8 @@ func (t *Table) Draw(screen tcell.Screen) {
 				cell := t.Table.GetCell(row, col)
 				if cell != nil {
 					// Visual indicator for multi-selected rows
-					cell.SetBackgroundColor(theme.Accent())
-					cell.SetTextColor(theme.Bg())
+					cell.SetBackgroundColor(accent)
+					cell.SetTextColor(bg)
 				}
 			}
 		}
@@ -396,6 +427,7 @@ func (t *Table) UpdateRow(index int, cells ...string) error {
 		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
 	}
@@ -422,6 +454,7 @@ func (t *Table) UpdateColoredRow(index int, cells []string, colors []tcell.Color
 		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
 	}
@@ -529,6 +562,7 @@ func (t *Table) InsertRowAt(index int, cells ...string) error {
 		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
 	}
@@ -564,6 +598,7 @@ func (t *Table) InsertColoredRowAt(index int, cells []string, colors []tcell.Col
 		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
 	}
@@ -789,4 +824,103 @@ func (t *Table) rebuildSelectionFromKeys() {
 			t.selectedRows[tableRow] = true
 		}
 	}
+}
+
+// =============================================================================
+// Convenience Methods (backwards compatibility helpers)
+// =============================================================================
+
+// SelectedRow returns the currently selected data row index (0-based).
+// Returns -1 if no row is selected or only header is selected.
+func (t *Table) SelectedRow() int {
+	row, _ := t.Table.GetSelection()
+	return t.tableRowToDataIndex(row)
+}
+
+// RowCount returns the number of data rows (excluding header).
+// Alias for GetDataRowCount().
+func (t *Table) RowCount() int {
+	return t.GetDataRowCount()
+}
+
+// SelectRow selects a data row by index (0-based).
+// This sets the table cursor to the specified row.
+func (t *Table) SelectRow(index int) {
+	tableRow := t.dataIndexToTableRow(index)
+	t.Table.Select(tableRow, 0)
+}
+
+// AddRowWithColor adds a row where all cells have the same color.
+// Convenience method for adding styled rows with uniform color.
+func (t *Table) AddRowWithColor(color tcell.Color, cells ...string) int {
+	row := t.Table.GetRowCount()
+
+	for col, text := range cells {
+		cell := tview.NewTableCell(text).
+			SetTextColor(color).
+			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
+			SetSelectable(true)
+		t.Table.SetCell(row, col, cell)
+	}
+
+	return t.tableRowToDataIndex(row)
+}
+
+// AddStyledRowSimple adds a row with status-based coloring using a status string.
+// The status is used to look up the color in the status registry.
+// Only the cell whose text matches the status gets the status color and icon;
+// other cells use the default foreground color.
+// The status name is stored as a reference on the status cell for dynamic theme updates.
+func (t *Table) AddStyledRowSimple(status string, cells ...string) int {
+	row := t.Table.GetRowCount()
+	statusColor := theme.StatusColor(status)
+	if statusColor == 0 {
+		statusColor = theme.Fg()
+	}
+	statusIcon := theme.StatusIcon(status)
+
+	for col, text := range cells {
+		displayText := text
+		cellColor := theme.Fg()
+		var cellRef interface{}
+
+		// Only apply status color and icon to the cell that matches the status
+		if text == status {
+			if statusIcon != "" {
+				displayText = statusIcon + " " + text
+			}
+			cellColor = statusColor
+			// Store status name as reference for dynamic theme updates in Draw()
+			cellRef = status
+		}
+
+		cell := tview.NewTableCell(displayText).
+			SetTextColor(cellColor).
+			SetAlign(tview.AlignLeft).
+			SetExpansion(1).
+			SetSelectable(true).
+			SetReference(cellRef)
+		t.Table.SetCell(row, col, cell)
+	}
+
+	return t.tableRowToDataIndex(row)
+}
+
+// GetCell returns the cell at the specified table row and column.
+// Note: row is the table row (including header), not data index.
+func (t *Table) GetCell(row, col int) *tview.TableCell {
+	return t.Table.GetCell(row, col)
+}
+
+// SetSelectionChangedFunc sets the callback for when selection changes.
+func (t *Table) SetSelectionChangedFunc(fn func(row, col int)) *Table {
+	t.Table.SetSelectionChangedFunc(fn)
+	return t
+}
+
+// SetSelectedFunc sets the callback when a row is selected with Enter.
+func (t *Table) SetSelectedFunc(fn func(row, col int)) *Table {
+	t.Table.SetSelectedFunc(fn)
+	return t
 }
