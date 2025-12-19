@@ -8,6 +8,28 @@ import (
 	"github.com/atterpac/jig/theme"
 )
 
+// Align specifies text alignment.
+type Align int
+
+const (
+	// AlignCenter centers the content (default).
+	AlignCenter Align = iota
+	// AlignLeft aligns content to the left.
+	AlignLeft
+	// AlignRight aligns content to the right.
+	AlignRight
+)
+
+// TitleAlign is an alias for Align for backward compatibility.
+type TitleAlign = Align
+
+// Title alignment constants (aliases for backward compatibility).
+const (
+	TitleAlignCenter = AlignCenter
+	TitleAlignLeft   = AlignLeft
+	TitleAlignRight  = AlignRight
+)
+
 // Panel is a container with rounded borders and optional title.
 // It delegates focus and input handling to its content.
 type Panel struct {
@@ -15,6 +37,7 @@ type Panel struct {
 	content    tview.Primitive
 	title      string
 	titleColor tcell.Color // 0 means use theme default (Accent)
+	titleAlign TitleAlign  // Title alignment (default: center)
 }
 
 // NewPanel creates a new Panel container.
@@ -47,6 +70,12 @@ func (p *Panel) SetTitle(title string) *Panel {
 // SetTitleColor overrides the title color. Pass 0 to use theme default.
 func (p *Panel) SetTitleColor(color tcell.Color) *Panel {
 	p.titleColor = color
+	return p
+}
+
+// SetTitleAlign sets the title alignment (Left, Center, or Right).
+func (p *Panel) SetTitleAlign(align TitleAlign) *Panel {
+	p.titleAlign = align
 	return p
 }
 
@@ -97,7 +126,18 @@ func (p *Panel) Draw(screen tcell.Screen) {
 	if p.title != "" {
 		titleText := " " + p.title + " "
 		titleRunes := []rune(titleText)
-		titleStart := x + (width-len(titleRunes))/2
+		titleLen := len(titleRunes)
+
+		// Calculate title start position based on alignment
+		var titleStart int
+		switch p.titleAlign {
+		case TitleAlignLeft:
+			titleStart = x + 2 // Leave space after corner
+		case TitleAlignRight:
+			titleStart = x + width - titleLen - 2 // Leave space before corner
+		default: // TitleAlignCenter
+			titleStart = x + (width-titleLen)/2
+		}
 
 		for i, r := range titleRunes {
 			if titleStart+i > x && titleStart+i < x+width-1 {
