@@ -14,17 +14,20 @@ import (
 
 // StatusSection represents a single section in the status bar.
 type StatusSection struct {
-	Icon  string      // Icon (Nerd Font glyph)
-	Text  string      // Text to display
-	Color tcell.Color // Color for icon (0 = use FgDim)
+	Icon      string      // Icon (Nerd Font glyph)
+	Text      string      // Text to display
+	Color     tcell.Color // Static color for icon (0 = use Fg, ignored if ColorFunc set)
+	ColorFunc func() tcell.Color // Dynamic color function (takes precedence over Color)
 }
 
 // StatusBar is a configurable status bar with multiple sections.
 type StatusBar struct {
 	*components.Panel
-	content  *tview.TextView
-	sections []StatusSection
-	title    string
+	content       *tview.TextView
+	sections      []StatusSection // Left-aligned sections
+	rightSections []StatusSection // Right-aligned sections
+	title         string
+	contentAlign  components.Align
 
 	// Command mode
 	commandMode  bool
@@ -51,6 +54,7 @@ func NewStatusBar() *StatusBar {
 		Panel:           components.NewPanel(),
 		content:         tview.NewTextView(),
 		sections:        make([]StatusSection, 0),
+		contentAlign:    components.AlignCenter, // Default to center
 		completionIndex: -1,
 	}
 
@@ -182,10 +186,22 @@ func NewStatusBar() *StatusBar {
 	return s
 }
 
-// SetTitle sets the title shown on the left.
+// SetTitle sets the title shown in the border.
 func (s *StatusBar) SetTitle(title string) *StatusBar {
 	s.title = title
 	s.Panel.SetTitle(title)
+	return s
+}
+
+// SetTitleAlign sets the title alignment (Left, Center, or Right).
+func (s *StatusBar) SetTitleAlign(align components.TitleAlign) *StatusBar {
+	s.Panel.SetTitleAlign(align)
+	return s
+}
+
+// SetContentAlign sets the content alignment (AlignLeft, AlignCenter, or AlignRight).
+func (s *StatusBar) SetContentAlign(align components.Align) *StatusBar {
+	s.contentAlign = align
 	return s
 }
 
@@ -201,9 +217,27 @@ func (s *StatusBar) AddSection(section StatusSection) *StatusBar {
 	return s
 }
 
-// ClearSections removes all sections.
+// ClearSections removes all left-aligned sections.
 func (s *StatusBar) ClearSections() *StatusBar {
 	s.sections = make([]StatusSection, 0)
+	return s
+}
+
+// AddRightSection adds a right-aligned status section.
+func (s *StatusBar) AddRightSection(section StatusSection) *StatusBar {
+	s.rightSections = append(s.rightSections, section)
+	return s
+}
+
+// ClearRightSections removes all right-aligned sections.
+func (s *StatusBar) ClearRightSections() *StatusBar {
+	s.rightSections = make([]StatusSection, 0)
+	return s
+}
+
+// SetRightSections sets all right-aligned status sections.
+func (s *StatusBar) SetRightSections(sections []StatusSection) *StatusBar {
+	s.rightSections = sections
 	return s
 }
 
@@ -231,32 +265,66 @@ func (s *StatusBar) SectionCount() int {
 
 // Draw renders the status bar with current theme colors.
 func (s *StatusBar) Draw(screen tcell.Screen) {
-	// Build content text
-	var parts []string
+	separator := "  [" + theme.TagFgMuted() + "]•[-]  "
 
-	for _, section := range s.sections {
-		var part string
-
-		// Determine color for this section
-		sectionColor := theme.TagFg()
-		if section.Color != 0 {
+	// Helper to build section text
+	buildSectionText := func(section StatusSection) string {
+		var sectionColor string
+		if section.ColorFunc != nil {
+			sectionColor = theme.ColorToHex(section.ColorFunc())
+		} else if section.Color != 0 {
 			sectionColor = theme.ColorToHex(section.Color)
+		} else {
+			sectionColor = theme.TagFg()
 		}
 
-		// Icon with color
+		var part string
 		if section.Icon != "" {
 			part = "[" + sectionColor + "]" + section.Icon + "[-] "
 		}
-
-		// Text with same color
 		part += "[" + sectionColor + "]" + section.Text + "[-]"
-		parts = append(parts, part)
+		return part
 	}
 
-	// Join sections with separator
-	separator := "  [" + theme.TagFgMuted() + "]│[-]  "
-	s.content.SetText(strings.Join(parts, separator))
-	s.content.SetTextAlign(tview.AlignCenter)
+	// Build left sections
+	var leftParts []string
+	for _, section := range s.sections {
+		leftParts = append(leftParts, buildSectionText(section))
+	}
+	leftText := strings.Join(leftParts, separator)
+
+	// Build right sections
+	var rightParts []string
+	for _, section := range s.rightSections {
+		rightParts = append(rightParts, buildSectionText(section))
+	}
+	rightText := strings.Join(rightParts, separator)
+
+	// Calculate padding between left and right
+	_, _, width, _ := s.content.GetInnerRect()
+	if width <= 0 {
+		// Fallback if not yet laid out
+		width = 100
+	}
+
+	// Calculate visible lengths (strip color tags for length calculation)
+	leftLen := visibleLength(leftText)
+	rightLen := visibleLength(rightText)
+
+	// Build final text with padding
+	var finalText string
+	if len(s.rightSections) > 0 {
+		padding := width - leftLen - rightLen
+		if padding < 2 {
+			padding = 2
+		}
+		finalText = leftText + strings.Repeat(" ", padding) + rightText
+	} else {
+		finalText = leftText
+	}
+
+	s.content.SetText(finalText)
+	s.content.SetTextAlign(tview.AlignLeft)
 	s.content.SetBackgroundColor(theme.Bg())
 
 	s.Panel.Draw(screen)
@@ -374,17 +442,17 @@ func (s *StatusBar) GetPreferredHeight() int {
 // SetConnectionStatus is a convenience method for showing connection state.
 func (s *StatusBar) SetConnectionStatus(connected bool, name string) *StatusBar {
 	icon := theme.IconDisconnected
-	color := theme.Error()
+	colorFunc := theme.Error // Dynamic color function
 	if connected {
 		icon = theme.IconConnected
-		color = theme.Success()
+		colorFunc = theme.Success // Dynamic color function
 	}
 
 	// Update or add connection section at index 0
 	section := StatusSection{
-		Icon:  icon,
-		Text:  name,
-		Color: color,
+		Icon:      icon,
+		Text:      name,
+		ColorFunc: colorFunc, // Use dynamic color that updates with theme
 	}
 
 	if len(s.sections) > 0 {
@@ -531,4 +599,25 @@ func (s *StatusBar) hideCompletions() {
 	if s.onCompletionDone != nil {
 		s.onCompletionDone()
 	}
+}
+
+// visibleLength calculates the visible length of a string with tview color tags.
+// It strips [color]text[-] style tags to get the actual display length.
+func visibleLength(s string) int {
+	length := 0
+	inTag := false
+	for _, r := range s {
+		if r == '[' {
+			inTag = true
+			continue
+		}
+		if r == ']' && inTag {
+			inTag = false
+			continue
+		}
+		if !inTag {
+			length++
+		}
+	}
+	return length
 }
