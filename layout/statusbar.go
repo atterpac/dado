@@ -46,6 +46,9 @@ type StatusBar struct {
 	// History support
 	onHistoryPrev func(current string) string
 	onHistoryNext func(current string) string
+
+	// Inline suggestion (ghost text)
+	suggestion string
 }
 
 // NewStatusBar creates a new status bar.
@@ -86,7 +89,11 @@ func NewStatusBar() *StatusBar {
 	s.commandInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			// Trigger completion
+			// First, try to accept inline suggestion
+			if s.acceptSuggestion() {
+				return nil
+			}
+			// Otherwise trigger completion popup
 			if s.onComplete != nil {
 				input := s.commandInput.GetText()
 				s.completions = s.onComplete(input)
@@ -97,6 +104,17 @@ func NewStatusBar() *StatusBar {
 				}
 			}
 			return nil
+
+		case tcell.KeyRight:
+			// Accept inline suggestion if cursor is at end
+			currentText := s.commandInput.GetText()
+			// tview InputField doesn't expose cursor position, so we check if suggestion is valid
+			if s.suggestion != "" && strings.HasPrefix(strings.ToLower(s.suggestion), strings.ToLower(currentText)) {
+				if s.acceptSuggestion() {
+					return nil
+				}
+			}
+			return event
 
 		case tcell.KeyBacktab:
 			// Navigate completions backwards
@@ -329,9 +347,51 @@ func (s *StatusBar) Draw(screen tcell.Screen) {
 
 	s.Panel.Draw(screen)
 
+	// Draw inline suggestion (ghost text) if in command mode
+	if s.commandMode && s.suggestion != "" {
+		s.drawSuggestion(screen)
+	}
+
 	// Draw completion popup if showing
 	if s.showCompletions && len(s.completions) > 0 && s.commandMode {
 		s.drawCompletionPopup(screen)
+	}
+}
+
+// drawSuggestion draws the inline ghost text after the current input.
+func (s *StatusBar) drawSuggestion(screen tcell.Screen) {
+	currentText := s.commandInput.GetText()
+	if currentText == "" {
+		return
+	}
+
+	// Check if suggestion starts with current input (case-insensitive)
+	if !strings.HasPrefix(strings.ToLower(s.suggestion), strings.ToLower(currentText)) {
+		return
+	}
+
+	// Get the suffix to display (the part after what user typed)
+	suffix := s.suggestion[len(currentText):]
+	if suffix == "" {
+		return
+	}
+
+	// Get the input field's actual position on screen
+	inputX, inputY, _, _ := s.commandInput.GetRect()
+
+	// Calculate x position: input field x + label length + input text length
+	label := s.commandInput.GetLabel()
+	labelLen := len([]rune(label))
+	inputLen := len([]rune(currentText))
+	startX := inputX + labelLen + inputLen
+
+	// Draw the ghost text in muted color
+	ghostStyle := tcell.StyleDefault.Background(theme.Bg()).Foreground(theme.FgMuted())
+
+	col := startX
+	for _, r := range suffix {
+		screen.SetContent(col, inputY, r, nil, ghostStyle)
+		col++
 	}
 }
 
@@ -535,6 +595,48 @@ func (s *StatusBar) SetOnHistoryPrev(fn func(current string) string) *StatusBar 
 func (s *StatusBar) SetOnHistoryNext(fn func(current string) string) *StatusBar {
 	s.onHistoryNext = fn
 	return s
+}
+
+// SetSuggestion sets the inline suggestion (ghost text) that appears after the input.
+// The suggestion should be the full text, including what the user has already typed.
+// Only the portion after the current input will be shown as ghost text.
+func (s *StatusBar) SetSuggestion(suggestion string) *StatusBar {
+	s.suggestion = suggestion
+	return s
+}
+
+// GetSuggestion returns the current inline suggestion.
+func (s *StatusBar) GetSuggestion() string {
+	return s.suggestion
+}
+
+// ClearSuggestion clears the inline suggestion.
+func (s *StatusBar) ClearSuggestion() *StatusBar {
+	s.suggestion = ""
+	return s
+}
+
+// acceptSuggestion accepts the current inline suggestion.
+// Returns true if a suggestion was accepted, false otherwise.
+func (s *StatusBar) acceptSuggestion() bool {
+	if s.suggestion == "" {
+		return false
+	}
+
+	currentText := s.commandInput.GetText()
+	if currentText == "" {
+		return false
+	}
+
+	// Check if suggestion starts with current input (case-insensitive)
+	if !strings.HasPrefix(strings.ToLower(s.suggestion), strings.ToLower(currentText)) {
+		return false
+	}
+
+	// Accept the suggestion
+	s.commandInput.SetText(s.suggestion)
+	s.suggestion = ""
+	return true
 }
 
 // GetCompletionList returns the completion list for rendering.

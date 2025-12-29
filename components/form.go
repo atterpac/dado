@@ -501,6 +501,9 @@ func (f *Form) focusNext() {
 	if f.focusedIndex >= len(f.fields) {
 		f.focusedIndex = 0
 	}
+
+	// Visually focus the new field (no-op delegate so tview focus stays on Form)
+	f.fields[f.focusedIndex].Focus(func(tview.Primitive) {})
 }
 
 func (f *Form) focusPrev() {
@@ -517,12 +520,22 @@ func (f *Form) focusPrev() {
 	if f.focusedIndex < 0 {
 		f.focusedIndex = len(f.fields) - 1
 	}
+
+	// Visually focus the new field (no-op delegate so tview focus stays on Form)
+	f.fields[f.focusedIndex].Focus(func(tview.Primitive) {})
 }
 
 // Focus handles focus.
+// The Form keeps focus itself so it can intercept Tab/BackTab for field navigation.
+// Individual fields receive input via the Form's InputHandler delegation.
+// Note: We do NOT call delegate - this keeps tview focus on the Form.
 func (f *Form) Focus(delegate func(tview.Primitive)) {
-	if len(f.fields) > 0 {
-		delegate(f.fields[f.focusedIndex])
+	// Don't call delegate(f) - that would cause infinite recursion
+	// tview will keep focus on the Form since we don't delegate elsewhere
+
+	// Visually focus the current field (no-op delegate for visual state only)
+	if len(f.fields) > 0 && f.focusedIndex >= 0 && f.focusedIndex < len(f.fields) {
+		f.fields[f.focusedIndex].Focus(func(tview.Primitive) {})
 	}
 }
 

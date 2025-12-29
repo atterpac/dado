@@ -17,6 +17,7 @@ type EmptyState struct {
 	icon        string
 	title       string
 	message     string
+	hasFocus    bool
 }
 
 // NewEmptyState creates a new empty state display.
@@ -105,7 +106,18 @@ func (e *EmptyState) Draw(screen tcell.Screen) {
 	e.Flex.Draw(screen)
 }
 
-// HasFocus returns false as empty states are not focusable.
+// Focus is called when the empty state receives focus.
+func (e *EmptyState) Focus(delegate func(p tview.Primitive)) {
+	e.hasFocus = true
+	// Don't delegate to children - EmptyState handles focus itself
+}
+
+// Blur is called when the empty state loses focus.
+func (e *EmptyState) Blur() {
+	e.hasFocus = false
+}
+
+// HasFocus returns true if the empty state currently has focus.
 func (e *EmptyState) HasFocus() bool {
-	return false
+	return e.hasFocus
 }
