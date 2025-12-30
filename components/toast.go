@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atterpac/jig/theme"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -313,8 +314,12 @@ func (m *ToastManager) Draw(screen tcell.Screen, screenWidth, screenHeight int) 
 }
 
 func (m *ToastManager) drawToast(screen tcell.Screen, toast *Toast, screenWidth, screenHeight, maxWidth int, position ToastPosition, index int) {
+	// Internal padding
+	hPadding := 2 // Horizontal padding inside border
+	vPadding := 1 // Vertical padding inside border
+
 	// Calculate toast dimensions
-	toastWidth := len(toast.Message) + 4 // Icon + space + message + padding
+	toastWidth := len(toast.Message) + 4 + (hPadding * 2) // Icon + space + message + horizontal padding
 	if toastWidth > maxWidth {
 		toastWidth = maxWidth
 	}
@@ -322,10 +327,10 @@ func (m *ToastManager) drawToast(screen tcell.Screen, toast *Toast, screenWidth,
 		toastWidth = 20
 	}
 
-	toastHeight := 3 // Top border, content, bottom border
+	toastHeight := 1 + (vPadding * 2) + 2 // Content row + vertical padding + top/bottom border
 	hasActions := len(toast.Actions) > 0
 	if hasActions {
-		toastHeight = 4 // Add action row
+		toastHeight += 1 // Add action row
 	}
 
 	// Calculate position
@@ -337,7 +342,7 @@ func (m *ToastManager) drawToast(screen tcell.Screen, toast *Toast, screenWidth,
 	bgColor, fgColor, iconColor := m.getLevelColors(toast.Level)
 
 	bgStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-	borderStyle := tcell.StyleDefault.Background(bgColor).Foreground(iconColor)
+	borderStyle := tcell.StyleDefault.Background(bgColor).Foreground(theme.FgDim())
 	iconStyle := tcell.StyleDefault.Background(bgColor).Foreground(iconColor)
 
 	// Draw background
@@ -350,28 +355,31 @@ func (m *ToastManager) drawToast(screen tcell.Screen, toast *Toast, screenWidth,
 	// Draw border
 	m.drawToastBorder(screen, x, y, toastWidth, toastHeight, borderStyle)
 
+	// Content row (centered vertically with padding)
+	contentY := y + 1 + vPadding
+
 	// Draw icon
 	icon := toast.Icon()
 	for i, r := range icon {
-		screen.SetContent(x+2+i, y+1, r, nil, iconStyle)
+		screen.SetContent(x+1+hPadding+i, contentY, r, nil, iconStyle)
 	}
 
 	// Draw message (truncate if needed)
 	message := toast.Message
-	maxMsgLen := toastWidth - 6 // Account for icon, spaces, padding
+	maxMsgLen := toastWidth - 4 - (hPadding * 2) // Account for icon, spaces, padding
 	if len(message) > maxMsgLen {
 		message = message[:maxMsgLen-3] + "..."
 	}
 	msgStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-	msgX := x + 4 // After icon
+	msgX := x + 3 + hPadding // After icon + space
 	for i, r := range message {
-		screen.SetContent(msgX+i, y+1, r, nil, msgStyle)
+		screen.SetContent(msgX+i, contentY, r, nil, msgStyle)
 	}
 
 	// Draw actions if present
 	if hasActions {
-		actionY := y + 2
-		actionX := x + toastWidth - 2
+		actionY := contentY + 1
+		actionX := x + toastWidth - 1 - hPadding
 
 		for i := len(toast.Actions) - 1; i >= 0; i-- {
 			action := toast.Actions[i]
@@ -428,15 +436,15 @@ func (m *ToastManager) calculatePosition(screenWidth, screenHeight, toastWidth, 
 func (m *ToastManager) getLevelColors(level ToastLevel) (bg, fg, icon tcell.Color) {
 	switch level {
 	case ToastInfo:
-		return tcell.ColorNavy, tcell.ColorWhite, tcell.ColorBlue
+		return theme.Bg(), theme.Fg(), theme.Info()
 	case ToastSuccess:
-		return tcell.ColorDarkGreen, tcell.ColorWhite, tcell.ColorGreen
+		return theme.Bg(), theme.Fg(), theme.Success()
 	case ToastWarning:
-		return tcell.ColorOlive, tcell.ColorWhite, tcell.ColorYellow
+		return theme.Bg(), theme.Fg(), theme.Warning()
 	case ToastError:
-		return tcell.ColorDarkRed, tcell.ColorWhite, tcell.ColorRed
+		return theme.Bg(), theme.Fg(), theme.Error()
 	default:
-		return tcell.ColorBlack, tcell.ColorWhite, tcell.ColorWhite
+		return theme.Bg(), theme.Fg(), theme.Fg()
 	}
 }
 

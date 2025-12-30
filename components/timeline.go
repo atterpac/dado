@@ -142,22 +142,42 @@ func (t *Timeline) calculateTimeRange() {
 		return
 	}
 
-	t.startTime = time.Now()
-	t.endTime = time.Time{}
+	var minStart, maxEnd time.Time
+	firstValid := true
 
 	for _, lane := range t.lanes {
-		if lane.StartTime.Before(t.startTime) {
-			t.startTime = lane.StartTime
+		// Skip lanes with zero/invalid start time
+		if lane.StartTime.IsZero() {
+			continue
 		}
-		if lane.EndTime != nil && lane.EndTime.After(t.endTime) {
-			t.endTime = *lane.EndTime
-		} else if lane.EndTime == nil && time.Now().After(t.endTime) {
-			t.endTime = time.Now()
+
+		if firstValid || lane.StartTime.Before(minStart) {
+			minStart = lane.StartTime
 		}
+		if lane.EndTime != nil && (firstValid || lane.EndTime.After(maxEnd)) {
+			maxEnd = *lane.EndTime
+		}
+		firstValid = false
+	}
+
+	// If no valid lanes found, use current time
+	if firstValid {
+		t.startTime = time.Now()
+		t.endTime = t.startTime.Add(time.Minute)
+		return
+	}
+
+	t.startTime = minStart
+
+	// Set end time: use max end time, or now for running items
+	if maxEnd.IsZero() || maxEnd.Before(minStart) {
+		t.endTime = time.Now()
+	} else {
+		t.endTime = maxEnd
 	}
 
 	// Ensure we have at least some time range
-	if t.endTime.IsZero() || t.endTime.Before(t.startTime) {
+	if t.endTime.Sub(t.startTime) < time.Second {
 		t.endTime = t.startTime.Add(time.Minute)
 	}
 }
