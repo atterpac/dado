@@ -164,7 +164,14 @@ func (p *Pages) Clear() {
 	}
 
 	p.stack = make([]Component, 0)
-	p.Pages = tview.NewPages()
+
+	// Remove all pages from the existing tview.Pages instead of replacing it.
+	// Replacing with tview.NewPages() would orphan the primitive from the layout,
+	// breaking focus management after profile switches.
+	for _, name := range p.Pages.GetPageNames(true) {
+		p.Pages.RemovePage(name)
+	}
+
 	p.notifyChange()
 }
 
