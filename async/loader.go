@@ -123,9 +123,14 @@ func (l *Loader[T]) Run(fn LoadFunc[T]) *Loader[T] {
 		ctx, l.cancel = context.WithCancel(ctx)
 	}
 
-	// Show indicator
-	if l.indicator != nil {
-		l.indicator.Show()
+	// Capture indicator reference for goroutine
+	indicator := l.indicator
+
+	// Show indicator on UI thread to avoid race conditions
+	if indicator != nil {
+		theme.QueueUpdateDraw(func() {
+			indicator.Show()
+		})
 	}
 
 	// Run async
@@ -141,13 +146,13 @@ func (l *Loader[T]) Run(fn LoadFunc[T]) *Loader[T] {
 		// Update UI on main thread
 		theme.QueueUpdateDraw(func() {
 			// Hide indicator
-			if l.indicator != nil {
+			if indicator != nil {
 				if err != nil {
-					l.indicator.Error(err)
+					indicator.Error(err)
 				} else {
-					l.indicator.Success()
+					indicator.Success()
 				}
-				l.indicator.Hide()
+				indicator.Hide()
 			}
 
 			// Call callbacks

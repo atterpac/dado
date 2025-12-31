@@ -116,13 +116,11 @@ func (p *Pages) Pop() bool {
 			restoreTo := p.focusStack[len(p.focusStack)-1]
 			p.focusStack = p.focusStack[:len(p.focusStack)-1]
 			// Queue focus restoration after the modal is removed
-			go func() {
-				if restoreTo != nil {
-					p.app.QueueUpdateDraw(func() {
-						p.app.SetFocus(restoreTo)
-					})
-				}
-			}()
+			if restoreTo != nil {
+				p.app.QueueUpdateDraw(func() {
+					p.app.SetFocus(restoreTo)
+				})
+			}
 		}
 	}
 
