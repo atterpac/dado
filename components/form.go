@@ -365,6 +365,31 @@ func (f *Form) Validate() error {
 	return nil
 }
 
+// ValidateAll validates all fields and returns all errors.
+// This is useful for showing multiple validation errors at once.
+func (f *Form) ValidateAll() ValidationResult {
+	var errors []FieldError
+
+	for _, field := range f.fields {
+		switch fld := field.(type) {
+		case *TextField:
+			if err := fld.Validate(); err != nil {
+				errors = append(errors, FieldError{
+					Field:   fld.GetName(),
+					Message: err.Error(),
+				})
+			}
+		}
+	}
+
+	return ValidationResult{Errors: errors}
+}
+
+// IsValid returns true if all fields pass validation.
+func (f *Form) IsValid() bool {
+	return !f.ValidateAll().HasErrors()
+}
+
 // Clear resets all fields to their default values.
 func (f *Form) Clear() *Form {
 	for _, field := range f.fields {

@@ -7,6 +7,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/jig/validators"
 )
 
 // TextField is a single-line text input with validation.
@@ -73,6 +74,20 @@ func (t *TextField) GetName() string {
 // SetValidator sets the validation function.
 func (t *TextField) SetValidator(fn func(string) error) *TextField {
 	t.validator = fn
+	return t
+}
+
+// SetValidators sets multiple validators for the field.
+// Validators are run in order and the first error is returned.
+func (t *TextField) SetValidators(vs ...validators.Validator) *TextField {
+	t.validator = func(value string) error {
+		for _, v := range vs {
+			if err := v(value); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	return t
 }
 
