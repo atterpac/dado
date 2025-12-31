@@ -4,9 +4,39 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/jig/theme"
 )
+
+// ModalBehavior configures how a modal handles input and lifecycle.
+// This is a copy of nav.ModalBehavior to avoid import cycles.
+// The values are copied when implementing nav.ModalComponent.
+type ModalBehavior struct {
+	// CapturesAllInput prevents input from reaching underlying views.
+	CapturesAllInput bool
+
+	// DismissOnEsc automatically dismisses the modal when Escape is pressed.
+	DismissOnEsc bool
+
+	// RestoreFocusOnDismiss returns focus to the previous component when dismissed.
+	RestoreFocusOnDismiss bool
+
+	// Backdrop draws a semi-transparent overlay behind the modal.
+	Backdrop bool
+
+	// BlockUntilDismissed prevents other stack operations until this modal is dismissed.
+	BlockUntilDismissed bool
+}
+
+// DefaultModalBehavior returns the standard modal behavior settings.
+func DefaultModalBehavior() ModalBehavior {
+	return ModalBehavior{
+		CapturesAllInput:      true,
+		DismissOnEsc:          true,
+		RestoreFocusOnDismiss: true,
+		Backdrop:              true,
+		BlockUntilDismissed:   false,
+	}
+}
 
 // ModalConfig configures modal dimensions and behavior.
 type ModalConfig struct {
@@ -21,6 +51,7 @@ type ModalConfig struct {
 }
 
 // Modal is a configurable modal dialog with centered positioning.
+// Modal implements the nav.ModalComponent interface for automatic lifecycle management.
 type Modal struct {
 	*tview.Flex
 	panel       *Panel
@@ -28,9 +59,11 @@ type Modal struct {
 	content     tview.Primitive
 	focusTarget tview.Primitive // Optional: specific primitive to focus when modal opens
 	config      ModalConfig
+	behavior    ModalBehavior
 	onClose     func()
 	onSubmit    func()
 	onCancel    func()
+	onDismiss   func() bool // Called before dismiss; return false to cancel
 }
 
 // NewModal creates a new modal with the given configuration.
@@ -38,11 +71,16 @@ func NewModal(config ModalConfig) *Modal {
 	flex := tview.NewFlex()
 	flex.SetBackgroundColor(theme.Bg())
 
+	// Initialize behavior from config
+	behavior := DefaultModalBehavior()
+	behavior.Backdrop = config.Backdrop
+
 	m := &Modal{
-		Flex:    flex,
-		panel:   NewPanel(),
-		hintBar: NewKeyHintBar(),
-		config:  config,
+		Flex:     flex,
+		panel:    NewPanel(),
+		hintBar:  NewKeyHintBar(),
+		config:   config,
+		behavior: behavior,
 	}
 
 	if config.Title != "" {
@@ -272,4 +310,86 @@ func (m *Modal) GetPanel() *Panel {
 // GetHintBar returns the hint bar for direct manipulation.
 func (m *Modal) GetHintBar() *KeyHintBar {
 	return m.hintBar
+}
+
+// GetBehavior returns the modal's behavior configuration.
+func (m *Modal) GetBehavior() ModalBehavior {
+	return m.behavior
+}
+
+// SetBehavior configures the modal's behavior.
+func (m *Modal) SetBehavior(b ModalBehavior) *Modal {
+	m.behavior = b
+	return m
+}
+
+// SetDismissOnEsc sets whether Escape key dismisses the modal.
+func (m *Modal) SetDismissOnEsc(dismiss bool) *Modal {
+	m.behavior.DismissOnEsc = dismiss
+	return m
+}
+
+// SetBlockUntilDismissed prevents other stack operations until dismissed.
+func (m *Modal) SetBlockUntilDismissed(block bool) *Modal {
+	m.behavior.BlockUntilDismissed = block
+	return m
+}
+
+// SetOnDismiss sets a handler called before the modal is dismissed.
+// Return false from the handler to cancel the dismiss.
+// This is useful for confirming unsaved changes.
+func (m *Modal) SetOnDismiss(fn func() bool) *Modal {
+	m.onDismiss = fn
+	return m
+}
+
+// --- nav.Component interface implementation ---
+
+// Start is called when the modal becomes active.
+func (m *Modal) Start() {}
+
+// Stop is called when the modal becomes inactive.
+func (m *Modal) Stop() {}
+
+// Hints returns key binding hints for this modal.
+func (m *Modal) Hints() []KeyHint {
+	hints := []KeyHint{}
+	if m.behavior.DismissOnEsc {
+		hints = append(hints, KeyHint{Key: "Esc", Description: "Close"})
+	}
+	if m.onSubmit != nil {
+		hints = append(hints, KeyHint{Key: "Enter", Description: "Submit"})
+	}
+	return hints
+}
+
+// --- nav package interface implementations ---
+// These methods allow Modal to be used directly with Pages.Push()
+// without needing a wrapper. The nav package uses interface detection
+// to identify modals and their behavior.
+
+// GetModalBehavior implements nav.ModalBehaviorProvider.
+// Returns the modal's behavior settings as individual values.
+func (m *Modal) GetModalBehavior() (capturesAllInput, dismissOnEsc, restoreFocusOnDismiss, backdrop, blockUntilDismissed bool) {
+	return m.behavior.CapturesAllInput,
+		m.behavior.DismissOnEsc,
+		m.behavior.RestoreFocusOnDismiss,
+		m.behavior.Backdrop,
+		m.behavior.BlockUntilDismissed
+}
+
+// OnDismissNav implements nav.ModalDismissHandler.
+// Called when the modal is about to be dismissed.
+// Returns false to cancel the dismiss.
+func (m *Modal) OnDismissNav() bool {
+	if m.onDismiss != nil {
+		return m.onDismiss()
+	}
+	return true
+}
+
+// IsModal implements nav.ModalMarker.
+// Returns true, indicating this is a modal component.
+func (m *Modal) IsModal() bool {
+	return true
 }

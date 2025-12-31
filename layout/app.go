@@ -34,13 +34,14 @@ type AppConfig struct {
 
 // App is the application root that manages the overall layout.
 type App struct {
-	app      *tview.Application
-	main     *tview.Flex
-	topBar   tview.Primitive
-	crumbs   *nav.Crumbs
-	pages    *nav.Pages
-	menu     *Menu
-	config   AppConfig
+	app              *tview.Application
+	main             *tview.Flex
+	topBar           tview.Primitive
+	crumbs           *nav.Crumbs
+	pages            *nav.Pages
+	menu             *Menu
+	config           AppConfig
+	userInputCapture func(*tcell.EventKey) *tcell.EventKey // User's custom input capture
 }
 
 // NewApp creates a new application with the given configuration.
@@ -69,8 +70,14 @@ func NewApp(config AppConfig) *App {
 	// Register with theme system
 	theme.SetApp(a.app)
 
+	// Set app reference in pages for focus management
+	a.pages.SetApplication(a.app)
+
 	// Build layout
 	a.buildLayout()
+
+	// Set up automatic modal input handling
+	a.setupModalInputCapture()
 
 	// Set up page change handler
 	a.pages.SetOnChange(func(c nav.Component) {
@@ -214,9 +221,32 @@ func (a *App) Draw() *App {
 }
 
 // SetInputCapture sets a function to capture input before it reaches focused primitive.
+// Note: Modal auto-dismiss handling runs before this capture function.
 func (a *App) SetInputCapture(capture func(*tcell.EventKey) *tcell.EventKey) *App {
-	a.app.SetInputCapture(capture)
+	a.userInputCapture = capture
 	return a
+}
+
+// setupModalInputCapture configures automatic modal input handling.
+func (a *App) setupModalInputCapture() {
+	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Check if current page is a modal with auto-dismiss
+		if behavior := a.pages.CurrentModalBehavior(); behavior != nil {
+			// Handle auto-dismiss on Escape
+			if behavior.DismissOnEsc && event.Key() == tcell.KeyEscape {
+				if a.pages.DismissModal() {
+					return nil // Event consumed
+				}
+			}
+		}
+
+		// Pass to user's custom capture if set
+		if a.userInputCapture != nil {
+			return a.userInputCapture(event)
+		}
+
+		return event
+	})
 }
 
 // UpdateMenuHints updates the menu with hints from a component.
@@ -244,7 +274,7 @@ func (a *App) Suspend(fn func()) bool {
 	return a.app.Suspend(fn)
 }
 
-// modalWrapper wraps a Modal to implement nav.Component.
+// modalWrapper wraps a Modal to implement nav.Component and nav.ModalComponent.
 type modalWrapper struct {
 	modal *components.Modal
 	app   *App
@@ -263,6 +293,16 @@ func (m *modalWrapper) Hints() []components.KeyHint {
 	return []components.KeyHint{
 		{Key: "Esc", Description: "Close"},
 	}
+}
+
+// ModalBehavior implements nav.ModalComponent.
+func (m *modalWrapper) ModalBehavior() nav.ModalBehavior {
+	return nav.DefaultModalBehavior()
+}
+
+// OnDismiss implements nav.ModalComponent.
+func (m *modalWrapper) OnDismiss() bool {
+	return true // Always allow dismiss
 }
 
 func (m *modalWrapper) Draw(screen tcell.Screen)       { m.modal.Draw(screen) }
