@@ -107,18 +107,27 @@ func SetProvider(t Theme) {
 	// Update tview global styles for components using tcell.ColorDefault
 	applyGlobalStyles(t)
 
-	// Update all registered primitives' backgrounds
-	updateRegisteredPrimitives(t)
-
-	// Call RefreshTheme() on all registered Refreshable components
-	refreshRegisteredComponents()
-
-	// Notify theme change callbacks
+	// Notify theme change callbacks (sync - these should be lightweight)
 	notifyThemeChange()
 
 	// Auto-trigger redraw if enabled and app is registered
 	if autoRefresh {
-		triggerRedraw()
+		// Use a goroutine to avoid any potential deadlock when called from
+		// within tview callbacks. The QueueUpdateDraw will safely execute
+		// on the main UI thread.
+		go func() {
+			QueueUpdateDraw(func() {
+				// Update all registered primitives' backgrounds
+				updateRegisteredPrimitives(t)
+
+				// Call RefreshTheme() on all registered Refreshable components
+				refreshRegisteredComponents()
+			})
+		}()
+	} else {
+		// If auto-refresh is disabled, update primitives synchronously
+		// but skip the RefreshTheme calls (user handles manually)
+		updateRegisteredPrimitives(t)
 	}
 }
 
