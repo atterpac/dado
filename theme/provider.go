@@ -49,6 +49,17 @@ type Primitive interface {
 	SetBackgroundColor(tcell.Color) *tview.Box
 }
 
+// Refreshable is an optional interface for components that need custom
+// refresh logic when the theme changes. Components implementing this
+// interface will have RefreshTheme() called automatically after SetProvider().
+//
+// Use this for components that cache colors or need to update state beyond
+// just background colors. For most components, the automatic background
+// update via Register() is sufficient.
+type Refreshable interface {
+	RefreshTheme()
+}
+
 // themeHolder wraps Theme interface for atomic.Value storage.
 // atomic.Value requires consistent concrete types - this wrapper ensures
 // we always store *themeHolder regardless of the underlying Theme implementation.
@@ -68,13 +79,25 @@ var (
 	registeredPrimitives []Primitive
 	primitivesMu         sync.RWMutex
 
+	// Registry of refreshable components for custom theme refresh logic
+	registeredRefreshables []Refreshable
+	refreshablesMu         sync.RWMutex
+
 	// Callbacks to notify when theme changes
 	themeChangeCallbacks []func()
 	callbacksMu          sync.RWMutex
+
+	// autoRefresh controls whether SetProvider automatically triggers a redraw.
+	// Default is true for ergonomic theme switching.
+	autoRefresh     = true
+	autoRefreshOnce sync.Once
 )
 
 // SetProvider sets the active theme provider and updates tview global styles.
-// Also updates all registered primitives' background colors and notifies callbacks.
+// Also updates all registered primitives' background colors, calls RefreshTheme()
+// on registered Refreshable components, notifies callbacks, and automatically
+// triggers a redraw (unless disabled via SetAutoRefresh(false)).
+//
 // This function is safe to call from any goroutine including during Draw() cycles.
 func SetProvider(t Theme) {
 	// Store theme atomically - lock-free for readers
@@ -87,8 +110,23 @@ func SetProvider(t Theme) {
 	// Update all registered primitives' backgrounds
 	updateRegisteredPrimitives(t)
 
+	// Call RefreshTheme() on all registered Refreshable components
+	refreshRegisteredComponents()
+
 	// Notify theme change callbacks
 	notifyThemeChange()
+
+	// Auto-trigger redraw if enabled and app is registered
+	if autoRefresh {
+		triggerRedraw()
+	}
+}
+
+// SetAutoRefresh controls whether SetProvider automatically triggers a redraw.
+// Default is true. Set to false if you want to batch theme changes or handle
+// redraws manually.
+func SetAutoRefresh(enabled bool) {
+	autoRefresh = enabled
 }
 
 // applyGlobalStyles updates tview.Styles from the theme.
@@ -120,6 +158,28 @@ func updateRegisteredPrimitives(t Theme) {
 	}
 }
 
+// refreshRegisteredComponents calls RefreshTheme() on all registered Refreshable components.
+func refreshRegisteredComponents() {
+	refreshablesMu.RLock()
+	defer refreshablesMu.RUnlock()
+
+	for _, r := range registeredRefreshables {
+		r.RefreshTheme()
+	}
+}
+
+// triggerRedraw queues a redraw if an app is registered.
+func triggerRedraw() {
+	appMu.RLock()
+	app := appInstance
+	appMu.RUnlock()
+
+	if app != nil {
+		// Use QueueUpdateDraw to safely trigger redraw from any goroutine
+		app.QueueUpdateDraw(func() {})
+	}
+}
+
 // Register adds a primitive to receive automatic background updates on theme change.
 // Call this when creating components that contain tview primitives.
 // The primitive will have SetBackgroundColor called whenever SetProvider is called.
@@ -138,6 +198,39 @@ func Unregister(p Primitive) {
 	for i, registered := range registeredPrimitives {
 		if registered == p {
 			registeredPrimitives = append(registeredPrimitives[:i], registeredPrimitives[i+1:]...)
+			return
+		}
+	}
+}
+
+// RegisterRefreshable adds a component to receive RefreshTheme() calls on theme change.
+// Use this for components that need custom refresh logic beyond background color updates.
+// Components are called in registration order after primitives are updated.
+//
+// Returns an unregister function for convenience:
+//
+//	unregister := theme.RegisterRefreshable(myComponent)
+//	defer unregister() // Clean up when component is destroyed
+func RegisterRefreshable(r Refreshable) func() {
+	refreshablesMu.Lock()
+	defer refreshablesMu.Unlock()
+	registeredRefreshables = append(registeredRefreshables, r)
+
+	// Return unregister function
+	return func() {
+		UnregisterRefreshable(r)
+	}
+}
+
+// UnregisterRefreshable removes a component from RefreshTheme() notifications.
+// Call this when a component is destroyed to prevent memory leaks.
+func UnregisterRefreshable(r Refreshable) {
+	refreshablesMu.Lock()
+	defer refreshablesMu.Unlock()
+
+	for i, registered := range registeredRefreshables {
+		if registered == r {
+			registeredRefreshables = append(registeredRefreshables[:i], registeredRefreshables[i+1:]...)
 			return
 		}
 	}

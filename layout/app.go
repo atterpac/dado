@@ -261,10 +261,15 @@ func (a *App) ShowModal(modal *components.Modal) {
 	a.pages.Push(&modalWrapper{modal: modal, app: a})
 }
 
-// RefreshTheme updates all components to use current theme colors.
-// Call this after changing themes to ensure backgrounds update.
+// RefreshTheme forces a theme refresh and redraw.
+//
+// Note: As of v0.0.6, calling SetProvider() automatically triggers a redraw,
+// so explicit RefreshTheme() calls are typically unnecessary. This method
+// remains available for cases where you need to force a refresh without
+// changing the theme, or when auto-refresh is disabled via SetAutoRefresh(false).
 func (a *App) RefreshTheme() {
 	a.main.SetBackgroundColor(theme.Bg())
+	a.app.QueueUpdateDraw(func() {})
 }
 
 // Suspend temporarily suspends the application, executes the given function,
