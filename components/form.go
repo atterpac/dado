@@ -495,7 +495,7 @@ func (f *Form) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 				f.onCancel()
 			}
 			return
-		case tcell.KeyCtrlS:
+		case tcell.KeyCtrlS, tcell.KeyEnter:
 			if f.onSubmit != nil {
 				f.onSubmit(f.GetValues())
 			}
