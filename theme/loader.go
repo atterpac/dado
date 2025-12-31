@@ -442,14 +442,24 @@ func (t *ConfigTheme) PanelTitle() tcell.Color  { return t.colors.panelTitle }
 // Name returns the theme name from config.
 func (t *ConfigTheme) Name() string { return t.config.Name }
 
-// RegisterStatuses registers all statuses defined in the theme config.
-func (t *ConfigTheme) RegisterStatuses() error {
+// CreateStatuses creates typed Status handles from the theme config.
+// Returns a map of status name to *Status handle.
+// Apps can store these handles for compile-time safe status usage.
+//
+// Example:
+//
+//	statuses, err := configTheme.CreateStatuses()
+//	if err != nil { return err }
+//	StatusRunning := statuses["Running"]
+//	StatusFailed := statuses["Failed"]
+func (t *ConfigTheme) CreateStatuses() (map[string]*Status, error) {
+	result := make(map[string]*Status, len(t.config.Status))
 	for _, s := range t.config.Status {
 		color, err := parseHexColor(s.Color)
 		if err != nil {
-			return fmt.Errorf("invalid status color for %s: %w", s.Name, err)
+			return nil, fmt.Errorf("invalid status color for %s: %w", s.Name, err)
 		}
-		RegisterStatus(s.Name, StatusStyle{Color: color, Icon: s.Icon})
+		result[s.Name] = DefineStatusStatic(s.Name, color, s.Icon)
 	}
-	return nil
+	return result, nil
 }

@@ -16,12 +16,12 @@ const (
 
 // TimelineLane represents a horizontal lane in the timeline.
 type TimelineLane struct {
-	ID        string     // Unique identifier
-	Name      string     // Display name
-	Status    string     // Status string (for color lookup via theme.StatusColor)
-	StartTime time.Time  // When the lane starts
-	EndTime   *time.Time // When the lane ends (nil = ongoing)
-	Data      any        // Optional user data
+	ID        string        // Unique identifier
+	Name      string        // Display name
+	Status    *theme.Status // Typed status for color/icon
+	StartTime time.Time     // When the lane starts
+	EndTime   *time.Time    // When the lane ends (nil = ongoing)
+	Data      any           // Optional user data
 }
 
 // Timeline displays data as a horizontal Gantt-style timeline.
@@ -44,7 +44,7 @@ type Timeline struct {
 	onSelect func(lane *TimelineLane)
 
 	// Custom bar styling (optional)
-	barStyleFn func(status string) (rune, tcell.Color)
+	barStyleFn func(status *theme.Status) (rune, tcell.Color)
 }
 
 // NewTimeline creates a new timeline/Gantt chart view.
@@ -109,8 +109,8 @@ func (t *Timeline) SetOnSelect(fn func(lane *TimelineLane)) *Timeline {
 }
 
 // SetBarStyleFn sets a custom function for determining bar character and color.
-// If not set, uses theme.StatusColor for coloring.
-func (t *Timeline) SetBarStyleFn(fn func(status string) (rune, tcell.Color)) *Timeline {
+// If not set, uses the Status.Color() for coloring.
+func (t *Timeline) SetBarStyleFn(fn func(status *theme.Status) (rune, tcell.Color)) *Timeline {
 	t.barStyleFn = fn
 	return t
 }
@@ -414,57 +414,32 @@ func (t *Timeline) drawLegend(screen tcell.Screen, x, y, width int) {
 }
 
 // barStyle returns the bar character and color for a status.
-func (t *Timeline) barStyle(status string) (rune, tcell.Color) {
+func (t *Timeline) barStyle(status *theme.Status) (rune, tcell.Color) {
 	// Use custom function if provided
 	if t.barStyleFn != nil {
 		return t.barStyleFn(status)
 	}
 
-	// Default styling based on common status names
-	switch status {
-	case "Running", "Active", "InProgress":
-		return '▓', theme.Info()
-	case "Completed", "Success", "Done", "Fired":
-		return '█', theme.Success()
-	case "Failed", "Error", "TimedOut":
-		return '░', theme.Error()
-	case "Canceled", "Terminated", "Aborted":
-		return '▒', theme.Warning()
-	case "Scheduled", "Initiated", "Pending", "Waiting":
-		return '▒', theme.FgDim()
-	default:
-		// Try theme status registry
-		if theme.HasStatus(status) {
-			return '█', theme.StatusColor(status)
-		}
-		return '▒', theme.Fg()
+	// Default: use status color if available, otherwise fallback
+	if status != nil {
+		return '█', status.Color()
 	}
+	return '▒', theme.FgDim()
 }
 
-// statusColor returns the color for a status string.
-func (t *Timeline) statusColor(status string) tcell.Color {
+// statusColor returns the color for a status.
+func (t *Timeline) statusColor(status *theme.Status) tcell.Color {
 	// Use custom function if provided
 	if t.barStyleFn != nil {
 		_, color := t.barStyleFn(status)
 		return color
 	}
 
-	// Default coloring
-	switch status {
-	case "Running", "Active", "InProgress":
-		return theme.Info()
-	case "Completed", "Success", "Done", "Fired":
-		return theme.Success()
-	case "Failed", "Error", "TimedOut":
-		return theme.Error()
-	case "Canceled", "Terminated", "Aborted":
-		return theme.Warning()
-	default:
-		if theme.HasStatus(status) {
-			return theme.StatusColor(status)
-		}
-		return theme.FgDim()
+	// Use status color if available
+	if status != nil {
+		return status.Color()
 	}
+	return theme.FgDim()
 }
 
 // InputHandler handles keyboard input.

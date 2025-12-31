@@ -13,11 +13,12 @@ import (
 // TableCell defines styling for a single cell.
 type TableCell struct {
 	Text       string
-	Color      tcell.Color // 0 = auto-detect from text (status registry)
-	Align      int         // tview.AlignLeft, AlignCenter, AlignRight
-	Expansion  int         // Column expansion factor
-	MaxWidth   int         // Maximum width (0 = no limit)
-	Selectable bool        // Whether this cell is selectable
+	Color      tcell.Color   // Explicit color (0 = use Status color or default Fg)
+	Status     *theme.Status // Typed status for color/icon (takes precedence over Color if set)
+	Align      int           // tview.AlignLeft, AlignCenter, AlignRight
+	Expansion  int           // Column expansion factor
+	MaxWidth   int           // Maximum width (0 = no limit)
+	Selectable bool          // Whether this cell is selectable
 }
 
 // Table is an enhanced table wrapper with header support and selection.
@@ -74,14 +75,14 @@ func (t *Table) SetHeaders(headers ...string) *Table {
 	return t
 }
 
-// AddRow adds a data row with automatic status coloring.
+// AddRow adds a data row with default foreground color.
 func (t *Table) AddRow(cells ...string) *Table {
 	row := t.Table.GetRowCount()
+	fg := theme.Fg()
 
 	for col, text := range cells {
-		color := t.detectCellColor(text)
 		cell := tview.NewTableCell(text).
-			SetTextColor(color).
+			SetTextColor(fg).
 			SetAlign(tview.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
@@ -112,21 +113,31 @@ func (t *Table) AddColoredRow(cells []string, colors []tcell.Color) *Table {
 }
 
 // AddStyledRow adds a row with full cell styling.
+// If Status is set on a cell, its color takes precedence over the Color field.
 func (t *Table) AddStyledRow(cells []TableCell) *Table {
 	row := t.Table.GetRowCount()
 
 	for col, tc := range cells {
 		color := tc.Color
+		text := tc.Text
+		var cellRef interface{}
+
+		// Status takes precedence over Color
+		if tc.Status != nil {
+			color = tc.Status.Color()
+			cellRef = tc.Status // Store for theme updates
+		}
 		if color == 0 {
-			color = t.detectCellColor(tc.Text)
+			color = theme.Fg()
 		}
 
-		cell := tview.NewTableCell(tc.Text).
+		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tc.Align).
 			SetExpansion(tc.Expansion).
 			SetMaxWidth(tc.MaxWidth).
-			SetSelectable(tc.Selectable)
+			SetSelectable(tc.Selectable).
+			SetReference(cellRef)
 		t.Table.SetCell(row, col, cell)
 	}
 
@@ -252,9 +263,6 @@ func (t *Table) Draw(screen tcell.Screen) {
 	accent := theme.Accent()
 	selectionStyle := theme.SelectionStyle()
 
-	// Build a cache of status colors to avoid repeated lock acquisitions
-	statusColorCache := make(map[string]tcell.Color)
-
 	// Update table background color from theme
 	t.Table.SetBackgroundColor(bg)
 
@@ -277,16 +285,6 @@ func (t *Table) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Helper to get status color with caching
-	getStatusColor := func(status string) tcell.Color {
-		if color, ok := statusColorCache[status]; ok {
-			return color
-		}
-		color := theme.StatusColor(status)
-		statusColorCache[status] = color
-		return color
-	}
-
 	// Update data cell backgrounds and refresh text colors for theme changes
 	for row := startRow; row < rowCount; row++ {
 		if t.multiSelect && t.selectedRows[row] {
@@ -296,11 +294,9 @@ func (t *Table) Draw(screen tcell.Screen) {
 			cell := t.Table.GetCell(row, col)
 			if cell != nil {
 				cell.SetBackgroundColor(bg)
-				// Only refresh text color for cells with a stored status reference.
-				// Cells without a reference keep their original color (set via AddRowWithColor, etc.)
-				if ref, ok := cell.GetReference().(string); ok && ref != "" {
-					// Cell has a stored status reference - use cached color lookup
-					cell.SetTextColor(getStatusColor(ref))
+				// Refresh color for cells with a typed Status reference
+				if status, ok := cell.GetReference().(*theme.Status); ok && status != nil {
+					cell.SetTextColor(status.Color())
 				}
 				// Note: We intentionally don't set fg for cells without a reference,
 				// as that would overwrite custom colors set via AddRowWithColor().
@@ -353,13 +349,6 @@ func (t *Table) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	})
 }
 
-// detectCellColor returns color based on status registry or default.
-func (t *Table) detectCellColor(text string) tcell.Color {
-	if theme.HasStatus(text) {
-		return theme.StatusColor(text)
-	}
-	return theme.Fg()
-}
 
 // notifySelectionChange calls the selection change callback.
 func (t *Table) notifySelectionChange() {
@@ -422,10 +411,10 @@ func (t *Table) UpdateRow(index int, cells ...string) error {
 		return fmt.Errorf("cannot update header row via UpdateRow")
 	}
 
+	fg := theme.Fg()
 	for col, text := range cells {
-		color := t.detectCellColor(text)
 		cell := tview.NewTableCell(text).
-			SetTextColor(color).
+			SetTextColor(fg).
 			SetAlign(tview.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
@@ -475,16 +464,25 @@ func (t *Table) UpdateStyledRow(index int, cells []TableCell) error {
 
 	for col, tc := range cells {
 		color := tc.Color
+		text := tc.Text
+		var cellRef interface{}
+
+		// Status takes precedence over Color
+		if tc.Status != nil {
+			color = tc.Status.Color()
+			cellRef = tc.Status // Store for theme updates
+		}
 		if color == 0 {
-			color = t.detectCellColor(tc.Text)
+			color = theme.Fg()
 		}
 
-		cell := tview.NewTableCell(tc.Text).
+		cell := tview.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tc.Align).
 			SetExpansion(tc.Expansion).
 			SetMaxWidth(tc.MaxWidth).
-			SetSelectable(tc.Selectable)
+			SetSelectable(tc.Selectable).
+			SetReference(cellRef)
 		t.Table.SetCell(tableRow, col, cell)
 	}
 
@@ -557,10 +555,10 @@ func (t *Table) InsertRowAt(index int, cells ...string) error {
 	t.Table.InsertRow(tableRow)
 
 	// Populate the new row
+	fg := theme.Fg()
 	for col, text := range cells {
-		color := t.detectCellColor(text)
 		cell := tview.NewTableCell(text).
-			SetTextColor(color).
+			SetTextColor(fg).
 			SetAlign(tview.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
@@ -867,31 +865,27 @@ func (t *Table) AddRowWithColor(color tcell.Color, cells ...string) int {
 	return t.tableRowToDataIndex(row)
 }
 
-// AddStyledRowSimple adds a row with status-based coloring using a status string.
-// The status is used to look up the color in the status registry.
-// Only the cell whose text matches the status gets the status color and icon;
-// other cells use the default foreground color.
-// The status name is stored as a reference on the status cell for dynamic theme updates.
-func (t *Table) AddStyledRowSimple(status string, cells ...string) int {
+// AddRowWithStatus adds a row with a typed status for a specific column.
+// The status column will display with the status color and icon.
+// Other cells use the default foreground color.
+// The status is stored as a reference for dynamic theme updates.
+func (t *Table) AddRowWithStatus(status *theme.Status, statusCol int, cells ...string) int {
 	row := t.Table.GetRowCount()
-	statusColor := theme.StatusColor(status)
-	if statusColor == 0 {
-		statusColor = theme.Fg()
-	}
-	statusIcon := theme.StatusIcon(status)
+	fg := theme.Fg()
 
 	for col, text := range cells {
 		displayText := text
-		cellColor := theme.Fg()
+		cellColor := fg
 		var cellRef interface{}
 
-		// Only apply status color and icon to the cell that matches the status
-		if text == status {
-			if statusIcon != "" {
-				displayText = statusIcon + " " + text
+		// Apply status color and icon to the designated column
+		if col == statusCol && status != nil {
+			icon := status.Icon()
+			if icon != "" {
+				displayText = icon + " " + text
 			}
-			cellColor = statusColor
-			// Store status name as reference for dynamic theme updates in Draw()
+			cellColor = status.Color()
+			// Store status for dynamic theme updates in Draw()
 			cellRef = status
 		}
 
