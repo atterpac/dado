@@ -114,17 +114,8 @@ func (fb *FormBinding[T]) Sync() error {
 				for i := 0; i < fieldVal.Len(); i++ {
 					values[i] = fieldVal.Index(i).String()
 				}
-				// Find indices for the values
-				indices := make([]int, 0, len(values))
-				for _, val := range values {
-					for i, opt := range f.GetSelected() {
-						if opt.Value == val {
-							indices = append(indices, i)
-							break
-						}
-					}
-				}
-				f.SetSelected(indices)
+				// Use SetSelectedValues to set by value strings
+				_ = f.SetSelectedValues(values)
 			}
 		}
 	}

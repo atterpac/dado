@@ -101,15 +101,15 @@ func (tb *TextFieldBuilder) Validate(v ...validators.Validator) *TextFieldBuilde
 	return tb
 }
 
-// OnChange sets the change callback.
-func (tb *TextFieldBuilder) OnChange(fn func(value string)) *TextFieldBuilder {
-	tb.field.SetOnChange(fn)
+// OnChange sets the change handler.
+func (tb *TextFieldBuilder) OnChange(handler ChangeHandler[string]) *TextFieldBuilder {
+	tb.field.SetOnChange(handler)
 	return tb
 }
 
-// OnSubmit sets the submit callback (Enter key).
-func (tb *TextFieldBuilder) OnSubmit(fn func(value string)) *TextFieldBuilder {
-	tb.field.SetOnSubmit(fn)
+// OnSubmit sets the submit handler.
+func (tb *TextFieldBuilder) OnSubmit(handler SubmitHandler) *TextFieldBuilder {
+	tb.field.SetOnSubmit(handler)
 	return tb
 }
 
@@ -167,9 +167,9 @@ func (tb *TextAreaBuilder) MaxLines(n int) *TextAreaBuilder {
 	return tb
 }
 
-// OnChange sets the change callback.
-func (tb *TextAreaBuilder) OnChange(fn func(value string)) *TextAreaBuilder {
-	tb.field.SetOnChange(fn)
+// OnChange sets the change handler.
+func (tb *TextAreaBuilder) OnChange(handler ChangeHandler[string]) *TextAreaBuilder {
+	tb.field.SetOnChange(handler)
 	return tb
 }
 
@@ -232,9 +232,9 @@ func (sb *SelectBuilder) Validate(v ...validators.Validator) *SelectBuilder {
 	return sb
 }
 
-// OnChange sets the change callback.
-func (sb *SelectBuilder) OnChange(fn func(index int, option SelectOption)) *SelectBuilder {
-	sb.field.SetOnChange(fn)
+// OnChange sets the change handler.
+func (sb *SelectBuilder) OnChange(handler ChangeHandler[SelectOption]) *SelectBuilder {
+	sb.field.SetOnChange(handler)
 	return sb
 }
 
@@ -285,9 +285,9 @@ func (mb *MultiSelectBuilder) Validate(v ...validators.Validator) *MultiSelectBu
 	return mb
 }
 
-// OnChange sets the change callback.
-func (mb *MultiSelectBuilder) OnChange(fn func(selected []SelectOption)) *MultiSelectBuilder {
-	mb.field.SetOnChange(fn)
+// OnChange sets the change handler.
+func (mb *MultiSelectBuilder) OnChange(handler ChangeHandler[[]SelectOption]) *MultiSelectBuilder {
+	mb.field.SetOnChange(handler)
 	return mb
 }
 
@@ -322,9 +322,9 @@ func (cb *CheckboxBuilder) Checked(checked bool) *CheckboxBuilder {
 	return cb
 }
 
-// OnChange sets the change callback.
-func (cb *CheckboxBuilder) OnChange(fn func(checked bool)) *CheckboxBuilder {
-	cb.field.SetOnChange(fn)
+// OnChange sets the change handler.
+func (cb *CheckboxBuilder) OnChange(handler ChangeHandler[bool]) *CheckboxBuilder {
+	cb.field.SetOnChange(handler)
 	return cb
 }
 
@@ -366,9 +366,9 @@ func (rb *RadioGroupBuilder) Validate(v ...validators.Validator) *RadioGroupBuil
 	return rb
 }
 
-// OnChange sets the change callback.
-func (rb *RadioGroupBuilder) OnChange(fn func(index int, value string)) *RadioGroupBuilder {
-	rb.field.SetOnChange(fn)
+// OnChange sets the change handler.
+func (rb *RadioGroupBuilder) OnChange(handler ChangeHandler[string]) *RadioGroupBuilder {
+	rb.field.SetOnChange(handler)
 	return rb
 }
 

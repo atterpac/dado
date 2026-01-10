@@ -1,6 +1,8 @@
 package components
 
 import (
+	"fmt"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
@@ -8,15 +10,18 @@ import (
 )
 
 // Checkbox is a boolean toggle component.
+// It implements ValueProvider[bool].
 type Checkbox struct {
 	*tview.Box
+	BaseEventEmitter
 
 	name    string
 	label   string
 	checked bool
 	focused bool
 
-	onChange func(checked bool)
+	// Typed handler
+	onChange ChangeHandler[bool]
 }
 
 // NewCheckbox creates a new Checkbox.
@@ -39,14 +44,30 @@ func (c *Checkbox) SetChecked(checked bool) *Checkbox {
 	return c
 }
 
-// IsChecked returns the checked state.
-func (c *Checkbox) IsChecked() bool {
+// Checked returns the checked state.
+func (c *Checkbox) Checked() bool {
 	return c.checked
 }
 
-// GetValue returns the checked state as interface{}.
+// Value returns the checked state (alias for Checked).
+// This method is part of the ValueProvider interface.
+func (c *Checkbox) Value() bool {
+	return c.checked
+}
+
+// GetValue returns the checked state.
 func (c *Checkbox) GetValue() bool {
 	return c.checked
+}
+
+// HasValue returns true (checkbox always has a value).
+func (c *Checkbox) HasValue() bool {
+	return true
+}
+
+// Clear resets the checkbox to unchecked.
+func (c *Checkbox) Clear() {
+	c.SetChecked(false)
 }
 
 // GetName returns the field name.
@@ -54,18 +75,30 @@ func (c *Checkbox) GetName() string {
 	return c.name
 }
 
-// SetOnChange sets the callback for state changes.
-func (c *Checkbox) SetOnChange(fn func(checked bool)) *Checkbox {
-	c.onChange = fn
+// SetOnChange sets the change handler (new API).
+func (c *Checkbox) SetOnChange(handler ChangeHandler[bool]) *Checkbox {
+	c.onChange = handler
 	return c
+}
+
+// emitChange emits a change event to all handlers.
+func (c *Checkbox) emitChange(oldValue, newValue bool) {
+	event := NewChangeEvent(c.name, oldValue, newValue)
+
+	// Typed handler
+	if c.onChange != nil {
+		c.onChange(event)
+	}
+
+	// Generic event bus
+	c.EmitEvent(event)
 }
 
 // Toggle toggles the checked state.
 func (c *Checkbox) Toggle() *Checkbox {
+	oldValue := c.checked
 	c.checked = !c.checked
-	if c.onChange != nil {
-		c.onChange(c.checked)
-	}
+	c.emitChange(oldValue, c.checked)
 	return c
 }
 
@@ -122,11 +155,9 @@ func (c *Checkbox) Draw(screen tcell.Screen) {
 // InputHandler handles keyboard input.
 func (c *Checkbox) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return c.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyEnter, tcell.KeyRune:
-			if event.Key() == tcell.KeyEnter || event.Rune() == ' ' {
-				c.Toggle()
-			}
+		// Space to toggle (Enter is reserved for form submit)
+		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
+			c.Toggle()
 		}
 	})
 }
@@ -154,8 +185,10 @@ func (c *Checkbox) GetFieldHeight() int {
 }
 
 // RadioGroup is a single-choice option group.
+// It implements IndexedValueProvider[string].
 type RadioGroup struct {
 	*tview.Box
+	BaseEventEmitter
 
 	name     string
 	label    string
@@ -164,7 +197,8 @@ type RadioGroup struct {
 	cursor   int
 	focused  bool
 
-	onChange func(index int, value string)
+	// Typed handler
+	onChange ChangeHandler[string]
 }
 
 // NewRadioGroup creates a new RadioGroup.
@@ -196,20 +230,53 @@ func (r *RadioGroup) SetSelected(index int) *RadioGroup {
 	return r
 }
 
-// GetSelected returns the selected index and value.
-func (r *RadioGroup) GetSelected() (int, string) {
-	if r.selected >= 0 && r.selected < len(r.options) {
-		return r.selected, r.options[r.selected]
+// SetSelectedIndex sets the selected index, returning an error if out of range.
+func (r *RadioGroup) SetSelectedIndex(index int) error {
+	if index < -1 || index >= len(r.options) {
+		return fmt.Errorf("index %d out of range [0, %d)", index, len(r.options))
 	}
-	return -1, ""
+	r.selected = index
+	return nil
 }
 
-// GetValue returns the selected value.
-func (r *RadioGroup) GetValue() string {
+// SetSelectedValue sets the selected option by value.
+func (r *RadioGroup) SetSelectedValue(value string) error {
+	for i, opt := range r.options {
+		if opt == value {
+			r.selected = i
+			return nil
+		}
+	}
+	return fmt.Errorf("value %q not found in options", value)
+}
+
+// SelectedIndex returns the selected index (-1 if none).
+func (r *RadioGroup) SelectedIndex() int {
+	return r.selected
+}
+
+// Value returns the selected value.
+// This method is part of the ValueProvider interface.
+func (r *RadioGroup) Value() string {
 	if r.selected >= 0 && r.selected < len(r.options) {
 		return r.options[r.selected]
 	}
 	return ""
+}
+
+// GetValue returns the selected value.
+func (r *RadioGroup) GetValue() string {
+	return r.Value()
+}
+
+// HasValue returns true if an option is selected.
+func (r *RadioGroup) HasValue() bool {
+	return r.selected >= 0 && r.selected < len(r.options)
+}
+
+// Clear resets the selection to none.
+func (r *RadioGroup) Clear() {
+	r.selected = -1
 }
 
 // GetName returns the field name.
@@ -222,10 +289,31 @@ func (r *RadioGroup) GetOptions() []string {
 	return r.options
 }
 
-// SetOnChange sets the callback for selection changes.
-func (r *RadioGroup) SetOnChange(fn func(index int, value string)) *RadioGroup {
-	r.onChange = fn
+// SetOnChange sets the change handler (new API).
+func (r *RadioGroup) SetOnChange(handler ChangeHandler[string]) *RadioGroup {
+	r.onChange = handler
 	return r
+}
+
+// emitChange emits a change event to all handlers.
+func (r *RadioGroup) emitChange(oldIndex, newIndex int) {
+	var oldValue, newValue string
+	if oldIndex >= 0 && oldIndex < len(r.options) {
+		oldValue = r.options[oldIndex]
+	}
+	if newIndex >= 0 && newIndex < len(r.options) {
+		newValue = r.options[newIndex]
+	}
+
+	event := NewChangeEvent(r.name, oldValue, newValue).WithIndex(newIndex)
+
+	// Typed handler
+	if r.onChange != nil {
+		r.onChange(event)
+	}
+
+	// Generic event bus
+	r.EmitEvent(event)
 }
 
 // Draw renders the radio group.
@@ -327,24 +415,20 @@ func (r *RadioGroup) InputHandler() func(*tcell.EventKey, func(tview.Primitive))
 			if r.cursor < len(r.options)-1 {
 				r.cursor++
 			}
-		case tcell.KeyEnter, tcell.KeyRune:
-			if event.Key() == tcell.KeyEnter || event.Rune() == ' ' {
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case ' ':
+				// Space to select (Enter is reserved for form submit)
+				oldSelected := r.selected
 				r.selected = r.cursor
-				if r.onChange != nil {
-					r.onChange(r.selected, r.options[r.selected])
+				r.emitChange(oldSelected, r.selected)
+			case 'j':
+				if r.cursor < len(r.options)-1 {
+					r.cursor++
 				}
-			}
-			// Vim keys
-			if event.Key() == tcell.KeyRune {
-				switch event.Rune() {
-				case 'j':
-					if r.cursor < len(r.options)-1 {
-						r.cursor++
-					}
-				case 'k':
-					if r.cursor > 0 {
-						r.cursor--
-					}
+			case 'k':
+				if r.cursor > 0 {
+					r.cursor--
 				}
 			}
 		}

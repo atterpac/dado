@@ -11,8 +11,10 @@ import (
 )
 
 // TextField is a single-line text input with validation.
+// It implements ValueProvider[string].
 type TextField struct {
 	*tview.Box
+	BaseEventEmitter
 
 	name        string
 	label       string
@@ -28,9 +30,9 @@ type TextField struct {
 	// State
 	focused bool
 
-	// Callbacks
-	onChange func(value string)
-	onSubmit func(value string)
+	// Typed handlers
+	onChange ChangeHandler[string]
+	onSubmit SubmitHandler
 }
 
 // NewTextField creates a new TextField.
@@ -66,6 +68,22 @@ func (t *TextField) GetValue() string {
 	return t.value
 }
 
+// Value returns the current value (alias for GetValue).
+// This method is part of the ValueProvider interface.
+func (t *TextField) Value() string {
+	return t.value
+}
+
+// HasValue returns true if the text field has a non-empty value.
+func (t *TextField) HasValue() bool {
+	return t.value != ""
+}
+
+// Clear resets the text field to an empty value.
+func (t *TextField) Clear() {
+	t.SetValue("")
+}
+
 // GetName returns the field name.
 func (t *TextField) GetName() string {
 	return t.name
@@ -91,16 +109,43 @@ func (t *TextField) SetValidators(vs ...validators.Validator) *TextField {
 	return t
 }
 
-// SetOnChange sets the callback for value changes.
-func (t *TextField) SetOnChange(fn func(value string)) *TextField {
-	t.onChange = fn
+// SetOnChange sets the change handler (new API).
+func (t *TextField) SetOnChange(handler ChangeHandler[string]) *TextField {
+	t.onChange = handler
 	return t
 }
 
-// SetOnSubmit sets the callback for Enter key.
-func (t *TextField) SetOnSubmit(fn func(value string)) *TextField {
-	t.onSubmit = fn
+// SetOnSubmit sets the submit handler (new API).
+func (t *TextField) SetOnSubmit(handler SubmitHandler) *TextField {
+	t.onSubmit = handler
 	return t
+}
+
+
+// emitChange emits a change event to all handlers.
+func (t *TextField) emitChange(oldValue, newValue string) {
+	event := NewChangeEvent(t.name, oldValue, newValue)
+
+	// Typed handler
+	if t.onChange != nil {
+		t.onChange(event)
+	}
+
+	// Generic event bus
+	t.EmitEvent(event)
+}
+
+// emitSubmit emits a submit event to all handlers.
+func (t *TextField) emitSubmit() {
+	event := NewSubmitEvent(t.name, t.value)
+
+	// Typed handler
+	if t.onSubmit != nil {
+		t.onSubmit(event)
+	}
+
+	// Generic event bus
+	t.EmitEvent(event)
 }
 
 // Validate runs validation and returns any error.
@@ -277,6 +322,8 @@ func (t *TextField) Draw(screen tcell.Screen) {
 // InputHandler handles keyboard input.
 func (t *TextField) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		oldValue := t.value
+
 		switch event.Key() {
 		case tcell.KeyLeft:
 			if t.cursorPos > 0 {
@@ -295,35 +342,25 @@ func (t *TextField) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) 
 				t.value = t.value[:t.cursorPos-1] + t.value[t.cursorPos:]
 				t.cursorPos--
 				t.validate()
-				if t.onChange != nil {
-					t.onChange(t.value)
-				}
+				t.emitChange(oldValue, t.value)
 			}
 		case tcell.KeyDelete:
 			if t.cursorPos < len(t.value) {
 				t.value = t.value[:t.cursorPos] + t.value[t.cursorPos+1:]
 				t.validate()
-				if t.onChange != nil {
-					t.onChange(t.value)
-				}
+				t.emitChange(oldValue, t.value)
 			}
 		case tcell.KeyEnter:
-			if t.onSubmit != nil {
-				t.onSubmit(t.value)
-			}
+			t.emitSubmit()
 		case tcell.KeyCtrlU:
 			t.value = t.value[t.cursorPos:]
 			t.cursorPos = 0
 			t.validate()
-			if t.onChange != nil {
-				t.onChange(t.value)
-			}
+			t.emitChange(oldValue, t.value)
 		case tcell.KeyCtrlK:
 			t.value = t.value[:t.cursorPos]
 			t.validate()
-			if t.onChange != nil {
-				t.onChange(t.value)
-			}
+			t.emitChange(oldValue, t.value)
 		case tcell.KeyCtrlW:
 			// Delete word backward
 			if t.cursorPos > 0 {
@@ -337,18 +374,14 @@ func (t *TextField) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) 
 				t.value = t.value[:pos] + t.value[t.cursorPos:]
 				t.cursorPos = pos
 				t.validate()
-				if t.onChange != nil {
-					t.onChange(t.value)
-				}
+				t.emitChange(oldValue, t.value)
 			}
 		case tcell.KeyRune:
 			r := event.Rune()
 			t.value = t.value[:t.cursorPos] + string(r) + t.value[t.cursorPos:]
 			t.cursorPos++
 			t.validate()
-			if t.onChange != nil {
-				t.onChange(t.value)
-			}
+			t.emitChange(oldValue, t.value)
 		}
 	})
 }
@@ -383,8 +416,10 @@ func (t *TextField) GetFieldHeight() int {
 }
 
 // TextArea is a multi-line text input.
+// It implements ValueProvider[string].
 type TextArea struct {
 	*tview.Box
+	BaseEventEmitter
 
 	name        string
 	label       string
@@ -399,7 +434,8 @@ type TextArea struct {
 
 	focused bool
 
-	onChange func(value string)
+	// Typed handler
+	onChange ChangeHandler[string]
 }
 
 // NewTextArea creates a new TextArea.
@@ -440,6 +476,22 @@ func (t *TextArea) GetValue() string {
 	return strings.Join(t.lines, "\n")
 }
 
+// Value returns the current value (alias for GetValue).
+// This method is part of the ValueProvider interface.
+func (t *TextArea) Value() string {
+	return t.GetValue()
+}
+
+// HasValue returns true if the text area has a non-empty value.
+func (t *TextArea) HasValue() bool {
+	return len(t.lines) > 1 || (len(t.lines) == 1 && t.lines[0] != "")
+}
+
+// Clear resets the text area to an empty value.
+func (t *TextArea) Clear() {
+	t.SetValue("")
+}
+
 // GetName returns the field name.
 func (t *TextArea) GetName() string {
 	return t.name
@@ -451,10 +503,23 @@ func (t *TextArea) SetMaxLines(max int) *TextArea {
 	return t
 }
 
-// SetOnChange sets the callback for value changes.
-func (t *TextArea) SetOnChange(fn func(value string)) *TextArea {
-	t.onChange = fn
+// SetOnChange sets the change handler (new API).
+func (t *TextArea) SetOnChange(handler ChangeHandler[string]) *TextArea {
+	t.onChange = handler
 	return t
+}
+
+// emitChange emits a change event to all handlers.
+func (t *TextArea) emitChange(oldValue, newValue string) {
+	event := NewChangeEvent(t.name, oldValue, newValue)
+
+	// Typed handler
+	if t.onChange != nil {
+		t.onChange(event)
+	}
+
+	// Generic event bus
+	t.EmitEvent(event)
 }
 
 // Draw renders the text area.
@@ -579,6 +644,7 @@ func (t *TextArea) Draw(screen tcell.Screen) {
 // InputHandler handles keyboard input.
 func (t *TextArea) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		oldValue := t.GetValue()
 		currentLine := t.lines[t.cursorRow]
 
 		switch event.Key() {
@@ -626,9 +692,7 @@ func (t *TextArea) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 				t.lines = append(t.lines[:t.cursorRow], t.lines[t.cursorRow+1:]...)
 				t.cursorRow--
 			}
-			if t.onChange != nil {
-				t.onChange(t.GetValue())
-			}
+			t.emitChange(oldValue, t.GetValue())
 		case tcell.KeyDelete:
 			if t.cursorCol < len(currentLine) {
 				t.lines[t.cursorRow] = currentLine[:t.cursorCol] + currentLine[t.cursorCol+1:]
@@ -637,9 +701,7 @@ func (t *TextArea) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 				t.lines[t.cursorRow] = currentLine + t.lines[t.cursorRow+1]
 				t.lines = append(t.lines[:t.cursorRow+1], t.lines[t.cursorRow+2:]...)
 			}
-			if t.onChange != nil {
-				t.onChange(t.GetValue())
-			}
+			t.emitChange(oldValue, t.GetValue())
 		case tcell.KeyEnter:
 			if len(t.lines) < t.maxLines {
 				// Split line at cursor
@@ -648,17 +710,13 @@ func (t *TextArea) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 				t.lines = append(t.lines[:t.cursorRow+1], append([]string{newLine}, t.lines[t.cursorRow+1:]...)...)
 				t.cursorRow++
 				t.cursorCol = 0
-				if t.onChange != nil {
-					t.onChange(t.GetValue())
-				}
+				t.emitChange(oldValue, t.GetValue())
 			}
 		case tcell.KeyRune:
 			r := event.Rune()
 			t.lines[t.cursorRow] = currentLine[:t.cursorCol] + string(r) + currentLine[t.cursorCol:]
 			t.cursorCol++
-			if t.onChange != nil {
-				t.onChange(t.GetValue())
-			}
+			t.emitChange(oldValue, t.GetValue())
 		}
 	})
 }

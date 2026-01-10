@@ -343,7 +343,7 @@ func (f *Form) GetValues() map[string]any {
 		case *Select:
 			values[fld.GetName()] = fld.GetValue()
 		case *MultiSelect:
-			values[fld.GetName()] = fld.GetValues()
+			values[fld.GetName()] = fld.Values()
 		case *Checkbox:
 			values[fld.GetName()] = fld.GetValue()
 		case *RadioGroup:

@@ -1,6 +1,9 @@
 package components
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
@@ -14,8 +17,10 @@ type SelectOption struct {
 }
 
 // Select is a dropdown selection component.
+// It implements IndexedValueProvider[string].
 type Select struct {
 	*tview.Box
+	BaseEventEmitter
 
 	name        string
 	label       string
@@ -26,7 +31,8 @@ type Select struct {
 
 	focused bool
 
-	onChange func(index int, option SelectOption)
+	// Typed handler
+	onChange ChangeHandler[SelectOption]
 }
 
 // NewSelect creates a new Select component.
@@ -84,20 +90,61 @@ func (s *Select) SetSelected(index int) *Select {
 	return s
 }
 
-// GetSelected returns the selected option.
-func (s *Select) GetSelected() (int, SelectOption) {
-	if s.selected >= 0 && s.selected < len(s.options) {
-		return s.selected, s.options[s.selected]
+// SetSelectedIndex sets the selected index, returning an error if out of range.
+func (s *Select) SetSelectedIndex(index int) error {
+	if index < -1 || index >= len(s.options) {
+		return fmt.Errorf("index %d out of range [0, %d)", index, len(s.options))
 	}
-	return -1, SelectOption{}
+	s.selected = index
+	return nil
 }
 
-// GetValue returns the selected value.
-func (s *Select) GetValue() string {
+// SetSelectedValue sets the selected option by value.
+func (s *Select) SetSelectedValue(value string) error {
+	for i, opt := range s.options {
+		if opt.Value == value {
+			s.selected = i
+			return nil
+		}
+	}
+	return fmt.Errorf("value %q not found in options", value)
+}
+
+// SelectedIndex returns the selected index (-1 if none).
+func (s *Select) SelectedIndex() int {
+	return s.selected
+}
+
+// SelectedOption returns the selected option.
+func (s *Select) SelectedOption() SelectOption {
+	if s.selected >= 0 && s.selected < len(s.options) {
+		return s.options[s.selected]
+	}
+	return SelectOption{}
+}
+
+// Value returns the selected value.
+// This method is part of the ValueProvider interface.
+func (s *Select) Value() string {
 	if s.selected >= 0 && s.selected < len(s.options) {
 		return s.options[s.selected].Value
 	}
 	return ""
+}
+
+// GetValue returns the selected value.
+func (s *Select) GetValue() string {
+	return s.Value()
+}
+
+// HasValue returns true if an option is selected.
+func (s *Select) HasValue() bool {
+	return s.selected >= 0 && s.selected < len(s.options)
+}
+
+// Clear resets the selection to none.
+func (s *Select) Clear() {
+	s.selected = -1
 }
 
 // GetName returns the field name.
@@ -105,10 +152,31 @@ func (s *Select) GetName() string {
 	return s.name
 }
 
-// SetOnChange sets the callback for selection changes.
-func (s *Select) SetOnChange(fn func(index int, option SelectOption)) *Select {
-	s.onChange = fn
+// SetOnChange sets the change handler (new API).
+func (s *Select) SetOnChange(handler ChangeHandler[SelectOption]) *Select {
+	s.onChange = handler
 	return s
+}
+
+// emitChange emits a change event to all handlers.
+func (s *Select) emitChange(oldIndex, newIndex int) {
+	var oldOption, newOption SelectOption
+	if oldIndex >= 0 && oldIndex < len(s.options) {
+		oldOption = s.options[oldIndex]
+	}
+	if newIndex >= 0 && newIndex < len(s.options) {
+		newOption = s.options[newIndex]
+	}
+
+	event := NewChangeEvent(s.name, oldOption, newOption).WithIndex(newIndex)
+
+	// Typed handler
+	if s.onChange != nil {
+		s.onChange(event)
+	}
+
+	// Generic event bus
+	s.EmitEvent(event)
 }
 
 // Draw renders the select component.
@@ -247,18 +315,32 @@ func (s *Select) Draw(screen tcell.Screen) {
 // InputHandler handles keyboard input.
 func (s *Select) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return s.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		oldSelected := s.selected
+
 		switch event.Key() {
-		case tcell.KeyEnter, tcell.KeyRune:
-			if event.Key() == tcell.KeyRune && event.Rune() != ' ' {
+		case tcell.KeyRune:
+			// Space to toggle dropdown (Enter is reserved for form submit)
+			if event.Rune() == ' ' {
+				if s.expanded {
+					s.expanded = false
+					if s.selected >= 0 {
+						s.emitChange(oldSelected, s.selected)
+					}
+				} else {
+					s.expanded = true
+				}
 				return
 			}
-			if s.expanded {
-				s.expanded = false
-				if s.onChange != nil && s.selected >= 0 {
-					s.onChange(s.selected, s.options[s.selected])
+			// Vim keys
+			switch event.Rune() {
+			case 'j':
+				if s.expanded && s.selected < len(s.options)-1 {
+					s.selected++
 				}
-			} else {
-				s.expanded = true
+			case 'k':
+				if s.expanded && s.selected > 0 {
+					s.selected--
+				}
 			}
 		case tcell.KeyEscape:
 			s.expanded = false
@@ -277,20 +359,6 @@ func (s *Select) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 				}
 			} else {
 				s.expanded = true
-			}
-		}
-
-		// Vim keys
-		if event.Key() == tcell.KeyRune {
-			switch event.Rune() {
-			case 'j':
-				if s.expanded && s.selected < len(s.options)-1 {
-					s.selected++
-				}
-			case 'k':
-				if s.expanded && s.selected > 0 {
-					s.selected--
-				}
 			}
 		}
 	})
@@ -327,8 +395,10 @@ func (s *Select) GetFieldHeight() int {
 }
 
 // MultiSelect allows multiple option selection.
+// It implements MultiValueProvider[string].
 type MultiSelect struct {
 	*tview.Box
+	BaseEventEmitter
 
 	name     string
 	label    string
@@ -339,7 +409,8 @@ type MultiSelect struct {
 
 	focused bool
 
-	onChange func(selected []SelectOption)
+	// Typed handler
+	onChange ChangeHandler[[]SelectOption]
 }
 
 // NewMultiSelect creates a new MultiSelect component.
@@ -383,8 +454,53 @@ func (m *MultiSelect) SetSelected(indices []int) *MultiSelect {
 	return m
 }
 
-// GetSelected returns the selected options.
-func (m *MultiSelect) GetSelected() []SelectOption {
+// SetSelectedIndices sets the selected indices, returning an error if any index is out of range.
+func (m *MultiSelect) SetSelectedIndices(indices []int) error {
+	m.selected = make(map[int]bool)
+	for _, idx := range indices {
+		if idx < 0 || idx >= len(m.options) {
+			return fmt.Errorf("index %d out of range [0, %d)", idx, len(m.options))
+		}
+		m.selected[idx] = true
+	}
+	return nil
+}
+
+// SetSelectedValues sets the selected options by value.
+func (m *MultiSelect) SetSelectedValues(values []string) error {
+	m.selected = make(map[int]bool)
+	valueSet := make(map[string]bool)
+	for _, v := range values {
+		valueSet[v] = true
+	}
+	for i, opt := range m.options {
+		if valueSet[opt.Value] {
+			m.selected[i] = true
+			delete(valueSet, opt.Value)
+		}
+	}
+	if len(valueSet) > 0 {
+		for v := range valueSet {
+			return fmt.Errorf("value %q not found in options", v)
+		}
+	}
+	return nil
+}
+
+// SelectedIndices returns all selected indices (sorted).
+func (m *MultiSelect) SelectedIndices() []int {
+	indices := make([]int, 0, len(m.selected))
+	for i := range m.selected {
+		if m.selected[i] {
+			indices = append(indices, i)
+		}
+	}
+	sort.Ints(indices)
+	return indices
+}
+
+// SelectedOptions returns all selected options.
+func (m *MultiSelect) SelectedOptions() []SelectOption {
 	var result []SelectOption
 	for i := 0; i < len(m.options); i++ {
 		if m.selected[i] {
@@ -394,8 +510,9 @@ func (m *MultiSelect) GetSelected() []SelectOption {
 	return result
 }
 
-// GetValues returns the selected values.
-func (m *MultiSelect) GetValues() []string {
+// Values returns all selected value strings.
+// This method is part of the MultiValueProvider interface.
+func (m *MultiSelect) Values() []string {
 	var result []string
 	for i := 0; i < len(m.options); i++ {
 		if m.selected[i] {
@@ -405,15 +522,38 @@ func (m *MultiSelect) GetValues() []string {
 	return result
 }
 
+// HasValue returns true if at least one option is selected.
+func (m *MultiSelect) HasValue() bool {
+	return len(m.selected) > 0
+}
+
+// Clear deselects all options.
+func (m *MultiSelect) Clear() {
+	m.selected = make(map[int]bool)
+}
+
 // GetName returns the field name.
 func (m *MultiSelect) GetName() string {
 	return m.name
 }
 
-// SetOnChange sets the callback for selection changes.
-func (m *MultiSelect) SetOnChange(fn func(selected []SelectOption)) *MultiSelect {
-	m.onChange = fn
+// SetOnChange sets the change handler (new API).
+func (m *MultiSelect) SetOnChange(handler ChangeHandler[[]SelectOption]) *MultiSelect {
+	m.onChange = handler
 	return m
+}
+
+// emitChange emits a change event to all handlers.
+func (m *MultiSelect) emitChange(oldSelected, newSelected []SelectOption) {
+	event := NewChangeEvent(m.name, oldSelected, newSelected)
+
+	// Typed handler
+	if m.onChange != nil {
+		m.onChange(event)
+	}
+
+	// Generic event bus
+	m.EmitEvent(event)
 }
 
 // Draw renders the multi-select component.
@@ -546,24 +686,20 @@ func (m *MultiSelect) InputHandler() func(*tcell.EventKey, func(tview.Primitive)
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
-		case tcell.KeyEnter, tcell.KeyRune:
-			if event.Key() == tcell.KeyEnter || event.Rune() == ' ' {
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case ' ':
+				// Space to toggle selection (Enter is reserved for form submit)
+				oldSelected := m.SelectedOptions()
 				m.selected[m.cursor] = !m.selected[m.cursor]
-				if m.onChange != nil {
-					m.onChange(m.GetSelected())
+				m.emitChange(oldSelected, m.SelectedOptions())
+			case 'j':
+				if m.cursor < len(m.options)-1 {
+					m.cursor++
 				}
-			}
-			// Vim keys
-			if event.Key() == tcell.KeyRune {
-				switch event.Rune() {
-				case 'j':
-					if m.cursor < len(m.options)-1 {
-						m.cursor++
-					}
-				case 'k':
-					if m.cursor > 0 {
-						m.cursor--
-					}
+			case 'k':
+				if m.cursor > 0 {
+					m.cursor--
 				}
 			}
 		}
