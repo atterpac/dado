@@ -15,13 +15,6 @@ func Run() {
 	}
 
 	switch os.Args[1] {
-	case "new":
-		if len(os.Args) < 3 {
-			ui.PrintError("Missing project name")
-			fmt.Printf("\n  %sUsage:%s jig new <project-name> [--simple|--structured]\n\n", ui.Dim, ui.Reset)
-			os.Exit(1)
-		}
-		RunNew(os.Args[2:])
 	case "theme":
 		RunTheme(os.Args[2:])
 	case "component", "components":
@@ -47,7 +40,6 @@ func PrintUsage() {
 	fmt.Printf("    %sjig%s <command> [arguments]\n\n", ui.Cyan, ui.Reset)
 
 	fmt.Printf("  %s%sCOMMANDS%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	ui.PrintCommand("new", "<name>", "Create a new jig project")
 	ui.PrintCommand("theme", "list|preview", "Manage themes")
 	ui.PrintCommand("component", "list", "Browse available components")
 	ui.PrintCommand("help", "", "Show this help message")
@@ -55,8 +47,6 @@ func PrintUsage() {
 	fmt.Println()
 
 	fmt.Printf("  %s%sEXAMPLES%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	fmt.Printf("    %s$%s jig new myapp\n", ui.Dim, ui.Reset)
-	fmt.Printf("    %s$%s jig new myapp --structured --theme catppuccin\n", ui.Dim, ui.Reset)
 	fmt.Printf("    %s$%s jig theme preview nord\n", ui.Dim, ui.Reset)
 	fmt.Println()
 
