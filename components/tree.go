@@ -49,6 +49,7 @@ type Tree struct {
 
 	// Callbacks
 	onSelect     func(node *TreeNode)
+	onHighlight  func(node *TreeNode)
 	onExpand     func(node *TreeNode)
 	onCollapse   func(node *TreeNode)
 	lazyLoader   func(node *TreeNode) []*TreeNode
@@ -115,6 +116,12 @@ func (t *Tree) SetMultiSelect(enable bool) *Tree {
 // SetOnSelect sets the callback for when a node is selected (Enter).
 func (t *Tree) SetOnSelect(fn func(node *TreeNode)) *Tree {
 	t.onSelect = fn
+	return t
+}
+
+// SetOnHighlight sets the callback for when the highlighted node changes (j/k navigation).
+func (t *Tree) SetOnHighlight(fn func(node *TreeNode)) *Tree {
+	t.onHighlight = fn
 	return t
 }
 
@@ -420,6 +427,8 @@ func (t *Tree) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 			return
 		}
 
+		prevIndex := t.selectedIndex
+
 		switch event.Key() {
 		case tcell.KeyDown:
 			t.moveDown()
@@ -493,6 +502,13 @@ func (t *Tree) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 			t.selectedIndex -= height / 2
 			if t.selectedIndex < 0 {
 				t.selectedIndex = 0
+			}
+		}
+
+		// Call onHighlight if the selected index changed
+		if t.selectedIndex != prevIndex && t.onHighlight != nil {
+			if node := t.GetSelected(); node != nil {
+				t.onHighlight(node)
 			}
 		}
 	})

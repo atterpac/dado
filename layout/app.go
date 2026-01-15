@@ -234,9 +234,14 @@ func (a *App) setupModalInputCapture() {
 		if behavior := a.pages.CurrentModalBehavior(); behavior != nil {
 			// Handle auto-dismiss on Escape
 			if behavior.DismissOnEsc && event.Key() == tcell.KeyEscape {
-				if a.pages.DismissModal() {
-					return nil // Event consumed
-				}
+				// Use a goroutine to completely defer the dismiss operation
+				// outside of tview's event handling to avoid deadlocks.
+				go func() {
+					a.app.QueueUpdateDraw(func() {
+						a.pages.DismissModal()
+					})
+				}()
+				return nil // Event consumed
 			}
 		}
 
@@ -300,12 +305,12 @@ func (m *modalWrapper) Hints() []components.KeyHint {
 	}
 }
 
-// ModalBehavior implements nav.ModalComponent.
-func (m *modalWrapper) ModalBehavior() nav.ModalBehavior {
-	return nav.DefaultModalBehavior()
+// ModalBehavior implements nav.Modal.
+func (m *modalWrapper) ModalBehavior() components.ModalBehavior {
+	return components.DefaultModalBehavior()
 }
 
-// OnDismiss implements nav.ModalComponent.
+// OnDismiss implements nav.Modal.
 func (m *modalWrapper) OnDismiss() bool {
 	return true // Always allow dismiss
 }

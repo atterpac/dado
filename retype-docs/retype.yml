@@ -1,0 +1,39 @@
+input: .
+output: .retype
+url: https://jig.dev
+
+branding:
+  title: Jig
+  label: TUI Framework
+
+links:
+  - text: GitHub
+    link: https://github.com/atterpac/jig
+    icon: mark-github
+
+footer:
+  copyright: "&copy; Jig TUI Framework. All rights reserved."
+
+favicon: favicon.ico
+
+edit:
+  repo: https://github.com/atterpac/jig
+  base: retype-docs
+  label: Edit on GitHub
+
+search:
+  hotkeys:
+    - /
+    - k
+  maxResults: 10
+
+snippets:
+  lineNumbers:
+    - go
+    - bash
+
+markdown:
+  lineBreaks: soft
+
+generator:
+  recase: none

@@ -38,6 +38,7 @@ type Panel struct {
 	title      string
 	titleColor tcell.Color // 0 means use theme default (Accent)
 	titleAlign TitleAlign  // Title alignment (default: center)
+	focused    bool        // Manual focus state for visual indication
 }
 
 // NewPanel creates a new Panel container.
@@ -79,6 +80,18 @@ func (p *Panel) SetTitleAlign(align TitleAlign) *Panel {
 	return p
 }
 
+// SetFocused sets the manual focus state for visual indication.
+// When focused, the panel border uses the accent color.
+func (p *Panel) SetFocused(focused bool) *Panel {
+	p.focused = focused
+	return p
+}
+
+// IsFocused returns the manual focus state.
+func (p *Panel) IsFocused() bool {
+	return p.focused
+}
+
 // GetContent returns the inner content primitive.
 func (p *Panel) GetContent() tview.Primitive {
 	return p.content
@@ -96,9 +109,16 @@ func (p *Panel) Draw(screen tcell.Screen) {
 	// Get colors from theme at draw time
 	bgColor := theme.Bg()
 	borderColor := theme.PanelBorder()
+	if p.focused {
+		borderColor = theme.Accent()
+	}
 	titleColor := p.titleColor
 	if titleColor == 0 {
-		titleColor = theme.PanelTitle()
+		if p.focused {
+			titleColor = theme.Accent()
+		} else {
+			titleColor = theme.PanelTitle()
+		}
 	}
 
 	style := tcell.StyleDefault.Background(bgColor).Foreground(borderColor)

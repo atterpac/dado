@@ -24,3 +24,5 @@ go.work.sum
 
 # OS
 .DS_Store
+
+docs/static/

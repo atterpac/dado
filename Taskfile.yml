@@ -1,0 +1,138 @@
+version: '3'
+
+vars:
+  DOCS_DIR: retype-docs
+  DOCS_OUTPUT: docs/static
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Build tasks
+  build:
+    desc: Build the project
+    cmds:
+      - go build ./...
+
+  build:tutorial:
+    desc: Build the tutorial application
+    cmds:
+      - go build -o bin/tutorial ./cmd/tutorial
+
+  # Test tasks
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  test:verbose:
+    desc: Run tests with verbose output
+    cmds:
+      - go test -v ./...
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+    generates:
+      - coverage.out
+      - coverage.html
+
+  # Code quality tasks
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  check:
+    desc: Run all code quality checks
+    deps: [fmt, vet]
+    cmds:
+      - task: lint
+
+  # Documentation tasks
+  docs:serve:
+    desc: Start Retype development server
+    dir: "{{.DOCS_DIR}}"
+    cmds:
+      - retype start
+
+  docs:build:
+    desc: Build static documentation to {{.DOCS_OUTPUT}}
+    cmds:
+      - retype build {{.DOCS_DIR}} --output {{.DOCS_OUTPUT}}
+    generates:
+      - "{{.DOCS_OUTPUT}}/**/*"
+
+  docs:clean:
+    desc: Clean generated documentation
+    cmds:
+      - rm -rf {{.DOCS_OUTPUT}}
+      - rm -rf {{.DOCS_DIR}}/.retype
+
+  # Run tasks
+  run:tutorial:
+    desc: Build and run the tutorial application
+    deps: [build:tutorial]
+    cmds:
+      - ./bin/tutorial
+
+  # Dependency management
+  deps:
+    desc: Download dependencies
+    cmds:
+      - go mod download
+
+  deps:tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+
+  deps:update:
+    desc: Update all dependencies
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  # Clean tasks
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/
+      - rm -rf coverage.out coverage.html
+      - rm -rf {{.DOCS_OUTPUT}}
+      - rm -rf {{.DOCS_DIR}}/.retype
+
+  clean:all:
+    desc: Clean all generated files including Go cache
+    deps: [clean]
+    cmds:
+      - go clean -cache
+
+  # Development workflow
+  dev:
+    desc: Run development checks (fmt, vet, test)
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: test
+
+  ci:
+    desc: Run CI pipeline (build, check, test)
+    cmds:
+      - task: build
+      - task: check
+      - task: test

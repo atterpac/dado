@@ -69,7 +69,8 @@ type Modal struct {
 // NewModal creates a new modal with the given configuration.
 func NewModal(config ModalConfig) *Modal {
 	flex := tview.NewFlex()
-	flex.SetBackgroundColor(theme.Bg())
+	// Transparent background so backdrop/underlying content shows through
+	flex.SetBackgroundColor(tcell.ColorDefault)
 
 	// Initialize behavior from config
 	behavior := DefaultModalBehavior()
@@ -86,9 +87,6 @@ func NewModal(config ModalConfig) *Modal {
 	if config.Title != "" {
 		m.panel.SetTitle(config.Title)
 	}
-
-	// Register for automatic theme updates (Panel and KeyHintBar register themselves)
-	theme.Register(flex)
 
 	m.setupLayout()
 	return m
@@ -138,9 +136,10 @@ func (m *Modal) setupLayout() {
 	m.Flex.AddItem(nil, 0, 1, false) // Top spacer
 
 	centerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
-	centerRow.AddItem(nil, 0, 1, false)      // Left spacer
-	centerRow.AddItem(m.panel, width, 0, true) // Modal panel
-	centerRow.AddItem(nil, 0, 1, false)      // Right spacer
+	centerRow.SetBackgroundColor(tcell.ColorDefault) // Transparent
+	centerRow.AddItem(nil, 0, 1, false)              // Left spacer
+	centerRow.AddItem(m.panel, width, 0, true)       // Modal panel
+	centerRow.AddItem(nil, 0, 1, false)              // Right spacer
 
 	m.Flex.AddItem(centerRow, height, 0, true)
 	m.Flex.AddItem(nil, 0, 1, false) // Bottom spacer
@@ -206,14 +205,36 @@ func (m *Modal) Cancel() {
 
 // Draw renders the modal, optionally with backdrop.
 func (m *Modal) Draw(screen tcell.Screen) {
-	// Update background colors from theme
-	m.Flex.SetBackgroundColor(theme.Bg())
-	m.hintBar.SetBackgroundColor(theme.Bg())
+	x, y, width, height := m.GetRect()
 
 	if m.config.Backdrop {
 		m.drawBackdrop(screen)
 	}
-	m.Flex.Draw(screen)
+
+	// Calculate modal dimensions
+	modalWidth := m.config.Width
+	modalHeight := m.config.Height
+
+	if modalWidth == 0 {
+		modalWidth = m.config.MinWidth
+		if modalWidth == 0 {
+			modalWidth = 40
+		}
+	}
+	if modalHeight == 0 {
+		modalHeight = m.config.MinHeight
+		if modalHeight == 0 {
+			modalHeight = 10
+		}
+	}
+
+	// Center the panel
+	panelX := x + (width-modalWidth)/2
+	panelY := y + (height-modalHeight)/2
+
+	// Draw only the panel at the centered position (no flex background)
+	m.panel.SetRect(panelX, panelY, modalWidth, modalHeight)
+	m.panel.Draw(screen)
 }
 
 // drawBackdrop draws a semi-transparent dark overlay.
@@ -363,33 +384,22 @@ func (m *Modal) Hints() []KeyHint {
 	return hints
 }
 
-// --- nav package interface implementations ---
+// --- nav.Modal interface implementation ---
 // These methods allow Modal to be used directly with Pages.Push()
-// without needing a wrapper. The nav package uses interface detection
-// to identify modals and their behavior.
+// without needing a wrapper.
 
-// GetModalBehavior implements nav.ModalBehaviorProvider.
-// Returns the modal's behavior settings as individual values.
-func (m *Modal) GetModalBehavior() (capturesAllInput, dismissOnEsc, restoreFocusOnDismiss, backdrop, blockUntilDismissed bool) {
-	return m.behavior.CapturesAllInput,
-		m.behavior.DismissOnEsc,
-		m.behavior.RestoreFocusOnDismiss,
-		m.behavior.Backdrop,
-		m.behavior.BlockUntilDismissed
+// ModalBehavior implements nav.Modal.
+// Returns the modal's behavior configuration.
+func (m *Modal) ModalBehavior() ModalBehavior {
+	return m.behavior
 }
 
-// OnDismissNav implements nav.ModalDismissHandler.
+// OnDismiss implements nav.Modal.
 // Called when the modal is about to be dismissed.
 // Returns false to cancel the dismiss.
-func (m *Modal) OnDismissNav() bool {
+func (m *Modal) OnDismiss() bool {
 	if m.onDismiss != nil {
 		return m.onDismiss()
 	}
-	return true
-}
-
-// IsModal implements nav.ModalMarker.
-// Returns true, indicating this is a modal component.
-func (m *Modal) IsModal() bool {
 	return true
 }

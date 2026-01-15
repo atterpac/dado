@@ -6,6 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/atterpac/jig/components"
 	"github.com/atterpac/jig/theme"
 )
 
@@ -15,9 +16,9 @@ type Pages struct {
 	stack          []Component
 	focusStack     []tview.Primitive // Saved focus for modal restoration
 	onChange       func(Component)
-	onModalDismiss func(ModalComponent) // Optional callback when any modal dismisses
-	counter        int                  // For generating unique page names
-	app            *tview.Application   // Reference for focus management
+	onModalDismiss func(Modal) // Optional callback when any modal dismisses
+	counter        int         // For generating unique page names
+	app            *tview.Application // Reference for focus management
 }
 
 // NewPages creates a new page stack manager.
@@ -44,13 +45,13 @@ func (p *Pages) SetApplication(app *tview.Application) {
 }
 
 // SetOnModalDismiss sets a callback that fires when any modal is dismissed.
-func (p *Pages) SetOnModalDismiss(fn func(ModalComponent)) {
+func (p *Pages) SetOnModalDismiss(fn func(Modal)) {
 	p.onModalDismiss = fn
 }
 
 // Push adds a component to the stack and shows it.
 // Calls Stop() on the previous component if any.
-// If the component implements ModalComponent, modal behavior is applied automatically.
+// If the component implements Modal, modal behavior is applied automatically.
 func (p *Pages) Push(c Component) {
 	// Check if a blocking modal is active
 	if p.hasBlockingModal() {
@@ -94,32 +95,26 @@ func (p *Pages) Pop() bool {
 	current := p.stack[len(p.stack)-1]
 
 	// Handle modal dismiss
-	if IsModal(current) {
-		// Check OnDismiss callback - try ModalComponent first, then ModalDismissHandler
-		if modal, ok := current.(ModalComponent); ok {
-			if !modal.OnDismiss() {
-				return false // Dismiss was cancelled
-			}
-			// Notify modal dismiss callback
-			if p.onModalDismiss != nil {
-				p.onModalDismiss(modal)
-			}
-		} else if handler, ok := current.(ModalDismissHandler); ok {
-			if !handler.OnDismissNav() {
-				return false // Dismiss was cancelled
-			}
+	if modal := AsModal(current); modal != nil {
+		// Check OnDismiss callback
+		if !modal.OnDismiss() {
+			return false // Dismiss was cancelled
+		}
+		// Notify modal dismiss callback
+		if p.onModalDismiss != nil {
+			p.onModalDismiss(modal)
 		}
 
 		// Restore focus if configured
-		behavior := GetModalBehavior(current)
-		if behavior != nil && behavior.RestoreFocusOnDismiss && len(p.focusStack) > 0 && p.app != nil {
+		behavior := modal.ModalBehavior()
+		if behavior.RestoreFocusOnDismiss && len(p.focusStack) > 0 && p.app != nil {
 			restoreTo := p.focusStack[len(p.focusStack)-1]
 			p.focusStack = p.focusStack[:len(p.focusStack)-1]
-			// Queue focus restoration after the modal is removed
+			// Set focus directly - we're already on the UI thread via QueueUpdateDraw
+			// from App's modal dismiss handler. Calling QueueUpdateDraw again here
+			// can cause deadlocks.
 			if restoreTo != nil {
-				p.app.QueueUpdateDraw(func() {
-					p.app.SetFocus(restoreTo)
-				})
+				p.app.SetFocus(restoreTo)
 			}
 		}
 	}
@@ -253,7 +248,7 @@ func (p *Pages) CurrentIsModal() bool {
 
 // CurrentModalBehavior returns the modal behavior if the current page is a modal.
 // Returns nil if the current page is not a modal.
-func (p *Pages) CurrentModalBehavior() *ModalBehavior {
+func (p *Pages) CurrentModalBehavior() *components.ModalBehavior {
 	if c := p.Current(); c != nil {
 		return GetModalBehavior(c)
 	}

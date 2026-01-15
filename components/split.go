@@ -153,6 +153,11 @@ func (s *Split) ToggleFocus() *Split {
 	return s
 }
 
+// FocusedPane returns which pane is currently focused (0 = first, 1 = second).
+func (s *Split) FocusedPane() int {
+	return s.focusedPane
+}
+
 // Draw renders the split panes.
 func (s *Split) Draw(screen tcell.Screen) {
 	// Update background color from theme
