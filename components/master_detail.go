@@ -57,6 +57,15 @@ type MasterDetailView struct {
 	// Focus tracking
 	masterFocused bool
 
+	// Search functionality
+	searchEnabled   bool
+	searchText      string
+	baseMasterTitle string // Original title without search suffix
+	onSearch        func(query string) // Called when search text changes
+	onSearchSubmit  func(query string) // Called when search is submitted
+	onSearchCancel  func()             // Called when search is cancelled
+	showSearchFunc  func(currentText string, callbacks SearchCallbacks) // External search UI handler
+
 	// Callbacks
 	onStart           func()
 	onStop            func()
@@ -65,6 +74,13 @@ type MasterDetailView struct {
 
 	// Key hints (for nav.Component)
 	hints []KeyHint
+}
+
+// SearchCallbacks provides callbacks for search UI integration.
+type SearchCallbacks struct {
+	OnChange func(text string)
+	OnSubmit func(text string)
+	OnCancel func()
 }
 
 // NewMasterDetailView creates a new master-detail layout.
@@ -174,9 +190,15 @@ func (m *MasterDetailView) updateDetailContent() {
 // --- Content Methods ---
 
 // SetMasterTitle sets the master panel's title.
+// If search is enabled, this also updates the base title used for search display.
 func (m *MasterDetailView) SetMasterTitle(title string) *MasterDetailView {
 	m.masterTitle = title
-	m.masterPanel.SetTitle(title)
+	if m.searchEnabled {
+		m.baseMasterTitle = title
+		m.updateSearchTitle() // Re-apply search suffix if any
+	} else {
+		m.masterPanel.SetTitle(title)
+	}
 	return m
 }
 
@@ -395,6 +417,133 @@ func (m *MasterDetailView) SetOnDetailToggle(fn func(visible bool)) *MasterDetai
 func (m *MasterDetailView) SetOnResize(fn func(ratio float64)) *MasterDetailView {
 	m.split.SetOnResize(fn)
 	return m
+}
+
+// --- Search Functionality ---
+
+// EnableSearch enables the built-in search functionality.
+// When enabled, pressing '/' will trigger the search UI and the title
+// will update to show the current search term (e.g., "Workflows (/term)").
+//
+// The showSearchFunc is called to display the search UI. It receives the
+// current search text and callbacks for handling user input.
+//
+// Example usage:
+//
+//	view.EnableSearch(func(current string, cb components.SearchCallbacks) {
+//	    app.ShowFilterMode(current, FilterModeCallbacks{
+//	        OnChange: cb.OnChange,
+//	        OnSubmit: cb.OnSubmit,
+//	        OnCancel: cb.OnCancel,
+//	    })
+//	})
+func (m *MasterDetailView) EnableSearch(showSearchFunc func(currentText string, callbacks SearchCallbacks)) *MasterDetailView {
+	m.searchEnabled = true
+	m.showSearchFunc = showSearchFunc
+	m.baseMasterTitle = m.masterTitle
+	return m
+}
+
+// SetOnSearch sets a callback that fires when the search text changes (live filtering).
+func (m *MasterDetailView) SetOnSearch(fn func(query string)) *MasterDetailView {
+	m.onSearch = fn
+	return m
+}
+
+// SetOnSearchSubmit sets a callback that fires when search is submitted (Enter pressed).
+func (m *MasterDetailView) SetOnSearchSubmit(fn func(query string)) *MasterDetailView {
+	m.onSearchSubmit = fn
+	return m
+}
+
+// SetOnSearchCancel sets a callback that fires when search is cancelled (Escape pressed).
+func (m *MasterDetailView) SetOnSearchCancel(fn func()) *MasterDetailView {
+	m.onSearchCancel = fn
+	return m
+}
+
+// GetSearchText returns the current search text.
+func (m *MasterDetailView) GetSearchText() string {
+	return m.searchText
+}
+
+// SetSearchText sets the search text and updates the title.
+func (m *MasterDetailView) SetSearchText(text string) *MasterDetailView {
+	m.searchText = text
+	m.updateSearchTitle()
+	return m
+}
+
+// ClearSearch clears the search text and resets the title.
+func (m *MasterDetailView) ClearSearch() *MasterDetailView {
+	m.searchText = ""
+	m.updateSearchTitle()
+	if m.onSearchCancel != nil {
+		m.onSearchCancel()
+	}
+	return m
+}
+
+// IsSearchEnabled returns whether search is enabled.
+func (m *MasterDetailView) IsSearchEnabled() bool {
+	return m.searchEnabled
+}
+
+// ShowSearch triggers the search UI if search is enabled.
+func (m *MasterDetailView) ShowSearch() {
+	if !m.searchEnabled || m.showSearchFunc == nil {
+		return
+	}
+
+	m.showSearchFunc(m.searchText, SearchCallbacks{
+		OnChange: func(text string) {
+			m.searchText = text
+			m.updateSearchTitle()
+			if m.onSearch != nil {
+				m.onSearch(text)
+			}
+		},
+		OnSubmit: func(text string) {
+			m.searchText = text
+			m.updateSearchTitle()
+			if m.onSearchSubmit != nil {
+				m.onSearchSubmit(text)
+			}
+		},
+		OnCancel: func() {
+			if m.onSearchCancel != nil {
+				m.onSearchCancel()
+			}
+		},
+	})
+}
+
+// updateSearchTitle updates the master title to include search term.
+func (m *MasterDetailView) updateSearchTitle() {
+	if m.baseMasterTitle == "" {
+		m.baseMasterTitle = m.masterTitle
+	}
+
+	if m.searchText == "" {
+		m.masterPanel.SetTitle(m.baseMasterTitle)
+	} else {
+		m.masterPanel.SetTitle(m.baseMasterTitle + " (/" + m.searchText + ")")
+	}
+}
+
+// HandleSearchKey checks if the event is a search trigger and handles it.
+// Returns true if the event was handled.
+func (m *MasterDetailView) HandleSearchKey(event *tcell.EventKey) bool {
+	if !m.searchEnabled {
+		return false
+	}
+
+	if event.Key() == tcell.KeyRune && event.Rune() == '/' {
+		m.ShowSearch()
+		return true
+	}
+
+	return false
 }
 
 // --- Key Hints (nav.Component support) ---
