@@ -84,6 +84,7 @@ func (s *Splash) SetLogo(logo string) *Splash {
 // SetStatus sets the status/hint text below the logo.
 func (s *Splash) SetStatus(status string) *Splash {
 	s.status = status
+	s.updateStatus()
 	return s
 }
 
@@ -268,7 +269,7 @@ func (s *Splash) updateStatus() {
 	var statusBuilder strings.Builder
 
 	if s.status != "" {
-		statusBuilder.WriteString(fmt.Sprintf("[%s]%s[-]\n", theme.TagFg(), s.status))
+		statusBuilder.WriteString(s.status + "\n")
 	}
 
 	if s.devMode {

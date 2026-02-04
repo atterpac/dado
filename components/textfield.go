@@ -23,6 +23,10 @@ type TextField struct {
 	cursorPos   int
 	offset      int // horizontal scroll offset
 
+	// Password masking
+	masked   bool
+	maskChar rune
+
 	// Validation
 	validator func(string) error
 	error     string
@@ -52,6 +56,23 @@ func (t *TextField) SetLabel(label string) *TextField {
 // SetPlaceholder sets the placeholder text.
 func (t *TextField) SetPlaceholder(placeholder string) *TextField {
 	t.placeholder = placeholder
+	return t
+}
+
+// SetMasked enables or disables password masking.
+// When enabled, the displayed value will show mask characters instead of the actual text.
+func (t *TextField) SetMasked(masked bool) *TextField {
+	t.masked = masked
+	if t.maskChar == 0 {
+		t.maskChar = '•'
+	}
+	return t
+}
+
+// SetMaskChar sets the character used for password masking.
+// Default is '•'. Common alternatives are '*' or '●'.
+func (t *TextField) SetMaskChar(char rune) *TextField {
+	t.maskChar = char
 	return t
 }
 
@@ -277,6 +298,12 @@ func (t *TextField) Draw(screen tcell.Screen) {
 			visibleValue = visibleValue[:inputWidth]
 		}
 
+		// Determine mask character for password fields
+		maskChar := t.maskChar
+		if maskChar == 0 {
+			maskChar = '•'
+		}
+
 		col := inputX
 		for i, r := range visibleValue {
 			style := inputStyle
@@ -284,7 +311,12 @@ func (t *TextField) Draw(screen tcell.Screen) {
 			if t.focused && t.offset+i == t.cursorPos {
 				style = tcell.StyleDefault.Background(accentColor).Foreground(bgColor)
 			}
-			screen.SetContent(col, row, r, nil, style)
+			// Use mask character if masked
+			displayChar := r
+			if t.masked {
+				displayChar = maskChar
+			}
+			screen.SetContent(col, row, displayChar, nil, style)
 			col++
 		}
 

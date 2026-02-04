@@ -8,6 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/atterpac/jig/theme"
 )
 
 // FinderItem represents a searchable item
@@ -60,6 +62,12 @@ type Finder struct {
 	scrollOffset  int
 	showPreview   bool
 	recentIDs     []string
+
+	// Cached theme colors (set during Draw)
+	bgColor     tcell.Color
+	fgColor     tcell.Color
+	fgDimColor  tcell.Color
+	accentColor tcell.Color
 
 	// Callbacks
 	onSelect      func(item FinderItem)
@@ -498,12 +506,25 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
+	// Set background color from theme
+	f.Box.SetBackgroundColor(theme.Bg())
 	f.Box.DrawForSubclass(screen, f)
 	x, y, width, height := f.GetInnerRect()
 
 	if width < 10 || height < 3 {
 		return
 	}
+
+	// Get theme colors
+	bg := theme.Bg()
+	fg := theme.Fg()
+	fgDim := theme.FgDim()
+	fgMuted := theme.FgMuted()
+	accent := theme.Accent()
+	border := theme.Border()
+
+	// Base style with theme background
+	baseStyle := tcell.StyleDefault.Background(bg).Foreground(fg)
 
 	// Calculate preview width if enabled
 	listWidth := width
@@ -516,8 +537,8 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	}
 
 	// Draw input line
-	inputStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-	promptStyle := tcell.StyleDefault.Foreground(tcell.ColorBlue)
+	inputStyle := baseStyle
+	promptStyle := baseStyle.Foreground(accent)
 
 	// Draw prompt
 	for i, r := range f.prompt {
@@ -527,7 +548,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	// Draw query or placeholder
 	inputX := x + len(f.prompt)
 	if f.query == "" && f.placeholder != "" {
-		placeholderStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+		placeholderStyle := baseStyle.Foreground(fgMuted)
 		for i, r := range f.placeholder {
 			if inputX+i >= x+listWidth {
 				break
@@ -546,15 +567,21 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	// Draw cursor
 	cursorX := inputX + len(f.query)
 	if cursorX < x+listWidth {
-		screen.SetContent(cursorX, y, '_', nil, tcell.StyleDefault.Foreground(tcell.ColorBlue))
+		screen.SetContent(cursorX, y, '_', nil, baseStyle.Foreground(accent))
 	}
 
 	// Draw separator
 	separatorY := y + 1
-	separatorStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+	separatorStyle := baseStyle.Foreground(border)
 	for i := 0; i < listWidth; i++ {
 		screen.SetContent(x+i, separatorY, '─', nil, separatorStyle)
 	}
+
+	// Store colors for item drawing
+	f.bgColor = bg
+	f.fgColor = fg
+	f.fgDimColor = fgDim
+	f.accentColor = accent
 
 	// Draw items
 	itemsStartY := separatorY + 1
@@ -583,13 +610,19 @@ func (f *Finder) Draw(screen tcell.Screen) {
 		// Draw category header if changed
 		if f.showCategories && item.Category != lastCategory && item.Category != "" {
 			lastCategory = item.Category
-			catStyle := tcell.StyleDefault.Foreground(tcell.ColorBlue).Bold(true)
-			catHeader := "── " + item.Category + " "
-			for j := 0; j < listWidth && j < len(catHeader); j++ {
-				screen.SetContent(x+j, itemY, rune(catHeader[j]), nil, catStyle)
+			catStyle := baseStyle.Foreground(accent).Bold(true)
+			catHeader := []rune("── " + item.Category + " ")
+			col := 0
+			for _, r := range catHeader {
+				if col >= listWidth {
+					break
+				}
+				screen.SetContent(x+col, itemY, r, nil, catStyle)
+				col++
 			}
-			for j := len(catHeader); j < listWidth; j++ {
-				screen.SetContent(x+j, itemY, '─', nil, catStyle)
+			for col < listWidth {
+				screen.SetContent(x+col, itemY, '─', nil, catStyle)
+				col++
 			}
 			itemsDrawn++
 			itemY++
@@ -606,7 +639,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 
 	// Draw footer
 	footerY := y + height - 1
-	footerStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+	footerStyle := baseStyle.Foreground(fgMuted)
 	footerText := ""
 	if len(f.filtered) > 0 {
 		footerText = itoa(len(f.filtered)) + " of " + itoa(len(f.items)) + " items"
@@ -641,7 +674,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 			item := f.filtered[f.selectedIndex]
 			preview := f.previewFunc(item)
 			lines := strings.Split(preview, "\n")
-			previewStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+			previewStyle := baseStyle
 			for row, line := range lines {
 				if row >= height {
 					break
@@ -658,9 +691,19 @@ func (f *Finder) Draw(screen tcell.Screen) {
 }
 
 func (f *Finder) drawItem(screen tcell.Screen, x, y, width int, item FinderItem, selected bool) {
-	style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+	// Use cached theme colors
+	bg := f.bgColor
+	fg := f.fgColor
+	fgDim := f.fgDimColor
+	accent := f.accentColor
+
+	// Get selection colors from theme for high contrast
+	selBg := theme.SelectionBg()
+	selFg := theme.SelectionFg()
+
+	style := tcell.StyleDefault.Background(bg).Foreground(fg)
 	if selected {
-		style = tcell.StyleDefault.Background(tcell.ColorBlue).Foreground(tcell.ColorWhite)
+		style = tcell.StyleDefault.Background(selBg).Foreground(selFg).Bold(true)
 	}
 
 	// Clear line
@@ -700,7 +743,7 @@ func (f *Finder) drawItem(screen tcell.Screen, x, y, width int, item FinderItem,
 		}
 		charStyle := style
 		if matchSet[i] && !selected {
-			charStyle = style.Foreground(tcell.ColorBlue).Bold(true)
+			charStyle = style.Foreground(accent).Bold(true)
 		}
 		screen.SetContent(col, y, r, nil, charStyle)
 		col++
@@ -708,9 +751,10 @@ func (f *Finder) drawItem(screen tcell.Screen, x, y, width int, item FinderItem,
 
 	// Draw description if enabled
 	if f.showDescription && item.Description != "" {
-		descStyle := style.Foreground(tcell.ColorDarkGray)
+		descStyle := style.Foreground(fgDim)
 		if selected {
-			descStyle = style.Foreground(tcell.ColorLightGray)
+			// Use slightly lighter color for description when selected
+			descStyle = style.Foreground(selFg).Bold(false)
 		}
 
 		// Calculate remaining space
@@ -736,7 +780,7 @@ func (f *Finder) drawItem(screen tcell.Screen, x, y, width int, item FinderItem,
 		badgeText := "Recent"
 		badgeX := x + width - len(badgeText) - 1
 		if badgeX > col+2 {
-			badgeStyle := style.Foreground(tcell.ColorYellow)
+			badgeStyle := style.Foreground(theme.Highlight())
 			for i, r := range badgeText {
 				screen.SetContent(badgeX+i, y, r, nil, badgeStyle)
 			}

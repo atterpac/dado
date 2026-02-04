@@ -107,6 +107,8 @@ func (a *App) buildLayout() {
 	if a.config.ShowCrumbs {
 		a.crumbs = nav.NewCrumbs()
 		a.main.AddItem(a.crumbs, 1, 0, false)
+		// Connect crumbs to pages for automatic updates
+		a.pages.SetCrumbs(a.crumbs)
 	}
 
 	// Pages (main content area)
@@ -289,6 +291,8 @@ type modalWrapper struct {
 	modal *components.Modal
 	app   *App
 }
+
+func (m *modalWrapper) Name() string { return "Modal" }
 
 func (m *modalWrapper) Start() {
 	// Set up close handler to pop

@@ -19,6 +19,7 @@ type Pages struct {
 	onModalDismiss func(Modal) // Optional callback when any modal dismisses
 	counter        int         // For generating unique page names
 	app            *tview.Application // Reference for focus management
+	crumbs         *Crumbs            // Optional breadcrumb component
 }
 
 // NewPages creates a new page stack manager.
@@ -179,8 +180,25 @@ func (p *Pages) SetOnChange(fn func(Component)) {
 	p.onChange = fn
 }
 
-// notifyChange calls the onChange callback if set.
+// SetCrumbs sets the breadcrumb component to update on navigation.
+func (p *Pages) SetCrumbs(crumbs *Crumbs) {
+	p.crumbs = crumbs
+}
+
+// notifyChange calls the onChange callback if set and updates crumbs.
 func (p *Pages) notifyChange() {
+	// Update crumbs from stack
+	if p.crumbs != nil {
+		var path []string
+		for _, c := range p.stack {
+			// Skip modals in breadcrumb path
+			if !IsModal(c) {
+				path = append(path, c.Name())
+			}
+		}
+		p.crumbs.SetPath(path)
+	}
+
 	if p.onChange != nil {
 		p.onChange(p.Current())
 	}
