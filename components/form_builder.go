@@ -83,6 +83,15 @@ func (fb *FormBuilder) Text(name, label string) *TextFieldBuilder {
 	}
 }
 
+// Password adds a password field (masked text input) and returns a builder to configure it.
+func (fb *FormBuilder) Password(name, label string) *TextFieldBuilder {
+	field := NewTextField(name).SetLabel(label).SetMasked(true)
+	return &TextFieldBuilder{
+		parent: fb,
+		field:  field,
+	}
+}
+
 // Placeholder sets the placeholder text.
 func (tb *TextFieldBuilder) Placeholder(text string) *TextFieldBuilder {
 	tb.field.SetPlaceholder(text)
@@ -110,6 +119,18 @@ func (tb *TextFieldBuilder) OnChange(handler ChangeHandler[string]) *TextFieldBu
 // OnSubmit sets the submit handler.
 func (tb *TextFieldBuilder) OnSubmit(handler SubmitHandler) *TextFieldBuilder {
 	tb.field.SetOnSubmit(handler)
+	return tb
+}
+
+// Masked enables password masking for the field.
+func (tb *TextFieldBuilder) Masked() *TextFieldBuilder {
+	tb.field.SetMasked(true)
+	return tb
+}
+
+// MaskChar sets a custom mask character (default is '•').
+func (tb *TextFieldBuilder) MaskChar(char rune) *TextFieldBuilder {
+	tb.field.SetMaskChar(char)
 	return tb
 }
 

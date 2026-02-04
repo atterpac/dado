@@ -6,18 +6,20 @@ import (
 
 	"github.com/atterpac/jig/components"
 	"github.com/atterpac/jig/theme"
+	"github.com/gdamore/tcell/v2"
 )
 
 // TableBinding binds a slice of data to a Table component.
 // It provides automatic data mapping, filtering, fetching, and selection handling.
 type TableBinding[T any] struct {
-	table      *components.Table
-	data       []T
-	filtered   []T
-	mapper     func(T) []string
-	keyMapper  func(T) string
-	filter     func(T, string) bool
-	filterText string
+	table       *components.Table
+	data        []T
+	filtered    []T
+	mapper      func(T) []string
+	colorMapper func(T) []tcell.Color
+	keyMapper   func(T) string
+	filter      func(T, string) bool
+	filterText  string
 
 	// Auto-refresh
 	fetcher         func() ([]T, error)
@@ -60,6 +62,14 @@ func (b *TableBinding[T]) SetKeyMapper(fn func(T) string) *TableBinding[T] {
 // SetFilter sets the filter function (item, query) -> matches.
 func (b *TableBinding[T]) SetFilter(fn func(T, string) bool) *TableBinding[T] {
 	b.filter = fn
+	return b
+}
+
+// SetColorMapper sets a function that returns colors for each cell in a row.
+// The returned slice should have the same length as the mapper output.
+// If nil, default colors are used.
+func (b *TableBinding[T]) SetColorMapper(fn func(T) []tcell.Color) *TableBinding[T] {
+	b.colorMapper = fn
 	return b
 }
 
@@ -133,10 +143,31 @@ func (b *TableBinding[T]) GetItem(row int) *T {
 	return &b.filtered[dataRow]
 }
 
-// GetSelected returns the currently highlighted item.
+// GetSelected returns a pointer to the currently highlighted item.
+// For pointer types T, this returns **T. Use GetSelectedValue for cleaner access.
 func (b *TableBinding[T]) GetSelected() *T {
 	row, _ := b.table.GetSelection()
 	return b.GetItem(row)
+}
+
+// GetSelectedValue returns the currently highlighted item directly.
+// Returns the zero value of T if nothing is selected.
+func (b *TableBinding[T]) GetSelectedValue() (T, bool) {
+	if item := b.GetSelected(); item != nil {
+		return *item, true
+	}
+	var zero T
+	return zero, false
+}
+
+// GetItemValue returns the item at the given table row directly.
+// Returns the zero value of T and false if out of bounds.
+func (b *TableBinding[T]) GetItemValue(row int) (T, bool) {
+	if item := b.GetItem(row); item != nil {
+		return *item, true
+	}
+	var zero T
+	return zero, false
 }
 
 // GetSelectedItems returns all multi-selected items.
@@ -310,7 +341,13 @@ func (b *TableBinding[T]) rebuildTable() {
 
 	for i, item := range b.filtered {
 		if b.mapper != nil {
-			b.table.AddRow(b.mapper(item)...)
+			cells := b.mapper(item)
+			if b.colorMapper != nil {
+				colors := b.colorMapper(item)
+				b.table.AddColoredRow(cells, colors)
+			} else {
+				b.table.AddRow(cells...)
+			}
 			// Set row key if keyMapper is provided
 			if b.keyMapper != nil {
 				b.table.SetRowKey(i, b.keyMapper(item))

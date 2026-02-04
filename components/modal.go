@@ -366,6 +366,9 @@ func (m *Modal) SetOnDismiss(fn func() bool) *Modal {
 
 // --- nav.Component interface implementation ---
 
+// Name returns the modal title for breadcrumbs.
+func (m *Modal) Name() string { return m.config.Title }
+
 // Start is called when the modal becomes active.
 func (m *Modal) Start() {}
 

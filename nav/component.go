@@ -11,6 +11,9 @@ import (
 type Component interface {
 	tview.Primitive
 
+	// Name returns the display name for this component (used in breadcrumbs).
+	Name() string
+
 	// Start is called when the component becomes active (shown).
 	Start()
 

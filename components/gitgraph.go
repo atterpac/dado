@@ -17,6 +17,7 @@ const (
 	gitMerge     = '◆' // Merge commit
 	gitHead      = '◉' // HEAD commit
 	gitStash     = '◇' // Stash entry (hollow diamond)
+	gitUnstaged  = '○' // Unstaged changes (empty circle)
 	gitVert      = '│' // Vertical line
 	gitHoriz     = '─' // Horizontal line
 	gitTopLeft   = '╭' // Corner down-right
@@ -28,32 +29,37 @@ const (
 
 // GitCommit represents a git commit with graph positioning info
 type GitCommit struct {
-	Hash      string
-	ShortHash string
-	Message   string
-	Author    string
-	Date      time.Time
-	Parents   []string // Parent commit hashes
-	Children  []string // Child commit hashes
-	Branch    string   // Branch name if this is a branch tip
-	Tags      []string // Tags pointing to this commit
-	IsMerge   bool     // True if len(Parents) > 1
-	IsStash   bool     // True if this is a stash entry
-	Column    int      // Assigned column in graph layout
-	Row       int      // Row position in flat list
-	Refs      []string // All refs (branches, tags) at this commit
-	Ahead     int      // Commits ahead of upstream (for branch tips)
-	Behind    int      // Commits behind upstream (for branch tips)
-	Data      any      // Custom user data
+	Hash         string
+	ShortHash    string
+	Message      string
+	Author       string
+	Date         time.Time
+	Parents      []string // Parent commit hashes
+	Children     []string // Child commit hashes
+	Branch       string   // Branch name if this is a branch tip
+	Tags         []string // Tags pointing to this commit
+	IsMerge      bool     // True if len(Parents) > 1
+	IsStash      bool     // True if this is a stash entry
+	IsPseudoNode bool     // True for virtual nodes (unstaged changes, staged changes)
+	PseudoType   string   // "unstaged", "staged", or future types
+	Column       int      // Assigned column in graph layout
+	Row          int      // Row position in flat list
+	Refs         []string // All refs (branches, tags) at this commit
+	Ahead        int      // Commits ahead of upstream (for branch tips)
+	Behind       int      // Commits behind upstream (for branch tips)
+	Data         any      // Custom user data
 }
 
 // GitGraphData represents the commit graph with layout info
 type GitGraphData struct {
-	Commits    []*GitCommit          // Commits in topological order (newest first)
-	CommitMap  map[string]*GitCommit // Hash -> Commit lookup
-	Branches   []string              // All branch names
-	MaxColumn  int                   // Maximum column used in layout
-	ActiveCols map[int]string        // Column -> commit hash currently in that column
+	Commits       []*GitCommit          // Commits in topological order (newest first)
+	CommitMap     map[string]*GitCommit // Hash -> Commit lookup
+	Branches      []string              // All branch names
+	CurrentBranch string                // Current/active branch name (gets column 0)
+	MaxColumn     int                   // Maximum column used in layout
+	ColumnCap     int                   // Maximum columns to display (0 = unlimited)
+	ActiveCols    map[int]string        // Column -> commit hash currently in that column
+	ColumnBranch  map[int]string        // Column -> branch name that owns this lane
 }
 
 // NewGitGraphData creates an empty graph data structure
@@ -76,48 +82,108 @@ func (g *GitGraphData) GetCommit(hash string) *GitCommit {
 }
 
 // LayoutGraph assigns columns to commits for visualization
+// Each branch lineage gets its own column that persists until the branch merges
+// The current branch (if set) is always assigned to column 0
 func (g *GitGraphData) LayoutGraph() {
 	if len(g.Commits) == 0 {
 		return
 	}
 
-	activeLines := make(map[int]string) // column -> commit hash that line leads to
+	// Default column cap if not set
+	columnCap := g.ColumnCap
+	if columnCap <= 0 {
+		columnCap = 12 // Default to 12 columns max (36 chars for graph)
+	}
+
+	// activeLines: column -> commit hash that line is expecting next
+	activeLines := make(map[int]string)
+	// commitColumn: hash -> assigned column (persists for the branch)
+	commitColumn := make(map[string]int)
+	// columnBranch: column -> branch name that owns this lane
+	g.ColumnBranch = make(map[int]string)
 	nextFreeCol := 0
+
+	// Find the current branch tip commit and reserve column 0 for it
+	var currentBranchTip *GitCommit
+	if g.CurrentBranch != "" {
+		for _, commit := range g.Commits {
+			for _, ref := range commit.Refs {
+				if ref == g.CurrentBranch || ref == "HEAD" {
+					currentBranchTip = commit
+					break
+				}
+			}
+			if currentBranchTip != nil {
+				break
+			}
+		}
+	}
+
+	// If we found the current branch tip, reserve column 0 for it
+	if currentBranchTip != nil {
+		commitColumn[currentBranchTip.Hash] = 0
+		g.ColumnBranch[0] = g.CurrentBranch
+		nextFreeCol = 1
+	}
 
 	for i, commit := range g.Commits {
 		commit.Row = i
 
-		// Check if this commit was expected in an active line
-		foundCol := -1
-		for col, hash := range activeLines {
-			if hash == commit.Hash {
-				foundCol = col
-				break
-			}
-		}
-
-		if foundCol >= 0 {
-			// This commit continues an existing line
-			commit.Column = foundCol
-		} else {
-			// New branch/line - find first available column
-			commit.Column = nextFreeCol
-			for col := 0; col < nextFreeCol; col++ {
-				if _, exists := activeLines[col]; !exists {
-					commit.Column = col
+		// Check if this commit already has a column assigned (e.g., current branch tip)
+		if col, exists := commitColumn[commit.Hash]; exists {
+			commit.Column = col
+			// Check if this commit was expected in an active line and update
+			for activeCol, hash := range activeLines {
+				if hash == commit.Hash {
+					delete(activeLines, activeCol)
 					break
 				}
 			}
-			if commit.Column == nextFreeCol {
-				nextFreeCol++
+		} else {
+			// Check if this commit was expected in an active line
+			foundCol := -1
+			for col, hash := range activeLines {
+				if hash == commit.Hash {
+					foundCol = col
+					break
+				}
+			}
+
+			if foundCol >= 0 {
+				// This commit continues an existing line
+				commit.Column = foundCol
+				commitColumn[commit.Hash] = foundCol
+			} else {
+				// New branch head - allocate a new column
+				if nextFreeCol < columnCap {
+					commit.Column = nextFreeCol
+					nextFreeCol++
+				} else {
+					// At cap - reuse the last column
+					commit.Column = columnCap - 1
+				}
+				commitColumn[commit.Hash] = commit.Column
 			}
 		}
 
-		if commit.Column > g.MaxColumn {
-			g.MaxColumn = commit.Column
+		// Record branch name for this column if commit has refs and column doesn't have a branch yet
+		if g.ColumnBranch[commit.Column] == "" {
+			for _, ref := range commit.Refs {
+				if !strings.HasPrefix(ref, "origin/") && ref != "HEAD" {
+					g.ColumnBranch[commit.Column] = ref
+					break
+				}
+			}
 		}
 
-		// Remove this commit from active lines
+		if commit.Column > g.MaxColumn && commit.Column < columnCap {
+			g.MaxColumn = commit.Column
+		}
+		if g.MaxColumn >= columnCap {
+			g.MaxColumn = columnCap - 1
+		}
+
+		// Remove this commit from active lines (we've processed it)
 		delete(activeLines, commit.Column)
 
 		// Track parent commits - only if they exist in our commit list
@@ -127,7 +193,7 @@ func (g *GitGraphData) LayoutGraph() {
 				continue
 			}
 
-			// Check if parent is already tracked
+			// Check if parent is already tracked in an active line
 			parentHasCol := false
 			for _, h := range activeLines {
 				if h == parentHash {
@@ -138,28 +204,99 @@ func (g *GitGraphData) LayoutGraph() {
 
 			if !parentHasCol {
 				if idx == 0 {
-					// First parent continues in same column
+					// First parent continues in same column as this commit
 					activeLines[commit.Column] = parentHash
 				} else {
-					// Secondary parents get a new column (for merge visualization)
-					newCol := nextFreeCol
-					for col := 0; col < nextFreeCol; col++ {
-						if _, exists := activeLines[col]; !exists {
-							newCol = col
-							break
+					// Secondary parent (merge source) - needs its own column
+					// Check if this parent already has a column assigned from another path
+					if existingCol, exists := commitColumn[parentHash]; exists {
+						// Parent already has a column, mark it active
+						activeLines[existingCol] = parentHash
+					} else {
+						// New line for merge source - allocate column if under cap
+						var newCol int
+						if nextFreeCol < columnCap {
+							newCol = nextFreeCol
+							nextFreeCol++
+						} else {
+							newCol = columnCap - 1
 						}
-					}
-					if newCol == nextFreeCol {
-						nextFreeCol++
-					}
-					activeLines[newCol] = parentHash
-					if newCol > g.MaxColumn {
-						g.MaxColumn = newCol
+						activeLines[newCol] = parentHash
+						if newCol > g.MaxColumn {
+							g.MaxColumn = newCol
+						}
 					}
 				}
 			}
 		}
 	}
+
+	// Parse merge commits to find branch names for merged branches
+	// Standard merge messages are like "Merge branch 'feature-x' into main"
+	for _, commit := range g.Commits {
+		if commit.IsMerge && len(commit.Parents) > 1 {
+			branchName := parseMergeBranch(commit.Message)
+			if branchName != "" {
+				// Find the second parent and associate its column with this branch
+				secondParent := g.CommitMap[commit.Parents[1]]
+				if secondParent != nil && g.ColumnBranch[secondParent.Column] == "" {
+					g.ColumnBranch[secondParent.Column] = branchName
+				}
+			}
+		}
+	}
+
+	// Assign branch names to commits based on their column
+	// This preserves the original branch even after merges
+	for _, commit := range g.Commits {
+		// First check if commit has its own branch ref
+		if commit.Branch == "" {
+			for _, ref := range commit.Refs {
+				if !strings.HasPrefix(ref, "origin/") && ref != "HEAD" {
+					commit.Branch = ref
+					break
+				}
+			}
+		}
+		// If still no branch, use the column's branch
+		if commit.Branch == "" {
+			commit.Branch = g.ColumnBranch[commit.Column]
+		}
+	}
+}
+
+// parseMergeBranch extracts the branch name from a merge commit message
+// Handles formats like:
+// - "Merge branch 'feature-x'"
+// - "Merge branch 'feature-x' into main"
+// - "Merge pull request #123 from user/feature-x"
+func parseMergeBranch(message string) string {
+	// Try "Merge branch 'xyz'" format
+	if strings.HasPrefix(message, "Merge branch '") {
+		start := len("Merge branch '")
+		end := strings.Index(message[start:], "'")
+		if end > 0 {
+			return message[start : start+end]
+		}
+	}
+
+	// Try "Merge pull request #N from user/branch" format
+	if strings.HasPrefix(message, "Merge pull request") {
+		if idx := strings.Index(message, " from "); idx > 0 {
+			rest := message[idx+6:]
+			// Extract branch part after "user/"
+			if slashIdx := strings.Index(rest, "/"); slashIdx > 0 {
+				branch := rest[slashIdx+1:]
+				// Trim any trailing whitespace or newlines
+				if spaceIdx := strings.IndexAny(branch, " \n\t"); spaceIdx > 0 {
+					branch = branch[:spaceIdx]
+				}
+				return branch
+			}
+		}
+	}
+
+	return ""
 }
 
 // GitGraph is a git commit graph visualization component
@@ -181,6 +318,7 @@ type GitGraph struct {
 	showDate   bool
 	dateFormat string
 	laneColors []tcell.Color
+	columnCap  int // Maximum columns to display (0 = default of 12)
 }
 
 // NewGitGraph creates a new git graph component
@@ -233,6 +371,13 @@ func (g *GitGraph) SetShowAuthor(show bool) *GitGraph {
 	return g
 }
 
+// SetColumnCap sets the maximum number of columns/lanes to display
+// Default is 12 columns. Set to 0 to use default.
+func (g *GitGraph) SetColumnCap(cap int) *GitGraph {
+	g.columnCap = cap
+	return g
+}
+
 // SetShowDate enables/disables showing date
 func (g *GitGraph) SetShowDate(show bool) *GitGraph {
 	g.showDate = show
@@ -257,6 +402,11 @@ func (g *GitGraph) GetSelected() *GitCommit {
 		return nil
 	}
 	return g.graph.Commits[g.selectedIndex]
+}
+
+// GetGraph returns the underlying graph data
+func (g *GitGraph) GetGraph() *GitGraphData {
+	return g.graph
 }
 
 // SetSelectedIndex sets the selected commit by index
@@ -372,11 +522,24 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, width, height := g.GetInnerRect()
 
-	if width <= 0 || height <= 0 || g.graph == nil || len(g.graph.Commits) == 0 {
+	if width <= 0 || height <= 0 {
 		return
 	}
 
 	bgColor := theme.Bg()
+
+	// Fill entire area with background color first
+	bgStyle := tcell.StyleDefault.Background(bgColor)
+	for row := 0; row < height; row++ {
+		for col := 0; col < width; col++ {
+			screen.SetContent(x+col, y+row, ' ', nil, bgStyle)
+		}
+	}
+
+	if g.graph == nil || len(g.graph.Commits) == 0 {
+		return
+	}
+
 	fgColor := theme.Fg()
 	fgDimColor := theme.FgDim()
 	accentColor := theme.Accent()
@@ -510,14 +673,45 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			}
 		}
 
-		// Calculate space needed for right-side elements
-		rightReserved := len([]rune(refText))
-		if g.showHash {
-			rightReserved += len(commit.ShortHash) + 1
+		// Calculate space available for content after graph lanes
+		availableSpace := (x + width) - col - 2
+
+		// Build branch display text for selected rows without refs
+		branchDisplay := ""
+		if refText == "" && isSelected && commit.Branch != "" {
+			branchDisplay = commit.Branch
+			if len(branchDisplay) > 25 {
+				branchDisplay = branchDisplay[:22] + "..."
+			}
 		}
 
-		// Calculate available space for message
-		msgSpace := (x + width) - col - rightReserved - 2
+		// Calculate how much space each element needs
+		refSpace := len([]rune(refText))
+		if refSpace == 0 && branchDisplay != "" {
+			refSpace = len(" " + branchDisplay + " ")
+		}
+		hashSpace := 0
+		if g.showHash {
+			hashSpace = len(commit.ShortHash) + 1
+		}
+		authorSpace := 0
+		if g.showAuthor {
+			authorSpace = len(" - ") + len(commit.Author)
+			if authorSpace > 20 {
+				authorSpace = 20 // Cap author display
+			}
+		}
+
+		// Message gets remaining space (minimum 15 chars if possible)
+		rightReserved := refSpace + hashSpace
+		msgSpace := availableSpace - rightReserved - authorSpace
+		if msgSpace < 15 {
+			// Not enough space - reduce author/hash to fit message
+			authorSpace = 0
+			hashSpace = 0
+			rightReserved = refSpace
+			msgSpace = availableSpace - rightReserved
+		}
 		msgRunes := []rune(commit.Message)
 
 		msgStyle := rowStyle
@@ -543,14 +737,19 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			}
 		}
 
-		if g.showAuthor {
+		if g.showAuthor && authorSpace > 0 {
 			authorStyle := rowStyle
 			if !isSelected {
 				authorStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 			}
 			authorText := " - " + commit.Author
-			for _, ch := range authorText {
-				if col < x+width {
+			authorRunes := []rune(authorText)
+			// Truncate if needed
+			if len(authorRunes) > authorSpace {
+				authorRunes = append(authorRunes[:authorSpace-1], '…')
+			}
+			for _, ch := range authorRunes {
+				if col < x+width-rightReserved {
 					screen.SetContent(col, rowY, ch, nil, authorStyle)
 					col++
 				}
@@ -571,14 +770,14 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			}
 		}
 
-		if g.showHash {
+		if g.showHash && hashSpace > 0 {
 			hashStyle := rowStyle
 			if !isSelected {
 				hashStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 			}
 			hashText := " " + commit.ShortHash
 			for _, ch := range hashText {
-				if col < x+width {
+				if col < x+width-refSpace {
 					screen.SetContent(col, rowY, ch, nil, hashStyle)
 					col++
 				}
@@ -602,6 +801,21 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 				if refCol < x+width {
 					screen.SetContent(refCol, rowY, ch, nil, refStyle)
 					refCol++
+				}
+			}
+		} else if isSelected && branchDisplay != "" {
+			// For selected rows without refs, show the branch name dimmed
+			branchText := " " + branchDisplay + " "
+			branchLen := len([]rune(branchText))
+			branchStartCol := x + width - branchLen
+
+			branchStyle := tcell.StyleDefault.Background(accentColor).Foreground(bgColor).Dim(true)
+
+			branchCol := branchStartCol
+			for _, ch := range branchText {
+				if branchCol < x+width {
+					screen.SetContent(branchCol, rowY, ch, nil, branchStyle)
+					branchCol++
 				}
 			}
 		}
@@ -720,6 +934,9 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 }
 
 func (g *GitGraph) getNodeChar(commit *GitCommit) rune {
+	if commit.IsPseudoNode {
+		return gitUnstaged
+	}
 	if commit.IsStash {
 		return gitStash
 	}
@@ -775,9 +992,16 @@ func (g *GitGraph) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 			case 'k':
 				g.moveUp()
 			case 'g':
-				g.selectedIndex = 0
+				if g.selectedIndex != 0 {
+					g.selectedIndex = 0
+					g.triggerOnChange()
+				}
 			case 'G':
-				g.selectedIndex = len(g.graph.Commits) - 1
+				lastIdx := len(g.graph.Commits) - 1
+				if g.selectedIndex != lastIdx {
+					g.selectedIndex = lastIdx
+					g.triggerOnChange()
+				}
 			case 'p':
 				// Jump to first parent
 				if commit := g.GetSelected(); commit != nil && len(commit.Parents) > 0 {

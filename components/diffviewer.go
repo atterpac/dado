@@ -29,6 +29,8 @@ type DiffLine struct {
 	OldLineNo int    // Line number in old content (0 if added)
 	NewLineNo int    // Line number in new content (0 if removed)
 	Content   string // Line content without +/- prefix
+	Selected  bool   // Whether line is selected (for staging)
+	HunkIndex int    // Index of hunk this line belongs to
 }
 
 // DiffHunk represents a contiguous block of changes
@@ -66,14 +68,18 @@ type DiffViewer struct {
 	offset        int
 
 	// Display options
-	sideBySide      bool
-	showLineNumbers bool
-	wordDiff        bool
-	contextLines    int
-	title           string
+	sideBySide       bool
+	showLineNumbers  bool
+	wordDiff         bool
+	contextLines     int
+	title            string
+	selectionEnabled bool // Enable line selection mode (for staging)
+	showSelection    bool // Show selection indicators
 
 	// Callbacks
-	onLineSelect func(line DiffLine)
+	onLineSelect   func(line DiffLine)
+	onHunkAction   func(hunkIndex int, lines []DiffLine) // Called for hunk-level operations
+	onLinesAction  func(lines []DiffLine)                // Called for selected lines operations
 }
 
 // NewDiffViewer creates a new diff viewer component
@@ -142,6 +148,130 @@ func (d *DiffViewer) SetOnLineSelect(fn func(line DiffLine)) *DiffViewer {
 	return d
 }
 
+// SetSelectionEnabled enables/disables line selection mode (for staging)
+func (d *DiffViewer) SetSelectionEnabled(enabled bool) *DiffViewer {
+	d.selectionEnabled = enabled
+	d.showSelection = enabled
+	return d
+}
+
+// SetOnHunkAction sets callback for hunk-level operations
+func (d *DiffViewer) SetOnHunkAction(fn func(hunkIndex int, lines []DiffLine)) *DiffViewer {
+	d.onHunkAction = fn
+	return d
+}
+
+// SetOnLinesAction sets callback for selected lines operations
+func (d *DiffViewer) SetOnLinesAction(fn func(lines []DiffLine)) *DiffViewer {
+	d.onLinesAction = fn
+	return d
+}
+
+// ToggleLineSelection toggles selection of the current line
+func (d *DiffViewer) ToggleLineSelection() {
+	if !d.selectionEnabled || d.selectedIndex >= len(d.lines) {
+		return
+	}
+	line := &d.lines[d.selectedIndex]
+	if line.Type == DiffLineAdded || line.Type == DiffLineRemoved {
+		line.Selected = !line.Selected
+	}
+}
+
+// SelectAllInHunk selects all changed lines in the current hunk
+func (d *DiffViewer) SelectAllInHunk() {
+	if !d.selectionEnabled || d.selectedIndex >= len(d.lines) {
+		return
+	}
+	currentHunk := d.lines[d.selectedIndex].HunkIndex
+	for i := range d.lines {
+		if d.lines[i].HunkIndex == currentHunk {
+			if d.lines[i].Type == DiffLineAdded || d.lines[i].Type == DiffLineRemoved {
+				d.lines[i].Selected = true
+			}
+		}
+	}
+}
+
+// ClearSelection clears all line selections
+func (d *DiffViewer) ClearSelection() {
+	for i := range d.lines {
+		d.lines[i].Selected = false
+	}
+}
+
+// GetSelectedLines returns all selected lines
+func (d *DiffViewer) GetSelectedLines() []DiffLine {
+	var selected []DiffLine
+	for _, line := range d.lines {
+		if line.Selected {
+			selected = append(selected, line)
+		}
+	}
+	return selected
+}
+
+// GetCurrentHunkIndex returns the hunk index of the current line
+func (d *DiffViewer) GetCurrentHunkIndex() int {
+	if d.selectedIndex >= 0 && d.selectedIndex < len(d.lines) {
+		return d.lines[d.selectedIndex].HunkIndex
+	}
+	return -1
+}
+
+// GetHunkLines returns all lines in the specified hunk
+func (d *DiffViewer) GetHunkLines(hunkIndex int) []DiffLine {
+	var lines []DiffLine
+	for _, line := range d.lines {
+		if line.HunkIndex == hunkIndex {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// NextHunk moves to the next hunk
+func (d *DiffViewer) NextHunk() {
+	currentHunk := d.GetCurrentHunkIndex()
+	for i := d.selectedIndex + 1; i < len(d.lines); i++ {
+		if d.lines[i].HunkIndex > currentHunk {
+			d.selectedIndex = i
+			d.ensureVisible()
+			return
+		}
+	}
+}
+
+// PrevHunk moves to the previous hunk
+func (d *DiffViewer) PrevHunk() {
+	currentHunk := d.GetCurrentHunkIndex()
+	// Find start of current hunk first
+	hunkStart := d.selectedIndex
+	for hunkStart > 0 && d.lines[hunkStart-1].HunkIndex == currentHunk {
+		hunkStart--
+	}
+	// Now find previous hunk
+	for i := hunkStart - 1; i >= 0; i-- {
+		if d.lines[i].HunkIndex < currentHunk {
+			// Find start of this hunk
+			for i > 0 && d.lines[i-1].HunkIndex == d.lines[i].HunkIndex {
+				i--
+			}
+			d.selectedIndex = i
+			d.ensureVisible()
+			return
+		}
+	}
+}
+
+// GetHunks returns all hunks from the result
+func (d *DiffViewer) GetHunks() []DiffHunk {
+	if d.result == nil {
+		return nil
+	}
+	return d.result.Hunks
+}
+
 // GetSelectedLine returns the currently selected line
 func (d *DiffViewer) GetSelectedLine() *DiffLine {
 	if d.selectedIndex >= 0 && d.selectedIndex < len(d.lines) {
@@ -195,14 +325,18 @@ func (d *DiffViewer) flattenLines() {
 		return
 	}
 
-	for _, hunk := range d.result.Hunks {
+	for hunkIdx, hunk := range d.result.Hunks {
 		// Add hunk header
 		d.lines = append(d.lines, DiffLine{
-			Type:    DiffLineHeader,
-			Content: hunk.Header,
+			Type:      DiffLineHeader,
+			Content:   hunk.Header,
+			HunkIndex: hunkIdx,
 		})
-		// Add hunk lines
-		d.lines = append(d.lines, hunk.Lines...)
+		// Add hunk lines with hunk index
+		for _, line := range hunk.Lines {
+			line.HunkIndex = hunkIdx
+			d.lines = append(d.lines, line)
+		}
 	}
 }
 
@@ -237,6 +371,7 @@ func (d *DiffViewer) Draw(screen tcell.Screen) {
 	addedColor := theme.Success()
 	removedColor := theme.Error()
 	headerColor := theme.Info()
+	warningColor := theme.Warning()
 
 	// Ensure selection is visible
 	d.ensureVisible()
@@ -287,6 +422,24 @@ func (d *DiffViewer) Draw(screen tcell.Screen) {
 		}
 
 		col := x
+
+		// Draw selection indicator (for staging mode)
+		if d.showSelection {
+			indicator := "  "
+			indStyle := lineStyle
+			if line.Selected {
+				indicator = "> "
+				if !isSelected {
+					indStyle = tcell.StyleDefault.Background(bgColor).Foreground(warningColor)
+				}
+			}
+			for _, ch := range indicator {
+				if col < x+width {
+					screen.SetContent(col, rowY, ch, nil, indStyle)
+					col++
+				}
+			}
+		}
 
 		// Draw line numbers
 		if d.showLineNumbers && line.Type != DiffLineHeader && line.Type != DiffLineFile {
