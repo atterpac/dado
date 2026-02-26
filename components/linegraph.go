@@ -376,7 +376,7 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 	// Reserve space for Y axis
 	yAxisWidth := 0
 	if g.yAxis.Show {
-		yAxisWidth = 8 // Space for labels like "-123.4"
+		yAxisWidth = 6 // Space for Y-axis labels
 		chartX += yAxisWidth
 		chartWidth -= yAxisWidth
 	}
@@ -392,6 +392,49 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		return
 	}
 
+	// Compute Y-axis tick values
+	labelCount := g.yAxis.LabelCount
+	if labelCount <= 0 {
+		labelCount = 5
+	}
+	format := g.yAxis.Format
+	if format == "" {
+		format = "%.1f"
+	}
+
+	// tickValues holds the Y values where grid lines and labels are drawn.
+	// For integer format, snap to nice integer boundaries to avoid duplicate labels.
+	var tickValues []float64
+	if format == "%.0f" {
+		intMin := int(math.Floor(g.minValue))
+		intMax := int(math.Ceil(g.maxValue))
+		if intMax <= intMin {
+			intMax = intMin + 1
+		}
+		intRange := intMax - intMin
+		step := 1
+		if intRange > labelCount {
+			step = (intRange + labelCount - 1) / labelCount
+		}
+		for v := intMax; v >= intMin; v -= step {
+			tickValues = append(tickValues, float64(v))
+		}
+	} else {
+		for i := 0; i <= labelCount; i++ {
+			value := g.maxValue - (float64(i)/float64(labelCount))*(g.maxValue-g.minValue)
+			tickValues = append(tickValues, value)
+		}
+	}
+
+	// Helper to map a tick value to a screen row
+	tickRow := func(value float64) int {
+		if g.maxValue == g.minValue {
+			return chartY + chartHeight/2
+		}
+		frac := (g.maxValue - value) / (g.maxValue - g.minValue)
+		return chartY + int(frac*float64(chartHeight-1))
+	}
+
 	// Draw grid
 	if g.showGrid {
 		gridColor := g.gridColor
@@ -400,15 +443,12 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		}
 		gridStyle := tcell.StyleDefault.Background(bgColor).Foreground(gridColor)
 
-		// Horizontal grid lines (at label positions)
-		labelCount := g.yAxis.LabelCount
-		if labelCount <= 0 {
-			labelCount = 5
-		}
-		for i := 0; i <= labelCount; i++ {
-			row := chartY + int(float64(i)/float64(labelCount)*float64(chartHeight-1))
-			for col := chartX; col < chartX+chartWidth; col++ {
-				screen.SetContent(col, row, '·', nil, gridStyle)
+		for _, tv := range tickValues {
+			row := tickRow(tv)
+			if row >= chartY && row < chartY+chartHeight {
+				for col := chartX; col < chartX+chartWidth; col++ {
+					screen.SetContent(col, row, '·', nil, gridStyle)
+				}
 			}
 		}
 	}
@@ -416,19 +456,13 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 	// Draw Y axis labels
 	if g.yAxis.Show {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
-		labelCount := g.yAxis.LabelCount
-		if labelCount <= 0 {
-			labelCount = 5
-		}
-		format := g.yAxis.Format
-		if format == "" {
-			format = "%.1f"
-		}
 
-		for i := 0; i <= labelCount; i++ {
-			value := g.maxValue - (float64(i)/float64(labelCount))*(g.maxValue-g.minValue)
-			label := formatFloat(value, format)
-			row := chartY + int(float64(i)/float64(labelCount)*float64(chartHeight-1))
+		for _, tv := range tickValues {
+			row := tickRow(tv)
+			if row < chartY || row >= chartY+chartHeight {
+				continue
+			}
+			label := formatFloat(tv, format)
 
 			// Right-align label
 			labelX := x + yAxisWidth - len(label) - 1
