@@ -95,9 +95,11 @@ func (b *TableBinding[T]) SetOnRefresh(fn func([]T, error)) *TableBinding[T] {
 // SetOnSelect sets callback when a table row is selected (Enter key).
 func (b *TableBinding[T]) SetOnSelect(fn func(T)) *TableBinding[T] {
 	b.onSelect = fn
-	b.table.SetOnSelect(func(row int) {
-		if item := b.GetItem(row); item != nil {
-			fn(*item)
+	b.table.SetOnSelect(func(dataIdx int) {
+		b.mu.RLock()
+		defer b.mu.RUnlock()
+		if dataIdx >= 0 && dataIdx < len(b.filtered) {
+			fn(b.filtered[dataIdx])
 		}
 	})
 	return b
@@ -234,11 +236,7 @@ func (b *TableBinding[T]) Refresh() error {
 // RefreshAsync fetches data asynchronously and updates the table.
 func (b *TableBinding[T]) RefreshAsync() {
 	go func() {
-		err := b.Refresh()
-		theme.QueueUpdateDraw(func() {
-			// Trigger redraw after data update
-			_ = err
-		})
+		b.Refresh()
 	}()
 }
 
@@ -327,7 +325,7 @@ func (b *TableBinding[T]) applyFilter() {
 
 	b.mu.Unlock()
 
-	theme.QueueUpdate(func() {
+	theme.QueueUpdateDraw(func() {
 		b.rebuildTable()
 	})
 }
