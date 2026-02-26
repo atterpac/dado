@@ -62,6 +62,8 @@ type Finder struct {
 	scrollOffset  int
 	showPreview   bool
 	recentIDs     []string
+	vimMode       bool // When true, j/k navigate and / enters search
+	searching     bool // In vim mode, true when typing into search
 
 	// Cached theme colors (set during Draw)
 	bgColor     tcell.Color
@@ -182,6 +184,16 @@ func (f *Finder) SetPreviewRatio(ratio float64) *Finder {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.previewRatio = ratio
+	return f
+}
+
+// SetVimMode enables vim-style navigation (j/k to move, / to search, Esc exits search).
+// When disabled (default), all typing goes directly to the search query.
+func (f *Finder) SetVimMode(enabled bool) *Finder {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.vimMode = enabled
+	f.searching = false
 	return f
 }
 
@@ -540,13 +552,19 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	inputStyle := baseStyle
 	promptStyle := baseStyle.Foreground(accent)
 
+	// In vim mode, show "/" prompt when searching, otherwise show the normal prompt
+	displayPrompt := f.prompt
+	if f.vimMode && f.searching {
+		displayPrompt = "/ "
+	}
+
 	// Draw prompt
-	for i, r := range f.prompt {
+	for i, r := range displayPrompt {
 		screen.SetContent(x+i, y, r, nil, promptStyle)
 	}
 
 	// Draw query or placeholder
-	inputX := x + len(f.prompt)
+	inputX := x + len(displayPrompt)
 	if f.query == "" && f.placeholder != "" {
 		placeholderStyle := baseStyle.Foreground(fgMuted)
 		for i, r := range f.placeholder {
@@ -564,10 +582,12 @@ func (f *Finder) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Draw cursor
-	cursorX := inputX + len(f.query)
-	if cursorX < x+listWidth {
-		screen.SetContent(cursorX, y, '_', nil, baseStyle.Foreground(accent))
+	// Draw cursor (only when actively searching, or always in default mode)
+	if !f.vimMode || f.searching {
+		cursorX := inputX + len(f.query)
+		if cursorX < x+listWidth {
+			screen.SetContent(cursorX, y, '_', nil, baseStyle.Foreground(accent))
+		}
 	}
 
 	// Draw separator
@@ -651,9 +671,14 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	}
 
 	// Draw hints on right side of footer
-	hints := "[Enter] Select  [Esc] Cancel"
-	if f.previewFunc != nil {
-		hints = "[Tab] Preview  " + hints
+	var hints string
+	if f.vimMode && !f.searching {
+		hints = "[/] Search  [j/k] Navigate  [Enter] Select  [q] Cancel"
+	} else {
+		hints = "[Enter] Select  [Esc] Cancel"
+		if f.previewFunc != nil {
+			hints = "[Tab] Preview  " + hints
+		}
 	}
 	hintsX := x + listWidth - len(hints)
 	if hintsX > x+len(footerText)+2 {
@@ -794,67 +819,170 @@ func (f *Finder) InputHandler() func(event *tcell.EventKey, setFocus func(p tvie
 		f.mu.Lock()
 		defer f.mu.Unlock()
 
-		key := event.Key()
+		if f.vimMode {
+			f.handleVimInput(event)
+		} else {
+			f.handleDefaultInput(event)
+		}
+	})
+}
+
+func (f *Finder) handleDefaultInput(event *tcell.EventKey) {
+	key := event.Key()
+	switch key {
+	case tcell.KeyDown, tcell.KeyCtrlN:
+		f.moveDown()
+	case tcell.KeyUp, tcell.KeyCtrlP:
+		f.moveUp()
+	case tcell.KeyPgDn:
+		for i := 0; i < f.maxVisible; i++ {
+			f.moveDown()
+		}
+	case tcell.KeyPgUp:
+		for i := 0; i < f.maxVisible; i++ {
+			f.moveUp()
+		}
+	case tcell.KeyHome:
+		f.selectedIndex = 0
+		f.scrollOffset = 0
+		f.notifyChange()
+	case tcell.KeyEnd:
+		if len(f.filtered) > 0 {
+			f.selectedIndex = len(f.filtered) - 1
+		}
+		f.notifyChange()
+	case tcell.KeyEnter:
+		f.selectCurrent()
+	case tcell.KeyEsc:
+		if f.onCancel != nil {
+			go f.onCancel()
+		}
+	case tcell.KeyTab:
+		if f.previewFunc != nil {
+			f.showPreview = !f.showPreview
+		}
+	case tcell.KeyCtrlU:
+		f.clearQuery()
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		f.deleteChar()
+	case tcell.KeyRune:
+		f.appendChar(event.Rune())
+	}
+}
+
+func (f *Finder) handleVimInput(event *tcell.EventKey) {
+	key := event.Key()
+
+	// In search mode, typing goes to query
+	if f.searching {
 		switch key {
+		case tcell.KeyEsc:
+			f.searching = false
+		case tcell.KeyEnter:
+			f.searching = false
+		case tcell.KeyBackspace, tcell.KeyBackspace2:
+			if len(f.query) > 0 {
+				f.deleteChar()
+			} else {
+				f.searching = false
+			}
+		case tcell.KeyCtrlU:
+			f.clearQuery()
+		case tcell.KeyRune:
+			f.appendChar(event.Rune())
 		case tcell.KeyDown, tcell.KeyCtrlN:
 			f.moveDown()
 		case tcell.KeyUp, tcell.KeyCtrlP:
 			f.moveUp()
-		case tcell.KeyPgDn:
-			for i := 0; i < f.maxVisible; i++ {
-				f.moveDown()
-			}
-		case tcell.KeyPgUp:
-			for i := 0; i < f.maxVisible; i++ {
-				f.moveUp()
-			}
-		case tcell.KeyHome:
+		}
+		return
+	}
+
+	// Normal vim mode — j/k navigate, / enters search
+	switch key {
+	case tcell.KeyDown, tcell.KeyCtrlN:
+		f.moveDown()
+	case tcell.KeyUp, tcell.KeyCtrlP:
+		f.moveUp()
+	case tcell.KeyEnter:
+		f.selectCurrent()
+	case tcell.KeyEsc:
+		if f.query != "" {
+			f.clearQuery()
+		} else if f.onCancel != nil {
+			go f.onCancel()
+		}
+	case tcell.KeyTab:
+		if f.previewFunc != nil {
+			f.showPreview = !f.showPreview
+		}
+	case tcell.KeyPgDn:
+		for i := 0; i < f.maxVisible; i++ {
+			f.moveDown()
+		}
+	case tcell.KeyPgUp:
+		for i := 0; i < f.maxVisible; i++ {
+			f.moveUp()
+		}
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case '/':
+			f.searching = true
+		case 'j':
+			f.moveDown()
+		case 'k':
+			f.moveUp()
+		case 'g':
 			f.selectedIndex = 0
 			f.scrollOffset = 0
 			f.notifyChange()
-		case tcell.KeyEnd:
+		case 'G':
 			if len(f.filtered) > 0 {
 				f.selectedIndex = len(f.filtered) - 1
 			}
 			f.notifyChange()
-		case tcell.KeyEnter:
-			if len(f.filtered) > 0 && f.selectedIndex >= 0 && f.selectedIndex < len(f.filtered) {
-				item := f.filtered[f.selectedIndex]
-				if f.onSelect != nil {
-					go f.onSelect(item)
-				}
-			}
-		case tcell.KeyEsc:
+		case 'q':
 			if f.onCancel != nil {
 				go f.onCancel()
 			}
-		case tcell.KeyTab:
-			if f.previewFunc != nil {
-				f.showPreview = !f.showPreview
-			}
-		case tcell.KeyCtrlU:
-			f.query = ""
-			f.filterItems()
-			if f.onQueryChange != nil {
-				go f.onQueryChange(f.query)
-			}
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if len(f.query) > 0 {
-				runes := []rune(f.query)
-				f.query = string(runes[:len(runes)-1])
-				f.filterItems()
-				if f.onQueryChange != nil {
-					go f.onQueryChange(f.query)
-				}
-			}
-		case tcell.KeyRune:
-			f.query += string(event.Rune())
-			f.filterItems()
-			if f.onQueryChange != nil {
-				go f.onQueryChange(f.query)
-			}
 		}
-	})
+	}
+}
+
+func (f *Finder) selectCurrent() {
+	if len(f.filtered) > 0 && f.selectedIndex >= 0 && f.selectedIndex < len(f.filtered) {
+		item := f.filtered[f.selectedIndex]
+		if f.onSelect != nil {
+			go f.onSelect(item)
+		}
+	}
+}
+
+func (f *Finder) clearQuery() {
+	f.query = ""
+	f.filterItems()
+	if f.onQueryChange != nil {
+		go f.onQueryChange(f.query)
+	}
+}
+
+func (f *Finder) deleteChar() {
+	if len(f.query) > 0 {
+		runes := []rune(f.query)
+		f.query = string(runes[:len(runes)-1])
+		f.filterItems()
+		if f.onQueryChange != nil {
+			go f.onQueryChange(f.query)
+		}
+	}
+}
+
+func (f *Finder) appendChar(r rune) {
+	f.query += string(r)
+	f.filterItems()
+	if f.onQueryChange != nil {
+		go f.onQueryChange(f.query)
+	}
 }
 
 func (f *Finder) moveDown() {

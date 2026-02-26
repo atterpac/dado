@@ -176,6 +176,14 @@ func (d *Dashboard) Stop() {
 	d.stopRefresh = make(map[int]chan struct{})
 }
 
+// Name returns the display name for breadcrumbs.
+func (d *Dashboard) Name() string {
+	if d.title != "" {
+		return d.title
+	}
+	return "Dashboard"
+}
+
 // Hints returns the current key hints.
 func (d *Dashboard) Hints() []components.KeyHint {
 	return []components.KeyHint{

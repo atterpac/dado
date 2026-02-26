@@ -46,10 +46,10 @@ func (e *EmptyState) setupLayout() {
 	content.AddItem(e.titleView, 1, 0, false)
 	content.AddItem(e.messageView, 1, 0, false)
 
-	// Center horizontally
+	// Center horizontally — use proportional sizing so long messages aren't truncated
 	hCenter := tview.NewFlex().SetDirection(tview.FlexColumn)
 	hCenter.AddItem(nil, 0, 1, false)
-	hCenter.AddItem(content, 40, 0, false)
+	hCenter.AddItem(content, 0, 2, false)
 	hCenter.AddItem(nil, 0, 1, false)
 
 	// Center vertically

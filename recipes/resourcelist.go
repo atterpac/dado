@@ -296,6 +296,9 @@ func (r *ResourceList[T]) updateHints() {
 	r.hintBar.SetHints(hints)
 }
 
+// Name returns the display name for breadcrumbs.
+func (r *ResourceList[T]) Name() string { return "Resources" }
+
 // Start begins the resource list lifecycle (fetching, refresh).
 func (r *ResourceList[T]) Start() {
 	// Initial fetch

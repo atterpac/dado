@@ -35,6 +35,12 @@ type Table struct {
 	selectedKeys  map[string]bool // Key -> selected state
 	rowKeyToIndex map[string]int  // Key -> current row index
 	rowIndexToKey map[int]string  // Row index -> key (reverse lookup)
+
+	// Empty state overlay shown when table has no data rows
+	emptyState   *EmptyState
+	emptyIcon    string
+	emptyTitle   string
+	emptyMessage string
 }
 
 // NewTable creates a new enhanced table.
@@ -256,8 +262,57 @@ func (t *Table) SetOnSelectionChange(fn func(rows []int)) *Table {
 	return t
 }
 
+// ConfigureEmpty sets the empty state shown when the table has no data rows.
+func (t *Table) ConfigureEmpty(icon, title, message string) *Table {
+	t.emptyIcon = icon
+	t.emptyTitle = title
+	t.emptyMessage = message
+	if t.emptyState == nil {
+		t.emptyState = NewEmptyState()
+	}
+	t.emptyState.Configure(icon, title, message)
+	return t
+}
+
+// SetEmptyIcon sets the icon for the empty state.
+func (t *Table) SetEmptyIcon(icon string) *Table {
+	t.emptyIcon = icon
+	if t.emptyState != nil {
+		t.emptyState.SetIcon(icon)
+	}
+	return t
+}
+
+// SetEmptyTitle sets the title for the empty state.
+func (t *Table) SetEmptyTitle(title string) *Table {
+	t.emptyTitle = title
+	if t.emptyState != nil {
+		t.emptyState.SetTitle(title)
+	}
+	return t
+}
+
+// SetEmptyMessage sets the message for the empty state.
+func (t *Table) SetEmptyMessage(message string) *Table {
+	t.emptyMessage = message
+	if t.emptyState != nil {
+		t.emptyState.SetMessage(message)
+	}
+	return t
+}
+
 // Draw renders the table with theme colors.
 func (t *Table) Draw(screen tcell.Screen) {
+	// If empty state is configured and there are no data rows, render it instead
+	if t.emptyState != nil && t.GetDataRowCount() == 0 {
+		t.Table.SetBackgroundColor(theme.Bg())
+		t.Table.DrawForSubclass(screen, t)
+		x, y, w, h := t.Table.GetInnerRect()
+		t.emptyState.SetRect(x, y, w, h)
+		t.emptyState.Draw(screen)
+		return
+	}
+
 	// Cache theme colors once at start to avoid lock contention in loops
 	bg := theme.Bg()
 	accent := theme.Accent()
