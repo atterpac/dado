@@ -318,14 +318,22 @@ func (m *MetricCard) drawCompact(screen tcell.Screen, x, y, width int, bgColor, 
 		}
 	}
 
-	// Trend
-	if m.trend != TrendNeutral || m.trendValue != "" {
+	// Trend (always render to keep layout stable)
+	{
 		col++ // space
 		trendColor := fgDimColor
-		if m.trendGood {
-			trendColor = successColor
-		} else if m.trend != TrendNeutral {
-			trendColor = errorColor
+		if m.trend == TrendUp {
+			if m.trendGood {
+				trendColor = successColor
+			} else {
+				trendColor = errorColor
+			}
+		} else if m.trend == TrendDown {
+			if m.trendGood {
+				trendColor = errorColor
+			} else {
+				trendColor = successColor
+			}
 		}
 		trendStyle := tcell.StyleDefault.Background(bgColor).Foreground(trendColor)
 
@@ -375,13 +383,21 @@ func (m *MetricCard) drawFull(screen tcell.Screen, x, y, width, height int, bgCo
 		row++
 	}
 
-	// Trend indicator
-	if (m.trend != TrendNeutral || m.trendValue != "") && row < y+height {
+	// Trend indicator (always render to keep layout stable)
+	if row < y+height {
 		trendColor := fgDimColor
-		if m.trendGood {
-			trendColor = successColor
-		} else if m.trend != TrendNeutral {
-			trendColor = errorColor
+		if m.trend == TrendUp {
+			if m.trendGood {
+				trendColor = successColor
+			} else {
+				trendColor = errorColor
+			}
+		} else if m.trend == TrendDown {
+			if m.trendGood {
+				trendColor = errorColor
+			} else {
+				trendColor = successColor
+			}
 		}
 		trendStyle := tcell.StyleDefault.Background(bgColor).Foreground(trendColor)
 
@@ -494,9 +510,7 @@ func (m *MetricCard) GetFieldHeight() int {
 	if m.label != "" {
 		height++
 	}
-	if m.trend != TrendNeutral || m.trendValue != "" {
-		height++
-	}
+	height++ // Trend row always present to keep layout stable
 	if m.showSpark {
 		height++
 	}
