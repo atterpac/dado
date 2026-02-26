@@ -568,6 +568,8 @@ func (l *LogViewer) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) 
 }
 
 // Start begins the log viewer lifecycle.
+func (l *LogViewer) Name() string { return "Log Viewer" }
+
 func (l *LogViewer) Start() {}
 
 // Stop ends the log viewer lifecycle.
