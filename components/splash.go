@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -161,8 +162,9 @@ func (s *Splash) calculateLogoDimensions() {
 
 	maxWidth := 0
 	for _, line := range lines {
-		if len(line) > maxWidth {
-			maxWidth = len(line)
+		w := utf8.RuneCountInString(line)
+		if w > maxWidth {
+			maxWidth = w
 		}
 	}
 	s.logoWidth = maxWidth + 2 // Add padding
