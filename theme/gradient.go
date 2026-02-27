@@ -3,6 +3,7 @@ package theme
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // GradientType defines the direction of gradient application.
@@ -139,8 +140,8 @@ func ApplyHorizontalGradient(text string, colors []string) string {
 	// Find max line width
 	maxWidth := 0
 	for _, line := range lines {
-		if len(line) > maxWidth {
-			maxWidth = len(line)
+		if w := utf8.RuneCountInString(line); w > maxWidth {
+			maxWidth = w
 		}
 	}
 
@@ -218,8 +219,8 @@ func ApplyDiagonalGradient(text string, colors []string) string {
 
 	maxWidth := 0
 	for _, line := range lines {
-		if len(line) > maxWidth {
-			maxWidth = len(line)
+		if w := utf8.RuneCountInString(line); w > maxWidth {
+			maxWidth = w
 		}
 	}
 
@@ -276,8 +277,8 @@ func ApplyReverseDiagonalGradient(text string, colors []string) string {
 
 	maxWidth := 0
 	for _, line := range lines {
-		if len(line) > maxWidth {
-			maxWidth = len(line)
+		if w := utf8.RuneCountInString(line); w > maxWidth {
+			maxWidth = w
 		}
 	}
 
