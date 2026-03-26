@@ -516,7 +516,9 @@ func (s *Sparkline) SetValues(values []float64) *Sparkline {
 func (s *Sparkline) AddValue(value float64, maxLen int) *Sparkline {
 	s.values = append(s.values, value)
 	if len(s.values) > maxLen {
-		s.values = s.values[len(s.values)-maxLen:]
+		newValues := make([]float64, maxLen)
+		copy(newValues, s.values[len(s.values)-maxLen:])
+		s.values = newValues
 	}
 	return s
 }

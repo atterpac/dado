@@ -282,7 +282,9 @@ func (v *LogViewer) AddEntry(entry LogEntry) *LogViewer {
 	// Trim if over limit
 	if v.maxEntries > 0 && len(v.entries) > v.maxEntries {
 		excess := len(v.entries) - v.maxEntries
-		v.entries = v.entries[excess:]
+		newEntries := make([]LogEntry, v.maxEntries)
+		copy(newEntries, v.entries[excess:])
+		v.entries = newEntries
 		// Adjust filtered indices
 		newFiltered := make([]int, 0, len(v.filteredIdx))
 		for _, idx := range v.filteredIdx {

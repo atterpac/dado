@@ -157,7 +157,9 @@ func (g *LineGraph) AddValue(value float64, maxLen int) *LineGraph {
 	}
 	g.series[0].Values = append(g.series[0].Values, value)
 	if len(g.series[0].Values) > maxLen {
-		g.series[0].Values = g.series[0].Values[len(g.series[0].Values)-maxLen:]
+		newValues := make([]float64, maxLen)
+		copy(newValues, g.series[0].Values[len(g.series[0].Values)-maxLen:])
+		g.series[0].Values = newValues
 	}
 	if g.autoScale {
 		g.recalculateRange()

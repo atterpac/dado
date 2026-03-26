@@ -14,6 +14,7 @@ type TreeNode struct {
 	ID       string
 	Label    string
 	Icon     string
+	Color    tcell.Color // optional label color (zero value = default)
 	Children []*TreeNode
 	Data     any
 	Expanded bool
@@ -73,6 +74,8 @@ func NewTree() *Tree {
 // SetRoot sets the root node of the tree.
 func (t *Tree) SetRoot(root *TreeNode) *Tree {
 	t.root = root
+	t.selectedIndex = 0
+	t.offset = 0
 	if root != nil {
 		root.level = 0
 		t.setLevels(root, 0)
@@ -253,8 +256,9 @@ func (t *Tree) Filter(query string) *Tree {
 func (t *Tree) filterNode(node *TreeNode, query string) bool {
 	matches := strings.Contains(strings.ToLower(node.Label), query)
 
-	// Check children
+	// Check children first to determine if any match
 	var hasMatchingChild bool
+	childStart := len(t.flatNodes)
 	for _, child := range node.Children {
 		if t.filterNode(child, query) {
 			hasMatchingChild = true
@@ -262,7 +266,11 @@ func (t *Tree) filterNode(node *TreeNode, query string) bool {
 	}
 
 	if matches || hasMatchingChild {
-		t.flatNodes = append(t.flatNodes, node)
+		// Insert parent before its children (pre-order)
+		children := make([]*TreeNode, len(t.flatNodes)-childStart)
+		copy(children, t.flatNodes[childStart:])
+		t.flatNodes = append(t.flatNodes[:childStart], node)
+		t.flatNodes = append(t.flatNodes, children...)
 		return true
 	}
 	return false
@@ -374,9 +382,13 @@ func (t *Tree) Draw(screen tcell.Screen) {
 				col++
 			}
 		}
+		labelStyle := lineStyle
+		if node.Color != 0 && t.offset+i != t.selectedIndex {
+			labelStyle = tcell.StyleDefault.Background(bgColor).Foreground(node.Color)
+		}
 		for _, r := range node.Label {
 			if col < x+width {
-				screen.SetContent(col, rowY, r, nil, lineStyle)
+				screen.SetContent(col, rowY, r, nil, labelStyle)
 				col++
 			}
 		}

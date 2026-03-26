@@ -201,6 +201,15 @@ func (p *ProgressModal) SetOnClose(fn func()) *ProgressModal {
 // StartSpinner starts the spinner animation for indeterminate mode
 func (p *ProgressModal) StartSpinner(app *tview.Application) {
 	p.mu.Lock()
+	// Stop any existing spinner goroutine before starting a new one
+	if p.spinnerStop != nil {
+		select {
+		case <-p.spinnerStop:
+			// Already closed
+		default:
+			close(p.spinnerStop)
+		}
+	}
 	p.spinnerStop = make(chan struct{})
 	p.mu.Unlock()
 

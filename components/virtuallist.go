@@ -292,6 +292,15 @@ func (v *VirtualList) getItem(index int) *VirtualListItem {
 		}
 
 		v.cacheMu.Lock()
+		// Evict cache entries far from current fetch window
+		maxCacheSize := batchSize * 3
+		if len(v.cache) > maxCacheSize {
+			for k := range v.cache {
+				if k < start-batchSize || k > start+batchSize*2 {
+					delete(v.cache, k)
+				}
+			}
+		}
 		for i, item := range items {
 			itemCopy := item
 			v.cache[start+i] = &itemCopy
