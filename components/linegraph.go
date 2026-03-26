@@ -77,6 +77,14 @@ type LineGraph struct {
 
 	// Callbacks
 	onHover func(seriesIdx, pointIdx int, value float64)
+
+	// Cached canvas to avoid per-frame allocation
+	canvas       [][]rune
+	canvasWidth  int
+	canvasHeight int
+
+	// Cached tick values to avoid per-frame allocation
+	tickValues []float64
 }
 
 // NewLineGraph creates a new line graph component
@@ -150,6 +158,9 @@ func (g *LineGraph) SetValues(values []float64) *LineGraph {
 
 // AddValue appends a value to the first series with rolling window
 func (g *LineGraph) AddValue(value float64, maxLen int) *LineGraph {
+	if maxLen < 1 {
+		maxLen = 100
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if len(g.series) == 0 {
@@ -276,8 +287,10 @@ func (g *LineGraph) recalculateRange() {
 	g.minValue = math.MaxFloat64
 	g.maxValue = -math.MaxFloat64
 
+	found := false
 	for _, s := range g.series {
 		for _, v := range s.Values {
+			found = true
 			if v < g.minValue {
 				g.minValue = v
 			}
@@ -285,6 +298,13 @@ func (g *LineGraph) recalculateRange() {
 				g.maxValue = v
 			}
 		}
+	}
+
+	// No data points across any series — use safe defaults
+	if !found {
+		g.minValue = 0
+		g.maxValue = 1
+		return
 	}
 
 	// Ensure we have a valid range
@@ -338,8 +358,8 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		return
 	}
 
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 
 	// Get colors at draw time
 	bgColor := theme.Bg()
@@ -406,7 +426,7 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 
 	// tickValues holds the Y values where grid lines and labels are drawn.
 	// For integer format, snap to nice integer boundaries to avoid duplicate labels.
-	var tickValues []float64
+	g.tickValues = g.tickValues[:0]
 	if format == "%.0f" {
 		intMin := int(math.Floor(g.minValue))
 		intMax := int(math.Ceil(g.maxValue))
@@ -419,14 +439,15 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 			step = (intRange + labelCount - 1) / labelCount
 		}
 		for v := intMax; v >= intMin; v -= step {
-			tickValues = append(tickValues, float64(v))
+			g.tickValues = append(g.tickValues, float64(v))
 		}
 	} else {
 		for i := 0; i <= labelCount; i++ {
 			value := g.maxValue - (float64(i)/float64(labelCount))*(g.maxValue-g.minValue)
-			tickValues = append(tickValues, value)
+			g.tickValues = append(g.tickValues, value)
 		}
 	}
+	tickValues := g.tickValues
 
 	// Helper to map a tick value to a screen row
 	tickRow := func(value float64) int {
@@ -476,13 +497,27 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Create braille canvas
+	// Reuse or reallocate braille canvas
 	brailleWidth := chartWidth * 2
 	brailleHeight := chartHeight * 4
-	canvas := make([][]rune, chartHeight)
-	for i := range canvas {
-		canvas[i] = make([]rune, chartWidth)
+	if g.canvasWidth != chartWidth || g.canvasHeight != chartHeight {
+		g.canvas = make([][]rune, chartHeight)
+		for i := range g.canvas {
+			g.canvas[i] = make([]rune, chartWidth)
+		}
+		g.canvasWidth = chartWidth
+		g.canvasHeight = chartHeight
+	} else {
+		for row := range g.canvas {
+			for col := range g.canvas[row] {
+				g.canvas[row][col] = 0
+			}
+		}
 	}
+	canvas := g.canvas
+
+	// Color palette for series without explicit colors
+	seriesColors := [4]tcell.Color{accentColor, theme.Success(), theme.Warning(), theme.Info()}
 
 	// Draw each series
 	for sIdx, series := range g.series {
@@ -493,9 +528,7 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		// Determine series color
 		seriesColor := series.Color
 		if seriesColor == 0 {
-			// Cycle through theme colors
-			colors := []tcell.Color{accentColor, theme.Success(), theme.Warning(), theme.Info()}
-			seriesColor = colors[sIdx%len(colors)]
+			seriesColor = seriesColors[sIdx%len(seriesColors)]
 		}
 
 		// Plot points
@@ -567,8 +600,7 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 
 			seriesColor := series.Color
 			if seriesColor == 0 {
-				colors := []tcell.Color{accentColor, theme.Success(), theme.Warning(), theme.Info()}
-				seriesColor = colors[sIdx%len(colors)]
+				seriesColor = seriesColors[sIdx%len(seriesColors)]
 			}
 
 			// Draw color indicator

@@ -141,6 +141,9 @@ func (m *MetricCard) SetSparklineMax(max float64) *MetricCard {
 
 // AddSparkValue appends a value to sparkline with rolling window
 func (m *MetricCard) AddSparkValue(value float64, maxLen int) *MetricCard {
+	if maxLen < 1 {
+		maxLen = 100
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sparkData = append(m.sparkData, value)
