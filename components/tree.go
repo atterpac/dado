@@ -232,6 +232,46 @@ func (t *Tree) GetSelectedNodes() []*TreeNode {
 	return nodes
 }
 
+// GetSelectedIndex returns the current cursor index in the flat node list.
+func (t *Tree) GetSelectedIndex() int {
+	return t.selectedIndex
+}
+
+// SetSelectedIndex sets the cursor to the given index in the flat node list.
+// The index is clamped to valid bounds. onHighlight fires only when the index
+// actually changes. The scroll offset is adjusted so the new selection is
+// visible on the next draw.
+func (t *Tree) SetSelectedIndex(index int) *Tree {
+	if len(t.flatNodes) == 0 {
+		t.selectedIndex = 0
+		t.offset = 0
+		return t
+	}
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(t.flatNodes) {
+		index = len(t.flatNodes) - 1
+	}
+
+	prev := t.selectedIndex
+	t.selectedIndex = index
+
+	// Scroll into view using current inner rect height when available.
+	if _, _, _, height := t.GetInnerRect(); height > 0 {
+		if t.selectedIndex < t.offset {
+			t.offset = t.selectedIndex
+		} else if t.selectedIndex >= t.offset+height {
+			t.offset = t.selectedIndex - height + 1
+		}
+	}
+
+	if t.selectedIndex != prev && t.onHighlight != nil {
+		t.onHighlight(t.flatNodes[t.selectedIndex])
+	}
+	return t
+}
+
 // ClearSelection clears multi-selection.
 func (t *Tree) ClearSelection() *Tree {
 	t.selected = make(map[*TreeNode]bool)
