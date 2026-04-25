@@ -62,6 +62,7 @@ type App struct {
 	config           AppConfig
 	userInputCapture func(*tcell.EventKey) *tcell.EventKey // User's custom input capture
 	effects          *effect.Dispatcher
+	subs             components.Subscriptions
 }
 
 // NewApp creates a new application with the given configuration.
@@ -89,7 +90,7 @@ func NewApp(config AppConfig) *App {
 	}
 
 	// Register main flex for automatic theme updates
-	theme.Register(mainFlex)
+	a.subs.Add(theme.Register(mainFlex))
 
 	// Register with theme system
 	theme.SetApp(a.app)
@@ -157,6 +158,16 @@ func (a *App) Run() error {
 // Stop stops the application and shuts down the Effect dispatcher,
 // cancelling any in-flight Effects.
 func (a *App) Stop() {
+	a.subs.Release()
+	if a.menu != nil {
+		a.menu.Subs().Release()
+	}
+	if a.pages != nil {
+		a.pages.Subs().Release()
+	}
+	if a.crumbs != nil {
+		a.crumbs.Subs().Release()
+	}
 	if a.effects != nil {
 		timeout := a.config.EffectShutdownTimeout
 		switch {

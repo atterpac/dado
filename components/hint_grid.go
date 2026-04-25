@@ -14,7 +14,11 @@ import (
 type HintGrid struct {
 	*tview.Box
 	hints []KeyHint
+	subs  Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (g *HintGrid) Subs() *Subscriptions { return &g.subs }
 
 // NewHintGrid creates a new hint grid.
 func NewHintGrid() *HintGrid {
@@ -26,7 +30,7 @@ func NewHintGrid() *HintGrid {
 		hints: make([]KeyHint, 0),
 	}
 
-	theme.Register(box)
+	g.subs.Add(theme.Register(box))
 	return g
 }
 

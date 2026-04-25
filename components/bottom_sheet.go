@@ -28,7 +28,11 @@ type BottomSheet struct {
 	behavior    ModalBehavior
 	onClose     func()
 	onDismiss   func() bool
+	subs        Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (b *BottomSheet) Subs() *Subscriptions { return &b.subs }
 
 // NewBottomSheet creates a new bottom sheet with the given configuration.
 func NewBottomSheet(config BottomSheetConfig) *BottomSheet {
@@ -62,7 +66,7 @@ func NewBottomSheet(config BottomSheetConfig) *BottomSheet {
 		b.panel.SetTitle(config.Title)
 	}
 
-	theme.Register(flex)
+	b.subs.Add(theme.Register(flex))
 	b.setupLayout()
 
 	return b

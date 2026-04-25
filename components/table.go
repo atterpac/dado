@@ -41,7 +41,12 @@ type Table struct {
 	emptyIcon    string
 	emptyTitle   string
 	emptyMessage string
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (t *Table) Subs() *Subscriptions { return &t.subs }
 
 // NewTable creates a new enhanced table.
 func NewTable() *Table {
@@ -58,8 +63,7 @@ func NewTable() *Table {
 	t.Table.SetSeparator(' ')
 	t.Table.SetBackgroundColor(theme.Bg())
 
-	// Register for automatic theme updates
-	theme.Register(t.Table)
+	t.subs.Add(theme.Register(t.Table))
 
 	return t
 }

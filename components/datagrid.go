@@ -71,7 +71,12 @@ type DataGrid struct {
 	deferredCallback func()
 
 	mu sync.RWMutex
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (dg *DataGrid) Subs() *Subscriptions { return &dg.subs }
 
 // NewDataGrid creates a new DataGrid component with default settings.
 func NewDataGrid() *DataGrid {
@@ -83,7 +88,7 @@ func NewDataGrid() *DataGrid {
 		separator:      '│',
 		overscan:       5,
 	}
-	theme.Register(dg.Box)
+	dg.subs.Add(theme.Register(dg.Box))
 	return dg
 }
 

@@ -17,7 +17,11 @@ type PropertyModal struct {
 	form    *components.Form
 	demo    demos.Demo
 	onClose func()
+	subs    components.Subscriptions
 }
+
+// Subs returns the modal's subscription set; release on dismissal.
+func (m *PropertyModal) Subs() *components.Subscriptions { return &m.subs }
 
 // NewPropertyModal creates a new property editor modal.
 func NewPropertyModal(demo demos.Demo, onClose func()) *PropertyModal {
@@ -62,7 +66,9 @@ func NewPropertyModal(demo demos.Demo, onClose func()) *PropertyModal {
 		{Key: "Esc", Description: "Close"},
 	})
 
-	theme.Register(m.form)
+	if m.form != nil {
+		m.subs.Add(theme.Register(m.form))
+	}
 
 	return m
 }
@@ -146,7 +152,7 @@ func (m *PropertyModal) buildForm(properties []demos.Property) {
 func (m *PropertyModal) Start() {}
 
 // Stop implements nav.Component.
-func (m *PropertyModal) Stop() {}
+func (m *PropertyModal) Stop() { m.subs.Release() }
 
 // Hints implements nav.Component.
 func (m *PropertyModal) Hints() []components.KeyHint {

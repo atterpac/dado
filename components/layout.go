@@ -9,14 +9,19 @@ import (
 // Layout wraps tview.Flex with a simpler API for common layout patterns.
 type Layout struct {
 	*tview.Flex
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (l *Layout) Subs() *Subscriptions { return &l.subs }
 
 // Row creates a horizontal layout (items arranged left to right).
 // Items are given equal weight by default.
 func Row(items ...tview.Primitive) *Layout {
 	flex := tview.NewFlex().SetDirection(tview.FlexColumn)
 	flex.SetBackgroundColor(theme.Bg())
-	theme.Register(flex)
+	l := &Layout{Flex: flex}
+	l.subs.Add(theme.Register(flex))
 
 	for _, item := range items {
 		flex.AddItem(item, 0, 1, false)
@@ -27,7 +32,7 @@ func Row(items ...tview.Primitive) *Layout {
 		flex.AddItem(nil, 0, 0, true) // dummy to reset focus tracking
 	}
 
-	return &Layout{Flex: flex}
+	return l
 }
 
 // Column creates a vertical layout (items arranged top to bottom).
@@ -35,22 +40,23 @@ func Row(items ...tview.Primitive) *Layout {
 func Column(items ...tview.Primitive) *Layout {
 	flex := tview.NewFlex().SetDirection(tview.FlexRow)
 	flex.SetBackgroundColor(theme.Bg())
-	theme.Register(flex)
+	l := &Layout{Flex: flex}
+	l.subs.Add(theme.Register(flex))
 
 	for _, item := range items {
 		flex.AddItem(item, 0, 1, false)
 	}
 
-	return &Layout{Flex: flex}
+	return l
 }
 
 // NewLayout creates an empty layout. Use AddItem to add children.
 func NewLayout() *Layout {
 	flex := tview.NewFlex()
 	flex.SetBackgroundColor(theme.Bg())
-	theme.Register(flex)
-
-	return &Layout{Flex: flex}
+	l := &Layout{Flex: flex}
+	l.subs.Add(theme.Register(flex))
+	return l
 }
 
 // Horizontal sets the layout direction to horizontal (row).

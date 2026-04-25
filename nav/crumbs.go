@@ -7,6 +7,7 @@ import (
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
+	"github.com/atterpac/jig/components"
 	"github.com/atterpac/jig/theme"
 )
 
@@ -15,7 +16,11 @@ type Crumbs struct {
 	*tview.TextView
 	path      []string
 	separator string
+	subs      components.Subscriptions
 }
+
+// Subs returns the widget's subscription set; release on teardown.
+func (c *Crumbs) Subs() *components.Subscriptions { return &c.subs }
 
 // NewCrumbs creates a new breadcrumb component.
 func NewCrumbs() *Crumbs {
@@ -31,8 +36,7 @@ func NewCrumbs() *Crumbs {
 	c.TextView.SetDynamicColors(true)
 	c.TextView.SetTextAlign(tview.AlignLeft)
 
-	// Register for automatic theme updates
-	theme.Register(tv)
+	c.subs.Add(theme.Register(tv))
 
 	return c
 }

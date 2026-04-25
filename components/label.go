@@ -11,7 +11,11 @@ import (
 // It wraps tview.TextView with themed defaults and a cleaner API.
 type Label struct {
 	*tview.TextView
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (l *Label) Subs() *Subscriptions { return &l.subs }
 
 // NewLabel creates a new Label with the given text.
 func NewLabel(text string) *Label {
@@ -25,8 +29,7 @@ func NewLabel(text string) *Label {
 		TextView: tv,
 	}
 
-	// Register for automatic theme updates
-	theme.Register(tv)
+	l.subs.Add(theme.Register(tv))
 
 	return l
 }

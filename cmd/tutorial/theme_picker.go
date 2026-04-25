@@ -14,7 +14,11 @@ type ThemePicker struct {
 	*components.Modal
 	list     *tview.List
 	onSelect func(t theme.Theme)
+	subs     components.Subscriptions
 }
+
+// Subs returns the picker's subscription set; release on dismissal.
+func (p *ThemePicker) Subs() *components.Subscriptions { return &p.subs }
 
 // NewThemePicker creates a new theme picker modal.
 func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
@@ -66,8 +70,7 @@ func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
 		}
 	})
 
-	// Register for theme updates
-	theme.Register(list)
+	p.subs.Add(theme.Register(list))
 
 	return p
 }
@@ -76,7 +79,7 @@ func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
 func (p *ThemePicker) Start() {}
 
 // Stop implements nav.Component.
-func (p *ThemePicker) Stop() {}
+func (p *ThemePicker) Stop() { p.subs.Release() }
 
 // Hints implements nav.Component.
 func (p *ThemePicker) Hints() []components.KeyHint {

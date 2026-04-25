@@ -22,7 +22,13 @@ type List struct {
 	items    []ListItem
 	onSelect func(index int, item ListItem)
 	onChange func(index int, item ListItem)
+	subs     Subscriptions
 }
+
+// Subs returns the widget's subscription set. ComponentBase.Stop releases
+// it automatically when the List is wrapped; standalone callers should
+// call Subs().Release() at teardown to drop the theme registration.
+func (l *List) Subs() *Subscriptions { return &l.subs }
 
 // NewList creates a new List.
 func NewList() *List {
@@ -54,7 +60,7 @@ func NewList() *List {
 	})
 
 	// Register for automatic theme updates
-	theme.Register(list)
+	l.subs.Add(theme.Register(list))
 
 	return l
 }

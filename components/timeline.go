@@ -45,7 +45,12 @@ type Timeline struct {
 
 	// Custom bar styling (optional)
 	barStyleFn func(status *theme.Status) (rune, tcell.Color)
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (t *Timeline) Subs() *Subscriptions { return &t.subs }
 
 // NewTimeline creates a new timeline/Gantt chart view.
 func NewTimeline() *Timeline {
@@ -60,8 +65,7 @@ func NewTimeline() *Timeline {
 
 	t.SetBackgroundColor(theme.Bg())
 
-	// Register for automatic theme updates
-	theme.Register(t.Box)
+	t.subs.Add(theme.Register(t.Box))
 
 	return t
 }

@@ -74,7 +74,12 @@ type MasterDetailView struct {
 
 	// Key hints (for nav.Component)
 	hints []KeyHint
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (m *MasterDetailView) Subs() *Subscriptions { return &m.subs }
 
 // SearchCallbacks provides callbacks for search UI integration.
 type SearchCallbacks struct {
@@ -111,8 +116,7 @@ func NewMasterDetailView() *MasterDetailView {
 	// Set initial panel content
 	m.updatePanels()
 
-	// Register for automatic theme updates
-	theme.Register(box)
+	m.subs.Add(theme.Register(box))
 
 	return m
 }

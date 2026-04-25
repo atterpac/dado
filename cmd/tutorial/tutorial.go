@@ -22,7 +22,11 @@ type Tutorial struct {
 	demoContent   *components.Layout
 	currentDemo   demos.Demo
 	demoComponent tview.Primitive // Cached to avoid re-creation
+	subs          components.Subscriptions
 }
+
+// Subs returns the tutorial's subscription set; release on app teardown.
+func (t *Tutorial) Subs() *components.Subscriptions { return &t.subs }
 
 // NewTutorial creates a new tutorial application.
 func NewTutorial() *Tutorial {
@@ -61,8 +65,7 @@ func NewTutorial() *Tutorial {
 		t.selectDemo(demo)
 	})
 
-	// Register for theme updates
-	theme.Register(t.demoContent)
+	t.subs.Add(theme.Register(t.demoContent))
 
 	return t
 }

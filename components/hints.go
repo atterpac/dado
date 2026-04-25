@@ -20,7 +20,11 @@ type KeyHint struct {
 type KeyHintBar struct {
 	*tview.Box
 	Hints []KeyHint
+	subs  Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (k *KeyHintBar) Subs() *Subscriptions { return &k.subs }
 
 // NewKeyHintBar creates a new key hint bar.
 func NewKeyHintBar() *KeyHintBar {
@@ -32,8 +36,7 @@ func NewKeyHintBar() *KeyHintBar {
 		Hints: make([]KeyHint, 0),
 	}
 
-	// Register for automatic theme updates
-	theme.Register(box)
+	k.subs.Add(theme.Register(box))
 
 	return k
 }

@@ -13,7 +13,11 @@ type CodeModal struct {
 	*components.Modal
 	codeView *tview.TextView
 	code     string
+	subs     components.Subscriptions
 }
+
+// Subs returns the modal's subscription set; release on dismissal.
+func (m *CodeModal) Subs() *components.Subscriptions { return &m.subs }
 
 // NewCodeModal creates a new code modal.
 func NewCodeModal(title string, code string) *CodeModal {
@@ -52,8 +56,7 @@ func NewCodeModal(title string, code string) *CodeModal {
 		code:     code,
 	}
 
-	// Register for theme updates
-	theme.Register(codeView)
+	m.subs.Add(theme.Register(codeView))
 
 	return m
 }
@@ -68,7 +71,7 @@ func formatGoCode(code string) string {
 func (m *CodeModal) Start() {}
 
 // Stop implements nav.Component.
-func (m *CodeModal) Stop() {}
+func (m *CodeModal) Stop() { m.subs.Release() }
 
 // Hints implements nav.Component.
 func (m *CodeModal) Hints() []components.KeyHint {

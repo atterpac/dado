@@ -84,20 +84,26 @@ type ERDGraph struct {
 
 	// Callbacks
 	onSelect func(table *ERDTable)
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (e *ERDGraph) Subs() *Subscriptions { return &e.subs }
 
 // NewERDGraph creates a new ERDGraph component.
 func NewERDGraph() *ERDGraph {
 	box := tview.NewBox()
 	box.SetBackgroundColor(theme.Bg())
-	theme.Register(box)
 
-	return &ERDGraph{
+	g := &ERDGraph{
 		Box:       box,
 		nodeWidth: 30,
 		hSpacing:  4,
 		vSpacing:  2,
 	}
+	g.subs.Add(theme.Register(box))
+	return g
 }
 
 // SetData replaces the graph data with the given tables and relations,

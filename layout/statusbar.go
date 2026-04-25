@@ -49,7 +49,12 @@ type StatusBar struct {
 
 	// Inline suggestion (ghost text)
 	suggestion string
+
+	subs components.Subscriptions
 }
+
+// Subs returns the status bar's subscription set; release on teardown.
+func (s *StatusBar) Subs() *components.Subscriptions { return &s.subs }
 
 // NewStatusBar creates a new status bar.
 func NewStatusBar() *StatusBar {
@@ -197,9 +202,9 @@ func NewStatusBar() *StatusBar {
 	})
 
 	// Register content for automatic theme updates (Panel registers itself)
-	theme.Register(s.content)
-	theme.Register(s.commandInput)
-	theme.Register(s.completionList)
+	s.subs.Add(theme.Register(s.content))
+	s.subs.Add(theme.Register(s.commandInput))
+	s.subs.Add(theme.Register(s.completionList))
 
 	return s
 }

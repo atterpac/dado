@@ -34,7 +34,12 @@ type Split struct {
 
 	// Callbacks
 	onResize func(ratio float64)
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (s *Split) Subs() *Subscriptions { return &s.subs }
 
 // NewSplit creates a new Split component.
 func NewSplit() *Split {
@@ -50,8 +55,7 @@ func NewSplit() *Split {
 		showDivider: true,
 	}
 
-	// Register for automatic theme updates
-	theme.Register(box)
+	s.subs.Add(theme.Register(box))
 
 	return s
 }

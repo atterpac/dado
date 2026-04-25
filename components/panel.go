@@ -39,7 +39,11 @@ type Panel struct {
 	titleColor tcell.Color // 0 means use theme default (Accent)
 	titleAlign TitleAlign  // Title alignment (default: center)
 	focused    bool        // Manual focus state for visual indication
+	subs       Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (p *Panel) Subs() *Subscriptions { return &p.subs }
 
 // NewPanel creates a new Panel container.
 func NewPanel() *Panel {
@@ -51,7 +55,7 @@ func NewPanel() *Panel {
 	}
 
 	// Register for automatic theme updates
-	theme.Register(box)
+	p.subs.Add(theme.Register(box))
 
 	return p
 }

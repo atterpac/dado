@@ -33,7 +33,11 @@ type Pages struct {
 	counter        int         // For generating unique page names
 	app            *tview.Application // Reference for focus management
 	crumbs         *Crumbs            // Optional breadcrumb component
+	subs           components.Subscriptions
 }
+
+// Subs returns the widget's subscription set; release on app teardown.
+func (p *Pages) Subs() *components.Subscriptions { return &p.subs }
 
 // NewPages creates a new page stack manager.
 func NewPages() *Pages {
@@ -46,8 +50,7 @@ func NewPages() *Pages {
 		focusStack: make([]tview.Primitive, 0),
 	}
 
-	// Register for automatic theme updates
-	theme.Register(pages)
+	p.subs.Add(theme.Register(pages))
 
 	return p
 }

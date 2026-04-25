@@ -14,7 +14,12 @@ type Menu struct {
 	*tview.Box
 	hints     []components.KeyHint
 	rightText string
+	subs      components.Subscriptions
 }
+
+// Subs returns the menu's subscription set; release on app teardown to drop
+// the theme registration.
+func (m *Menu) Subs() *components.Subscriptions { return &m.subs }
 
 // NewMenu creates a new menu bar.
 func NewMenu() *Menu {
@@ -25,8 +30,7 @@ func NewMenu() *Menu {
 
 	m.Box.SetBackgroundColor(theme.Bg())
 
-	// Register for automatic theme updates
-	theme.Register(m.Box)
+	m.subs.Add(theme.Register(m.Box))
 
 	return m
 }

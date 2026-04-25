@@ -38,7 +38,11 @@ type Drawer struct {
 	behavior    ModalBehavior
 	onClose     func()
 	onDismiss   func() bool
+	subs        Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (d *Drawer) Subs() *Subscriptions { return &d.subs }
 
 // NewDrawer creates a new drawer with the given configuration.
 func NewDrawer(config DrawerConfig) *Drawer {
@@ -72,7 +76,7 @@ func NewDrawer(config DrawerConfig) *Drawer {
 		d.panel.SetTitle(config.Title)
 	}
 
-	theme.Register(flex)
+	d.subs.Add(theme.Register(flex))
 	d.setupLayout()
 
 	return d

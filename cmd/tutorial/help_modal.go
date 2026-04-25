@@ -12,7 +12,11 @@ import (
 type HelpModal struct {
 	*components.Modal
 	content *tview.TextView
+	subs    components.Subscriptions
 }
+
+// Subs returns the modal's subscription set; release on dismissal.
+func (m *HelpModal) Subs() *components.Subscriptions { return &m.subs }
 
 // NewHelpModal creates a new help modal.
 func NewHelpModal() *HelpModal {
@@ -70,7 +74,7 @@ func NewHelpModal() *HelpModal {
 		content: content,
 	}
 
-	theme.Register(content)
+	m.subs.Add(theme.Register(content))
 
 	return m
 }
@@ -79,7 +83,7 @@ func NewHelpModal() *HelpModal {
 func (m *HelpModal) Start() {}
 
 // Stop implements nav.Component.
-func (m *HelpModal) Stop() {}
+func (m *HelpModal) Stop() { m.subs.Release() }
 
 // Hints implements nav.Component.
 func (m *HelpModal) Hints() []components.KeyHint {

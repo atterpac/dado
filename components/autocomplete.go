@@ -50,7 +50,12 @@ type AutocompleteInput struct {
 	// Providers
 	suggestionFn SuggestionProvider
 	historyFn    HistoryProvider
+
+	subs Subscriptions
 }
+
+// Subs returns the widget's subscription set; released by ComponentBase.Stop.
+func (ai *AutocompleteInput) Subs() *Subscriptions { return &ai.subs }
 
 // NewAutocompleteInput creates a new autocomplete input field.
 func NewAutocompleteInput() *AutocompleteInput {
@@ -62,8 +67,7 @@ func NewAutocompleteInput() *AutocompleteInput {
 	}
 	ai.SetBackgroundColor(theme.Bg())
 
-	// Register for automatic theme updates
-	theme.Register(ai.Box)
+	ai.subs.Add(theme.Register(ai.Box))
 
 	return ai
 }
