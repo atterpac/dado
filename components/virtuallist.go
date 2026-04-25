@@ -340,31 +340,48 @@ func (v *VirtualList) triggerOnChange() {
 	}
 }
 
-// Draw renders the virtual list
+// vlSnapshot is the immutable geometry the paint phase consumes.
+type vlSnapshot struct {
+	contentWidth int
+	indexWidth   int
+	bg, fg       tcell.Color
+	fgDim        tcell.Color
+	accent       tcell.Color
+}
+
+// Draw renders the virtual list. State mutation (ensureVisible,
+// prefetch) is contained in prepareDraw; paint writes only to screen.
 func (v *VirtualList) Draw(screen tcell.Screen) {
 	v.Box.DrawForSubclass(screen, v)
 	x, y, width, height := v.GetInnerRect()
-
 	if width <= 0 || height <= 0 || v.totalCount == 0 {
 		return
 	}
 
-	// Colors (read at draw time per jig rules)
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
+	snap := v.prepareDraw(width, height)
+	v.paint(screen, x, y, width, height, snap)
 
-	// Reserve space for scrollbar
-	contentWidth := width
+	if v.offset+height >= v.totalCount && v.onScrollEnd != nil {
+		v.onScrollEnd()
+	}
+}
+
+// prepareDraw fits the viewport, prefetches the visible window, and
+// returns the geometry the paint phase needs.
+func (v *VirtualList) prepareDraw(width, height int) vlSnapshot {
+	snap := vlSnapshot{
+		contentWidth: width,
+		bg:           theme.Bg(),
+		fg:           theme.Fg(),
+		fgDim:        theme.FgDim(),
+		accent:       theme.Accent(),
+	}
 	if v.showScrollbar && v.totalCount > height {
-		contentWidth--
+		snap.contentWidth--
 	}
 
-	// Ensure selection is visible
 	v.ensureVisible()
 
-	// Pre-fetch items in visible range + overscan
 	startFetch := v.offset - v.overscan
 	if startFetch < 0 {
 		startFetch = 0
@@ -373,72 +390,64 @@ func (v *VirtualList) Draw(screen tcell.Screen) {
 	if endFetch > v.totalCount {
 		endFetch = v.totalCount
 	}
-
-	// Pre-load items
 	for i := startFetch; i < endFetch; i++ {
 		v.getItem(i)
 	}
 
-	// Index column width
-	indexWidth := 0
 	if v.showIndex {
-		indexWidth = len(string(rune(v.totalCount))) + 2 // "123 "
-		if indexWidth < 4 {
-			indexWidth = 4
+		snap.indexWidth = len(string(rune(v.totalCount))) + 2
+		if snap.indexWidth < 4 {
+			snap.indexWidth = 4
 		}
 	}
+	return snap
+}
 
-	// Draw visible items
+// paint writes the list rows to screen. Does not mutate v.* state.
+func (v *VirtualList) paint(screen tcell.Screen, x, y, width, height int, snap vlSnapshot) {
 	for i := 0; i < height && v.offset+i < v.totalCount; i++ {
 		index := v.offset + i
 		item := v.getItem(index)
 		rowY := y + i
 		isSelected := index == v.selectedIndex
 
-		// Determine row style
-		rowStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
+		rowStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.fg)
 		if isSelected {
-			rowStyle = tcell.StyleDefault.Background(accentColor).Foreground(bgColor)
+			rowStyle = tcell.StyleDefault.Background(snap.accent).Foreground(snap.bg)
 		}
 
-		// Clear row
-		for col := x; col < x+contentWidth; col++ {
+		for col := x; col < x+snap.contentWidth; col++ {
 			screen.SetContent(col, rowY, ' ', nil, rowStyle)
 		}
 
 		col := x
 
-		// Draw index
 		if v.showIndex {
 			indexStyle := rowStyle
 			if !isSelected {
-				indexStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
+				indexStyle = tcell.StyleDefault.Background(snap.bg).Foreground(snap.fgDim)
 			}
-			indexStr := padLeft(itoa(index+1), indexWidth-1) + " "
+			indexStr := padLeft(itoa(index+1), snap.indexWidth-1) + " "
 			for _, ch := range indexStr {
-				if col < x+contentWidth {
+				if col < x+snap.contentWidth {
 					screen.SetContent(col, rowY, ch, nil, indexStyle)
 					col++
 				}
 			}
 		}
 
-		// Render item content
 		if item != nil {
 			var text string
 			if v.renderFunc != nil {
-				text = v.renderFunc(index, *item, contentWidth-indexWidth, isSelected)
-			} else {
-				// Default render: show ID or data
-				if item.ID != "" {
-					text = item.ID
-				} else if item.Data != nil {
-					text = toString(item.Data)
-				}
+				text = v.renderFunc(index, *item, snap.contentWidth-snap.indexWidth, isSelected)
+			} else if item.ID != "" {
+				text = item.ID
+			} else if item.Data != nil {
+				text = toString(item.Data)
 			}
 
 			for _, ch := range text {
-				if col < x+contentWidth {
+				if col < x+snap.contentWidth {
 					screen.SetContent(col, rowY, ch, nil, rowStyle)
 					col++
 				}
@@ -446,14 +455,8 @@ func (v *VirtualList) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Draw scrollbar
 	if v.showScrollbar && v.totalCount > height {
 		v.drawScrollbar(screen, x+width-1, y, height)
-	}
-
-	// Check if scrolled to end
-	if v.offset+height >= v.totalCount && v.onScrollEnd != nil {
-		v.onScrollEnd()
 	}
 }
 

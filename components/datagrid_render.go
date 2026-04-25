@@ -5,11 +5,34 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// Draw renders the DataGrid to the screen.
+// drawSnapshot holds the geometry and theme colors computed during the
+// state-mutation phase of Draw. The paint phase reads only this snapshot
+// (and mutation-free fields like selectedRows / cursor / source) so the
+// boundary between "compute layout / advance state" and "write to screen"
+// is explicit.
+type drawSnapshot struct {
+	headerHeight int
+	dataHeight   int
+	gutterWidth  int
+	contentWidth int
+	hasVScroll   bool
+	startRow     int
+	endRow       int
+	cols         []GridColumn
+	bg, fg       tcell.Color
+	fgDim        tcell.Color
+	accent       tcell.Color
+	warning      tcell.Color
+	header       tcell.Color
+}
+
+// Draw renders the DataGrid to the screen. State mutation lives in
+// prepareDrawLocked; screen writes live in paintLocked. Both run while
+// dg.mu is held — concurrency semantics are unchanged from the prior
+// monolithic implementation.
 func (dg *DataGrid) Draw(screen tcell.Screen) {
 	dg.Box.DrawForSubclass(screen, dg)
 	x, y, width, height := dg.GetInnerRect()
-
 	if width <= 0 || height <= 0 {
 		return
 	}
@@ -21,61 +44,57 @@ func (dg *DataGrid) Draw(screen tcell.Screen) {
 		return
 	}
 
-	// Read theme colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	warningColor := theme.Warning()
-	headerColor := theme.TableHeader()
-
-	// Calculate layout
-	headerHeight := 0
-	if dg.showHeader {
-		headerHeight = 1
-	}
-	dataHeight := height - headerHeight
-	if dataHeight <= 0 {
+	snap, ok := dg.prepareDrawLocked(width, height)
+	if !ok {
 		return
 	}
+	dg.paintLocked(screen, x, y, width, height, snap)
+}
 
-	// Row number gutter width
-	gutterWidth := 0
+// prepareDrawLocked performs all dg.* mutations Draw needs (viewport
+// fit, column-width recompute, source prefetch, cursor clamp) and
+// returns the geometry the paint phase will consume. Returns ok=false
+// when the available area is too small to render anything.
+//
+// Caller must hold dg.mu.
+func (dg *DataGrid) prepareDrawLocked(width, height int) (drawSnapshot, bool) {
+	snap := drawSnapshot{
+		bg:      theme.Bg(),
+		fg:      theme.Fg(),
+		fgDim:   theme.FgDim(),
+		accent:  theme.Accent(),
+		warning: theme.Warning(),
+		header:  theme.TableHeader(),
+	}
+
+	if dg.showHeader {
+		snap.headerHeight = 1
+	}
+	snap.dataHeight = height - snap.headerHeight
+	if snap.dataHeight <= 0 {
+		return snap, false
+	}
+
 	if dg.showRowNumbers {
-		rowCount := dg.source.RowCount()
-		gutterWidth = len(itoa(rowCount)) + 2 // digits + padding
-		if gutterWidth < 4 {
-			gutterWidth = 4
+		snap.gutterWidth = len(itoa(dg.source.RowCount())) + 2
+		if snap.gutterWidth < 4 {
+			snap.gutterWidth = 4
 		}
 	}
 
-	// Reserve scrollbar space
-	hasVScroll := dg.source.RowCount() > dataHeight
+	snap.hasVScroll = dg.source.RowCount() > snap.dataHeight
 	scrollWidth := 0
-	if hasVScroll {
+	if snap.hasVScroll {
 		scrollWidth = 1
 	}
+	snap.contentWidth = width - snap.gutterWidth - scrollWidth
 
-	contentWidth := width - gutterWidth - scrollWidth
+	dg.viewport.VisRows = snap.dataHeight
+	dg.colWidths = computeColumnWidths(dg.source, &dg.viewport, snap.contentWidth, dg.showRowNumbers)
+	snap.cols = dg.source.Columns()
 
-	// Update viewport dimensions
-	dg.viewport.VisRows = dataHeight
+	dg.ensureCursorColVisible(snap.contentWidth)
 
-	// Compute column widths from source
-	dg.colWidths = computeColumnWidths(dg.source, &dg.viewport, contentWidth, dg.showRowNumbers)
-	cols := dg.source.Columns()
-
-	// Adjust horizontal scroll so cursor column is visible
-	dg.ensureCursorColVisible(contentWidth)
-
-	// Compute horizontal scroll bounds
-	totalColWidth := 0
-	for _, w := range dg.colWidths {
-		totalColWidth += w
-	}
-	hasHScroll := totalColWidth > contentWidth
-
-	// Pre-fetch visible range
 	startRow := dg.viewport.RowOffset
 	endRow := startRow + dg.viewport.VisRows
 	if endRow > dg.source.RowCount() {
@@ -91,7 +110,6 @@ func (dg *DataGrid) Draw(screen tcell.Screen) {
 	}
 	dg.source.FetchRange(fetchStart, fetchEnd)
 
-	// Ensure cursor visible
 	dg.clampCursor()
 	if dg.cursor.Row < dg.viewport.RowOffset {
 		dg.viewport.RowOffset = dg.cursor.Row
@@ -99,88 +117,77 @@ func (dg *DataGrid) Draw(screen tcell.Screen) {
 	if dg.cursor.Row >= dg.viewport.RowOffset+dg.viewport.VisRows {
 		dg.viewport.RowOffset = dg.cursor.Row - dg.viewport.VisRows + 1
 	}
-	// Recalculate after potential adjustment
-	startRow = dg.viewport.RowOffset
-	endRow = startRow + dg.viewport.VisRows
-	if endRow > dg.source.RowCount() {
-		endRow = dg.source.RowCount()
+	snap.startRow = dg.viewport.RowOffset
+	snap.endRow = snap.startRow + snap.dataHeight
+	if snap.endRow > dg.source.RowCount() {
+		snap.endRow = dg.source.RowCount()
 	}
 
-	// Base style
-	baseStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
+	return snap, true
+}
 
-	// Draw header row
+// paintLocked writes the DataGrid to screen using the snapshot's geometry.
+// It does not mutate any dg.* fields. Caller must hold dg.mu.
+func (dg *DataGrid) paintLocked(screen tcell.Screen, x, y, width, height int, snap drawSnapshot) {
+	baseStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.fg)
+
 	if dg.showHeader {
-		headerStyle := tcell.StyleDefault.Background(bgColor).Foreground(headerColor).Bold(true)
+		headerStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.header).Bold(true)
 		headerY := y
-
-		// Clear header line
 		for col := x; col < x+width; col++ {
 			screen.SetContent(col, headerY, ' ', nil, headerStyle)
 		}
-
-		// Draw gutter header space
-		drawX := x + gutterWidth
-
-		// Draw header cells
-		dg.drawHeaderCells(screen, drawX, headerY, contentWidth, cols, headerStyle)
+		drawX := x + snap.gutterWidth
+		dg.drawHeaderCells(screen, drawX, headerY, snap.contentWidth, snap.cols, headerStyle)
 	}
 
-	// Draw data rows
-	for rowIdx := startRow; rowIdx < endRow; rowIdx++ {
-		screenY := y + headerHeight + (rowIdx - startRow)
+	for rowIdx := snap.startRow; rowIdx < snap.endRow; rowIdx++ {
+		screenY := y + snap.headerHeight + (rowIdx - snap.startRow)
 		isCursorRow := rowIdx == dg.cursor.Row
 		isSelectedRow := dg.selectedRows[rowIdx]
 
-		// Clear entire row
-		rowBg := bgColor
+		rowBg := snap.bg
 		if isSelectedRow {
-			rowBg = accentColor
+			rowBg = snap.accent
 		}
-		clearStyle := tcell.StyleDefault.Background(rowBg).Foreground(fgColor)
+		clearStyle := tcell.StyleDefault.Background(rowBg).Foreground(snap.fg)
 		if isSelectedRow {
-			clearStyle = clearStyle.Foreground(bgColor)
+			clearStyle = clearStyle.Foreground(snap.bg)
 		}
 		for col := x; col < x+width; col++ {
 			screen.SetContent(col, screenY, ' ', nil, clearStyle)
 		}
 
-		// Draw row number gutter
 		if dg.showRowNumbers {
-			gutterStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
+			gutterStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.fgDim)
 			if isSelectedRow {
-				gutterStyle = tcell.StyleDefault.Background(accentColor).Foreground(bgColor)
+				gutterStyle = tcell.StyleDefault.Background(snap.accent).Foreground(snap.bg)
 			}
-			numStr := padLeft(itoa(rowIdx+1), gutterWidth-1) + " "
+			numStr := padLeft(itoa(rowIdx+1), snap.gutterWidth-1) + " "
 			drawCol := x
 			for _, ch := range numStr {
-				if drawCol < x+gutterWidth {
+				if drawCol < x+snap.gutterWidth {
 					screen.SetContent(drawCol, screenY, ch, nil, gutterStyle)
 					drawCol++
 				}
 			}
 		}
 
-		// Draw cells
-		drawX := x + gutterWidth
-		dg.drawDataCells(screen, drawX, screenY, contentWidth, rowIdx, cols,
-			isCursorRow, isSelectedRow, baseStyle, bgColor, fgColor, accentColor, warningColor, fgDimColor)
+		drawX := x + snap.gutterWidth
+		dg.drawDataCells(screen, drawX, screenY, snap.contentWidth, rowIdx, snap.cols,
+			isCursorRow, isSelectedRow, baseStyle,
+			snap.bg, snap.fg, snap.accent, snap.warning, snap.fgDim)
 	}
 
-	// Clear empty rows below data
-	for emptyY := y + headerHeight + (endRow - startRow); emptyY < y+height; emptyY++ {
+	for emptyY := y + snap.headerHeight + (snap.endRow - snap.startRow); emptyY < y+height; emptyY++ {
 		for col := x; col < x+width; col++ {
 			screen.SetContent(col, emptyY, ' ', nil, baseStyle)
 		}
 	}
 
-	// Draw vertical scrollbar
-	if hasVScroll {
-		dg.drawVScrollbar(screen, x+width-1, y+headerHeight, dataHeight)
+	if snap.hasVScroll {
+		dg.drawVScrollbar(screen, x+width-1, y+snap.headerHeight, snap.dataHeight)
 	}
-
-	// Draw horizontal scrollbar indicator (in bottom-right if needed)
-	_ = hasHScroll
 }
 
 // drawHeaderCells renders the column headers.
