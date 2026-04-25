@@ -33,6 +33,14 @@ type AppConfig struct {
 	// OnComponentChange is called when the active component changes.
 	// Useful for updating menu hints, crumbs, etc.
 	OnComponentChange func(nav.Component)
+
+	// Debug enables the bus debug overlay. When true, pressing DebugKey
+	// pushes a DebugOverlay onto the page stack.
+	Debug bool
+
+	// DebugKey is the key that toggles the debug overlay. Defaults to
+	// Ctrl+D when zero.
+	DebugKey tcell.Key
 }
 
 // App is the application root that manages the overall layout.
@@ -56,6 +64,9 @@ func NewApp(config AppConfig) *App {
 	}
 	if config.BottomBarHeight == 0 {
 		config.BottomBarHeight = 1
+	}
+	if config.Debug && config.DebugKey == 0 {
+		config.DebugKey = tcell.KeyCtrlD
 	}
 
 	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -249,6 +260,18 @@ func (a *App) SetInputCapture(capture func(*tcell.EventKey) *tcell.EventKey) *Ap
 // setupModalInputCapture configures automatic modal input handling.
 func (a *App) setupModalInputCapture() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Debug overlay toggle, when enabled.
+		if a.config.Debug && event.Key() == a.config.DebugKey {
+			go func() {
+				a.app.QueueUpdateDraw(func() {
+					overlay := components.NewDebugOverlay(0)
+					overlay.SetOnClose(func() { a.pages.Pop() })
+					a.pages.Push(overlay)
+				})
+			}()
+			return nil
+		}
+
 		// Check if current page is a modal with auto-dismiss
 		if behavior := a.pages.CurrentModalBehavior(); behavior != nil {
 			// Handle auto-dismiss on Escape
