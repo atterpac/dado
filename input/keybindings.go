@@ -5,7 +5,39 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/atterpac/jig/bus"
 )
+
+// publishInput emits a key event to the bus when enabled.
+func publishInput(event *tcell.EventKey, consumed bool) {
+	if !bus.Enabled() {
+		return
+	}
+	bus.Publish(bus.Event{
+		Kind:    bus.KindInput,
+		Source:  bus.SourceInput,
+		Payload: bus.InputEvent{Key: keyLabel(event), Consumed: consumed},
+	})
+}
+
+// keyLabel renders a tcell.EventKey as a short human-readable string.
+func keyLabel(e *tcell.EventKey) string {
+	if e.Key() == tcell.KeyRune {
+		mod := ""
+		if e.Modifiers()&tcell.ModCtrl != 0 {
+			mod += "Ctrl+"
+		}
+		if e.Modifiers()&tcell.ModAlt != 0 {
+			mod += "Alt+"
+		}
+		if e.Modifiers()&tcell.ModShift != 0 {
+			mod += "Shift+"
+		}
+		return mod + string(e.Rune())
+	}
+	return tcell.KeyNames[e.Key()]
+}
 
 // Handler processes a key event and returns true if the event was handled.
 type Handler func(event *tcell.EventKey) bool
@@ -99,6 +131,13 @@ func (kb *KeyBindings) SetFallback(handler Handler) *KeyBindings {
 
 // Handle processes an event and returns true if handled.
 func (kb *KeyBindings) Handle(event *tcell.EventKey) bool {
+	consumed := kb.dispatch(event)
+	publishInput(event, consumed)
+	return consumed
+}
+
+// dispatch routes the event to the matching handler without bus instrumentation.
+func (kb *KeyBindings) dispatch(event *tcell.EventKey) bool {
 	// Check modifier combinations first (most specific)
 	if event.Modifiers() != 0 {
 		if handler, ok := kb.modBindings[keyMod{event.Key(), event.Modifiers()}]; ok {

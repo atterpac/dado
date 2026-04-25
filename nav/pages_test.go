@@ -47,6 +47,8 @@ func (m *mockComponent) Stop() {
 	}
 }
 
+func (m *mockComponent) Name() string { return m.name }
+
 func (m *mockComponent) Hints() []components.KeyHint {
 	return m.hints
 }

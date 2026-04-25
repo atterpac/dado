@@ -234,6 +234,9 @@ func (t *Tutorial) showHelpModal() {
 	t.app.Pages().Push(modal)
 }
 
+// Name implements nav.Component.
+func (t *Tutorial) Name() string { return "tutorial" }
+
 // Start implements nav.Component.
 func (t *Tutorial) Start() {
 	t.Split.FocusFirst()
