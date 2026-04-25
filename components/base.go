@@ -6,6 +6,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/atterpac/jig/theme"
 )
 
 var componentIDCounter uint64
@@ -46,6 +48,7 @@ type ComponentBase struct {
 	// Optional overrides
 	inputHandler func(*tcell.EventKey, func(tview.Primitive)) bool
 	drawOverlay  func(screen tcell.Screen)
+	themeP       *theme.Provider
 }
 
 // Subscriptions aggregates unregister functions so component teardown
@@ -176,10 +179,45 @@ func (cb *ComponentBase) Primitive() tview.Primitive {
 	return cb.primitive
 }
 
+// Typed returns the wrapped primitive cast to P. Panics if the stored
+// primitive is not a P — the cast mirrors the type the caller used at
+// NewComponentBase, so a mismatch is a programmer error, not a runtime
+// condition. Use when a caller needs typed access without going through
+// a component-specific accessor.
+//
+//	tbl := components.Typed[*Table](cb)
+//	tbl.SetCell(0, 0, ...)
+func Typed[P tview.Primitive](cb *ComponentBase) P {
+	return cb.primitive.(P)
+}
+
 // Subs returns the component's subscription set. Register theme/binding
 // unsubscribers here; they fire automatically on Stop().
 func (cb *ComponentBase) Subs() *Subscriptions {
 	return &cb.subs
+}
+
+// SetTheme scopes a theme.Provider to this component. When set, code that
+// reads via cb.Theme() uses this provider instead of theme.Default().
+// Pass nil to clear the override and fall back to the package default.
+func (cb *ComponentBase) SetTheme(p *theme.Provider) *ComponentBase {
+	cb.mu.Lock()
+	cb.themeP = p
+	cb.mu.Unlock()
+	return cb
+}
+
+// Theme returns the scoped Provider if SetTheme was called, otherwise
+// theme.Default(). New code reads colors via cb.Theme().Bg() to honor
+// per-subtree theme overrides; legacy theme.Bg() always reads Default().
+func (cb *ComponentBase) Theme() *theme.Provider {
+	cb.mu.RLock()
+	p := cb.themeP
+	cb.mu.RUnlock()
+	if p != nil {
+		return p
+	}
+	return theme.Default()
 }
 
 // --- nav.Component Implementation ---
