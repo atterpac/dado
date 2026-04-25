@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -41,7 +42,14 @@ type AppConfig struct {
 	// DebugKey is the key that toggles the debug overlay. Defaults to
 	// Ctrl+D when zero.
 	DebugKey tcell.Key
+
+	// EffectShutdownTimeout bounds how long Stop waits for in-flight
+	// Effects to drain. Zero uses defaultEffectShutdownTimeout (2s).
+	// Negative disables the wait (fire-and-forget Shutdown).
+	EffectShutdownTimeout time.Duration
 }
+
+const defaultEffectShutdownTimeout = 2 * time.Second
 
 // App is the application root that manages the overall layout.
 type App struct {
@@ -150,9 +158,18 @@ func (a *App) Run() error {
 // cancelling any in-flight Effects.
 func (a *App) Stop() {
 	if a.effects != nil {
-		// Best-effort drain; tview's Stop is synchronous so we don't
-		// block here on Effect goroutines that may still be running.
-		go a.effects.Shutdown(context.Background())
+		timeout := a.config.EffectShutdownTimeout
+		switch {
+		case timeout < 0:
+			go a.effects.Shutdown(context.Background())
+		default:
+			if timeout == 0 {
+				timeout = defaultEffectShutdownTimeout
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			_ = a.effects.Shutdown(ctx)
+			cancel()
+		}
 	}
 	a.app.Stop()
 }
