@@ -1,11 +1,14 @@
 package layout
 
 import (
+	"context"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/jig/components"
+	"github.com/atterpac/jig/effect"
 	"github.com/atterpac/jig/nav"
 	"github.com/atterpac/jig/theme"
 )
@@ -42,6 +45,7 @@ type App struct {
 	menu             *Menu
 	config           AppConfig
 	userInputCapture func(*tcell.EventKey) *tcell.EventKey // User's custom input capture
+	effects          *effect.Dispatcher
 }
 
 // NewApp creates a new application with the given configuration.
@@ -58,10 +62,11 @@ func NewApp(config AppConfig) *App {
 	mainFlex.SetBackgroundColor(theme.Bg())
 
 	a := &App{
-		app:    tview.NewApplication(),
-		main:   mainFlex,
-		pages:  nav.NewPages(),
-		config: config,
+		app:     tview.NewApplication(),
+		main:    mainFlex,
+		pages:   nav.NewPages(),
+		config:  config,
+		effects: effect.NewDispatcher(),
 	}
 
 	// Register main flex for automatic theme updates
@@ -130,9 +135,21 @@ func (a *App) Run() error {
 	return a.app.Run()
 }
 
-// Stop stops the application.
+// Stop stops the application and shuts down the Effect dispatcher,
+// cancelling any in-flight Effects.
 func (a *App) Stop() {
+	if a.effects != nil {
+		// Best-effort drain; tview's Stop is synchronous so we don't
+		// block here on Effect goroutines that may still be running.
+		go a.effects.Shutdown(context.Background())
+	}
 	a.app.Stop()
+}
+
+// Effects returns the application's default Effect dispatcher.
+// Effects are an opt-in command/effect layer; see package effect.
+func (a *App) Effects() *effect.Dispatcher {
+	return a.effects
 }
 
 // Pages returns the page manager.
