@@ -39,10 +39,23 @@ func (e SetValuesError) Error() string {
 }
 
 // FormField is the interface for form fields.
+//
+// Implementations expose their value through the polymorphic SetFieldValue /
+// FieldValue / ClearField trio so the Form container does not need to know
+// the concrete field type.
 type FormField interface {
 	tview.Primitive
 	GetName() string
 	GetFieldHeight() int
+
+	// SetFieldValue assigns the field's value from an any, returning an error
+	// if the value's dynamic type is incompatible with this field.
+	SetFieldValue(value any) error
+	// FieldValue returns the field's current value as an any. The concrete
+	// type is documented per field implementation.
+	FieldValue() any
+	// ClearField resets the field to its zero/empty state.
+	ClearField()
 }
 
 // Form is a container for form fields with focus management.
@@ -251,104 +264,16 @@ func (f *Form) SetValues(values map[string]any) error {
 	return nil
 }
 
-// setFieldValue sets a single field's value with type checking.
+// setFieldValue sets a single field's value, delegating to the field's polymorphic SetFieldValue.
 func (f *Form) setFieldValue(field FormField, value any) error {
-	switch fld := field.(type) {
-	case *TextField:
-		if v, ok := value.(string); ok {
-			fld.SetValue(v)
-			return nil
-		}
-		return fmt.Errorf("expected string, got %T", value)
-
-	case *TextArea:
-		if v, ok := value.(string); ok {
-			fld.SetValue(v)
-			return nil
-		}
-		return fmt.Errorf("expected string, got %T", value)
-
-	case *Select:
-		switch v := value.(type) {
-		case string:
-			fld.SetDefault(v)
-			return nil
-		case int:
-			fld.SetSelected(v)
-			return nil
-		default:
-			return fmt.Errorf("expected string or int, got %T", value)
-		}
-
-	case *MultiSelect:
-		switch v := value.(type) {
-		case []string:
-			// Find indices for the given values
-			indices := make([]int, 0, len(v))
-			for _, val := range v {
-				for i, opt := range fld.options {
-					if opt.Value == val {
-						indices = append(indices, i)
-						break
-					}
-				}
-			}
-			fld.SetSelected(indices)
-			return nil
-		case []int:
-			fld.SetSelected(v)
-			return nil
-		default:
-			return fmt.Errorf("expected []string or []int, got %T", value)
-		}
-
-	case *Checkbox:
-		if v, ok := value.(bool); ok {
-			fld.SetChecked(v)
-			return nil
-		}
-		return fmt.Errorf("expected bool, got %T", value)
-
-	case *RadioGroup:
-		switch v := value.(type) {
-		case string:
-			for i, opt := range fld.options {
-				if opt == v {
-					fld.SetSelected(i)
-					return nil
-				}
-			}
-			return fmt.Errorf("option %q not found", v)
-		case int:
-			fld.SetSelected(v)
-			return nil
-		default:
-			return fmt.Errorf("expected string or int, got %T", value)
-		}
-
-	default:
-		return fmt.Errorf("unsupported field type %T", field)
-	}
+	return field.SetFieldValue(value)
 }
 
 // GetValues returns all field values as a map.
 func (f *Form) GetValues() map[string]any {
-	values := make(map[string]any)
+	values := make(map[string]any, len(f.fields))
 	for _, field := range f.fields {
-		switch fld := field.(type) {
-		case *TextField:
-			values[fld.GetName()] = fld.GetValue()
-		case *TextArea:
-			values[fld.GetName()] = fld.GetValue()
-		case *Select:
-			values[fld.GetName()] = fld.GetValue()
-		case *MultiSelect:
-			values[fld.GetName()] = fld.Values()
-		case *Checkbox:
-			values[fld.GetName()] = fld.GetValue()
-		case *RadioGroup:
-			values[fld.GetName()] = fld.GetValue()
-		}
+		values[field.GetName()] = field.FieldValue()
 	}
 	return values
 }
@@ -393,20 +318,7 @@ func (f *Form) IsValid() bool {
 // Clear resets all fields to their default values.
 func (f *Form) Clear() *Form {
 	for _, field := range f.fields {
-		switch fld := field.(type) {
-		case *TextField:
-			fld.SetValue("")
-		case *TextArea:
-			fld.SetValue("")
-		case *Select:
-			fld.SetSelected(-1)
-		case *MultiSelect:
-			fld.SetSelected(nil)
-		case *Checkbox:
-			fld.SetChecked(false)
-		case *RadioGroup:
-			fld.SetSelected(-1)
-		}
+		field.ClearField()
 	}
 	return f
 }
@@ -495,7 +407,18 @@ func (f *Form) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 				f.onCancel()
 			}
 			return
-		case tcell.KeyCtrlS, tcell.KeyEnter:
+		case tcell.KeyCtrlS:
+			if f.onSubmit != nil {
+				f.onSubmit(f.GetValues())
+			}
+			return
+		case tcell.KeyEnter:
+			// If focused field is a TextArea, pass Enter through for newlines
+			if f.focusedIndex >= 0 && f.focusedIndex < len(f.fields) {
+				if _, isTextArea := f.fields[f.focusedIndex].(*TextArea); isTextArea {
+					break // Fall through to field handler
+				}
+			}
 			if f.onSubmit != nil {
 				f.onSubmit(f.GetValues())
 			}

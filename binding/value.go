@@ -1,10 +1,17 @@
 package binding
 
 import (
+	"reflect"
 	"sync"
 
 	"github.com/atterpac/jig/theme"
 )
+
+// valueEqual compares two T values using reflect.DeepEqual.
+// Used to skip redundant redraws when a value is set to its current value.
+func valueEqual[T any](a, b T) bool {
+	return reflect.DeepEqual(a, b)
+}
 
 // Value is an observable wrapper for a single value.
 // Changes can be subscribed to and automatically trigger UI updates.
@@ -44,8 +51,15 @@ func (v *Value[T]) Set(newVal T) {
 }
 
 // SetAndDraw updates the value and triggers a UI redraw.
+// Skips the redraw when newVal equals the current value (no observable change).
 func (v *Value[T]) SetAndDraw(newVal T) {
+	v.mu.RLock()
+	unchanged := valueEqual(v.value, newVal)
+	v.mu.RUnlock()
 	v.Set(newVal)
+	if unchanged {
+		return
+	}
 	theme.QueueUpdateDraw(func() {})
 }
 
@@ -91,8 +105,24 @@ func (v *Value[T]) Update(fn func(T) T) {
 }
 
 // UpdateAndDraw modifies the value and triggers a UI redraw.
+// Skips the redraw when the updater returns a value equal to the prior value.
 func (v *Value[T]) UpdateAndDraw(fn func(T) T) {
-	v.Update(fn)
+	v.mu.Lock()
+	old := v.value
+	v.value = fn(old)
+	newVal := v.value
+	listeners := v.listeners
+	v.mu.Unlock()
+
+	for _, listener := range listeners {
+		if listener != nil {
+			listener(old, newVal)
+		}
+	}
+
+	if valueEqual(old, newVal) {
+		return
+	}
 	theme.QueueUpdateDraw(func() {})
 }
 

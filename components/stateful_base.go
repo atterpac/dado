@@ -105,7 +105,8 @@ func (scb *StatefulComponentBase[T]) SetOnStop(fn func()) *StatefulComponentBase
 }
 
 // SetInputHandler sets a custom input handler.
-func (scb *StatefulComponentBase[T]) SetInputHandler(fn func(*tcell.EventKey, func(tview.Primitive)) *tcell.EventKey) *StatefulComponentBase[T] {
+// Return true to consume the event; false to delegate to the wrapped primitive.
+func (scb *StatefulComponentBase[T]) SetInputHandler(fn func(*tcell.EventKey, func(tview.Primitive)) bool) *StatefulComponentBase[T] {
 	scb.ComponentBase.SetInputHandler(fn)
 	return scb
 }

@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -435,6 +436,22 @@ func (t *TextField) HasFocus() bool {
 	return t.focused
 }
 
+// SetFieldValue sets the field's value from an any. Implements FormField.
+func (t *TextField) SetFieldValue(value any) error {
+	v, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("expected string, got %T", value)
+	}
+	t.SetValue(v)
+	return nil
+}
+
+// FieldValue returns the field's current value as an any. Implements FormField.
+func (t *TextField) FieldValue() any { return t.GetValue() }
+
+// ClearField resets the field to its zero value. Implements FormField.
+func (t *TextField) ClearField() { t.SetValue("") }
+
 // GetFieldHeight returns the preferred height for this field.
 func (t *TextField) GetFieldHeight() int {
 	height := 3 // border top, input, border bottom
@@ -769,6 +786,22 @@ func (t *TextArea) Blur() {
 func (t *TextArea) HasFocus() bool {
 	return t.focused
 }
+
+// SetFieldValue sets the field's value from an any. Implements FormField.
+func (t *TextArea) SetFieldValue(value any) error {
+	v, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("expected string, got %T", value)
+	}
+	t.SetValue(v)
+	return nil
+}
+
+// FieldValue returns the field's current value as an any. Implements FormField.
+func (t *TextArea) FieldValue() any { return t.GetValue() }
+
+// ClearField resets the field to its zero value. Implements FormField.
+func (t *TextArea) ClearField() { t.SetValue("") }
 
 // GetFieldHeight returns the preferred height for this field.
 func (t *TextArea) GetFieldHeight() int {

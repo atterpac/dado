@@ -192,10 +192,14 @@ func triggerRedraw() {
 // Register adds a primitive to receive automatic background updates on theme change.
 // Call this when creating components that contain tview primitives.
 // The primitive will have SetBackgroundColor called whenever SetProvider is called.
-func Register(p Primitive) {
+//
+// Returns an unregister function. Call it (or pass it to a Subscriptions set)
+// when the primitive's owner is torn down to prevent leaks.
+func Register(p Primitive) func() {
 	primitivesMu.Lock()
-	defer primitivesMu.Unlock()
 	registeredPrimitives = append(registeredPrimitives, p)
+	primitivesMu.Unlock()
+	return func() { Unregister(p) }
 }
 
 // Unregister removes a primitive from automatic background updates.

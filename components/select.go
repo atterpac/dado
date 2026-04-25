@@ -382,6 +382,27 @@ func (s *Select) HasFocus() bool {
 	return s.focused
 }
 
+// SetFieldValue sets the select's value from an any. Accepts a string
+// (matched against option values) or an int (option index). Implements FormField.
+func (s *Select) SetFieldValue(value any) error {
+	switch v := value.(type) {
+	case string:
+		s.SetDefault(v)
+		return nil
+	case int:
+		s.SetSelected(v)
+		return nil
+	default:
+		return fmt.Errorf("expected string or int, got %T", value)
+	}
+}
+
+// FieldValue returns the selected option value as an any. Implements FormField.
+func (s *Select) FieldValue() any { return s.GetValue() }
+
+// ClearField resets the selection. Implements FormField.
+func (s *Select) ClearField() { s.SetSelected(-1) }
+
 // GetFieldHeight returns the preferred height for this field.
 func (s *Select) GetFieldHeight() int {
 	height := 3 // border top, value, border bottom
@@ -722,6 +743,36 @@ func (m *MultiSelect) Blur() {
 func (m *MultiSelect) HasFocus() bool {
 	return m.focused
 }
+
+// SetFieldValue sets the multi-select's value from an any. Accepts []string
+// (matched against option values) or []int (option indices). Implements FormField.
+func (m *MultiSelect) SetFieldValue(value any) error {
+	switch v := value.(type) {
+	case []string:
+		indices := make([]int, 0, len(v))
+		for _, val := range v {
+			for i, opt := range m.options {
+				if opt.Value == val {
+					indices = append(indices, i)
+					break
+				}
+			}
+		}
+		m.SetSelected(indices)
+		return nil
+	case []int:
+		m.SetSelected(v)
+		return nil
+	default:
+		return fmt.Errorf("expected []string or []int, got %T", value)
+	}
+}
+
+// FieldValue returns the selected values as an any ([]string). Implements FormField.
+func (m *MultiSelect) FieldValue() any { return m.Values() }
+
+// ClearField resets the selection. Implements FormField.
+func (m *MultiSelect) ClearField() { m.SetSelected(nil) }
 
 // GetFieldHeight returns the preferred height for this field.
 func (m *MultiSelect) GetFieldHeight() int {

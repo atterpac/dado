@@ -137,6 +137,14 @@ func (kb *KeyBindings) Build() func(*tcell.EventKey, func(tview.Primitive)) *tce
 	}
 }
 
+// BuildBool creates an input handler with the bool-return convention used by
+// components.ComponentBase.SetInputHandler. Returns true when an event was consumed.
+func (kb *KeyBindings) BuildBool() func(*tcell.EventKey, func(tview.Primitive)) bool {
+	return func(event *tcell.EventKey, _ func(tview.Primitive)) bool {
+		return kb.Handle(event)
+	}
+}
+
 // BuildWithFocus creates a handler that provides access to the setFocus function.
 // Use this when your handlers need to change focus to other primitives.
 func (kb *KeyBindings) BuildWithFocus(focusHandler func(setFocus func(tview.Primitive))) func(*tcell.EventKey, func(tview.Primitive)) *tcell.EventKey {

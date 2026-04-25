@@ -41,10 +41,49 @@ type ComponentBase struct {
 	hints     []KeyHint
 	onStart   func()
 	onStop    func()
+	subs      Subscriptions
 
 	// Optional overrides
-	inputHandler func(*tcell.EventKey, func(tview.Primitive)) *tcell.EventKey
+	inputHandler func(*tcell.EventKey, func(tview.Primitive)) bool
 	drawOverlay  func(screen tcell.Screen)
+}
+
+// Subscriptions aggregates unregister functions so component teardown
+// releases all observer/refresh hooks registered during the component's lifetime.
+//
+// Zero value is ready to use. Methods are safe for concurrent use.
+type Subscriptions struct {
+	mu    sync.Mutex
+	funcs []func()
+}
+
+// Add stores an unregister function. Nil is ignored.
+func (s *Subscriptions) Add(unsub func()) {
+	if unsub == nil {
+		return
+	}
+	s.mu.Lock()
+	s.funcs = append(s.funcs, unsub)
+	s.mu.Unlock()
+}
+
+// Release invokes every registered unregister function in LIFO order and clears the list.
+// Safe to call multiple times.
+func (s *Subscriptions) Release() {
+	s.mu.Lock()
+	fns := s.funcs
+	s.funcs = nil
+	s.mu.Unlock()
+	for i := len(fns) - 1; i >= 0; i-- {
+		fns[i]()
+	}
+}
+
+// Len returns the number of pending unregister functions. Intended for tests.
+func (s *Subscriptions) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.funcs)
 }
 
 // NewComponentBase creates a new component base wrapping the given primitive.
@@ -111,8 +150,13 @@ func (cb *ComponentBase) SetOnStop(fn func()) *ComponentBase {
 }
 
 // SetInputHandler sets a custom input handler.
-// Return nil to indicate the event was handled, return the event to pass it through.
-func (cb *ComponentBase) SetInputHandler(fn func(*tcell.EventKey, func(tview.Primitive)) *tcell.EventKey) *ComponentBase {
+// Return true to indicate the event was consumed; false to delegate to the wrapped primitive.
+//
+// Note: this signature differs from tview's input handler, which uses
+// *tcell.EventKey returns to allow event transformation. To rebind keys
+// before delegation, mutate event fields in place or call setFocus directly
+// before returning false.
+func (cb *ComponentBase) SetInputHandler(fn func(*tcell.EventKey, func(tview.Primitive)) bool) *ComponentBase {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.inputHandler = fn
@@ -132,6 +176,12 @@ func (cb *ComponentBase) Primitive() tview.Primitive {
 	return cb.primitive
 }
 
+// Subs returns the component's subscription set. Register theme/binding
+// unsubscribers here; they fire automatically on Stop().
+func (cb *ComponentBase) Subs() *Subscriptions {
+	return &cb.subs
+}
+
 // --- nav.Component Implementation ---
 
 // Start is called when the component becomes the active view.
@@ -145,6 +195,7 @@ func (cb *ComponentBase) Start() {
 }
 
 // Stop is called when the component is no longer the active view.
+// Releases all registered Subscriptions after the user-provided onStop runs.
 func (cb *ComponentBase) Stop() {
 	cb.mu.RLock()
 	fn := cb.onStop
@@ -152,6 +203,7 @@ func (cb *ComponentBase) Stop() {
 	if fn != nil {
 		fn()
 	}
+	cb.subs.Release()
 }
 
 // Hints returns the key hints for this component.
@@ -194,12 +246,8 @@ func (cb *ComponentBase) InputHandler() func(*tcell.EventKey, func(tview.Primiti
 		customHandler := cb.inputHandler
 		cb.mu.RUnlock()
 
-		if customHandler != nil {
-			result := customHandler(event, setFocus)
-			if result == nil {
-				return // Event handled
-			}
-			event = result
+		if customHandler != nil && customHandler(event, setFocus) {
+			return // Event consumed
 		}
 
 		// Delegate to primitive

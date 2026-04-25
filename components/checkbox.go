@@ -179,6 +179,22 @@ func (c *Checkbox) HasFocus() bool {
 	return c.focused
 }
 
+// SetFieldValue sets the checkbox's value from an any. Implements FormField.
+func (c *Checkbox) SetFieldValue(value any) error {
+	v, ok := value.(bool)
+	if !ok {
+		return fmt.Errorf("expected bool, got %T", value)
+	}
+	c.SetChecked(v)
+	return nil
+}
+
+// FieldValue returns the checkbox's current value as an any. Implements FormField.
+func (c *Checkbox) FieldValue() any { return c.GetValue() }
+
+// ClearField resets the checkbox to false. Implements FormField.
+func (c *Checkbox) ClearField() { c.SetChecked(false) }
+
 // GetFieldHeight returns the preferred height for this field.
 func (c *Checkbox) GetFieldHeight() int {
 	return 1
@@ -451,6 +467,32 @@ func (r *RadioGroup) Blur() {
 func (r *RadioGroup) HasFocus() bool {
 	return r.focused
 }
+
+// SetFieldValue sets the radio group's value from an any. Accepts a string
+// (matched against option labels) or an int (option index). Implements FormField.
+func (r *RadioGroup) SetFieldValue(value any) error {
+	switch v := value.(type) {
+	case string:
+		for i, opt := range r.options {
+			if opt == v {
+				r.SetSelected(i)
+				return nil
+			}
+		}
+		return fmt.Errorf("option %q not found", v)
+	case int:
+		r.SetSelected(v)
+		return nil
+	default:
+		return fmt.Errorf("expected string or int, got %T", value)
+	}
+}
+
+// FieldValue returns the selected option label as an any. Implements FormField.
+func (r *RadioGroup) FieldValue() any { return r.GetValue() }
+
+// ClearField resets the selection. Implements FormField.
+func (r *RadioGroup) ClearField() { r.SetSelected(-1) }
 
 // GetFieldHeight returns the preferred height for this field.
 func (r *RadioGroup) GetFieldHeight() int {
