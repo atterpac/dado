@@ -29,8 +29,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atterpac/jig/bus"
 	"github.com/atterpac/jig/theme"
 )
+
+// publishLoader emits a loader lifecycle event when the bus is enabled.
+func publishLoader(kind, phase string, err error) {
+	if !bus.Enabled() {
+		return
+	}
+	bus.Publish(bus.Event{
+		Kind:    kind,
+		Source:  bus.SourceAsync,
+		Payload: bus.LoaderState{Phase: phase, Err: err},
+	})
+}
 
 // LoadFunc is the function signature for async operations.
 type LoadFunc[T any] func(ctx context.Context) (T, error)
@@ -133,6 +146,8 @@ func (l *Loader[T]) Run(fn LoadFunc[T]) *Loader[T] {
 		})
 	}
 
+	publishLoader(bus.KindLoaderStart, "start", nil)
+
 	// Run async
 	go func() {
 		defer func() {
@@ -160,10 +175,12 @@ func (l *Loader[T]) Run(fn LoadFunc[T]) *Loader[T] {
 				if l.onError != nil {
 					l.onError(err)
 				}
+				publishLoader(bus.KindLoaderError, "error", err)
 			} else {
 				if l.onSuccess != nil {
 					l.onSuccess(result)
 				}
+				publishLoader(bus.KindLoaderSuccess, "success", nil)
 			}
 
 			if l.onFinally != nil {
@@ -183,6 +200,7 @@ func (l *Loader[T]) Run(fn LoadFunc[T]) *Loader[T] {
 func (l *Loader[T]) Cancel() {
 	if l.cancel != nil {
 		l.cancel()
+		publishLoader(bus.KindLoaderCancel, "cancel", nil)
 	}
 }
 

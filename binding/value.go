@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/atterpac/jig/bus"
 	"github.com/atterpac/jig/theme"
 )
 
@@ -47,6 +48,14 @@ func (v *Value[T]) Set(newVal T) {
 		if fn != nil {
 			fn(old, newVal)
 		}
+	}
+
+	if bus.Enabled() {
+		bus.Publish(bus.Event{
+			Kind:    bus.KindBindingSet,
+			Source:  bus.SourceBinding,
+			Payload: bus.BindingChange{Old: old, New: newVal},
+		})
 	}
 }
 
@@ -101,6 +110,14 @@ func (v *Value[T]) Update(fn func(T) T) {
 		if listener != nil {
 			listener(old, newVal)
 		}
+	}
+
+	if bus.Enabled() {
+		bus.Publish(bus.Event{
+			Kind:    bus.KindBindingUpdate,
+			Source:  bus.SourceBinding,
+			Payload: bus.BindingChange{Old: old, New: newVal},
+		})
 	}
 }
 

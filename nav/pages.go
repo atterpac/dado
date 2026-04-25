@@ -6,9 +6,22 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/atterpac/jig/bus"
 	"github.com/atterpac/jig/components"
 	"github.com/atterpac/jig/theme"
 )
+
+// publishNav emits a navigation event when the bus is enabled.
+func (p *Pages) publishNav(kind, op, name string) {
+	if !bus.Enabled() {
+		return
+	}
+	bus.Publish(bus.Event{
+		Kind:    kind,
+		Source:  bus.SourceNav,
+		Payload: bus.PageNav{Op: op, Name: name, Depth: len(p.stack)},
+	})
+}
 
 // Pages manages stack-based page navigation with automatic modal handling.
 type Pages struct {
@@ -83,6 +96,7 @@ func (p *Pages) Push(c Component) {
 
 	// Notify listener
 	p.notifyChange()
+	p.publishNav(bus.KindNavPush, "push", c.Name())
 }
 
 // Pop removes the current component and returns to previous.
@@ -131,13 +145,16 @@ func (p *Pages) Pop() bool {
 	p.stack = p.stack[:len(p.stack)-1]
 
 	// Show and start previous
+	var prevName string
 	if len(p.stack) > 0 {
 		prev := p.stack[len(p.stack)-1]
 		prev.Start()
+		prevName = prev.Name()
 	}
 
 	// Notify listener
 	p.notifyChange()
+	p.publishNav(bus.KindNavPop, "pop", prevName)
 
 	return true
 }
@@ -254,6 +271,7 @@ func (p *Pages) Replace(c Component) {
 
 	// Notify listener
 	p.notifyChange()
+	p.publishNav(bus.KindNavReplace, "replace", c.Name())
 }
 
 // CurrentIsModal returns true if the current (front) page is a modal.

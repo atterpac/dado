@@ -6,6 +6,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/atterpac/jig/bus"
 )
 
 // Theme defines the color contract all themes must implement.
@@ -100,6 +102,12 @@ var (
 //
 // This function is safe to call from any goroutine including during Draw() cycles.
 func SetProvider(t Theme) {
+	// Capture prior theme for bus instrumentation before atomic swap.
+	var prev Theme
+	if h := activeTheme.Load(); h != nil {
+		prev = h.(*themeHolder).theme
+	}
+
 	// Store theme atomically - lock-free for readers
 	// Wrap in themeHolder to ensure consistent concrete type for atomic.Value
 	activeTheme.Store(&themeHolder{theme: t})
@@ -109,6 +117,14 @@ func SetProvider(t Theme) {
 
 	// Notify theme change callbacks (sync - these should be lightweight)
 	notifyThemeChange()
+
+	if bus.Enabled() {
+		bus.Publish(bus.Event{
+			Kind:    bus.KindThemeSwitch,
+			Source:  bus.SourceTheme,
+			Payload: bus.ThemeSwitch{From: themeName(prev), To: themeName(t)},
+		})
+	}
 
 	// Auto-trigger redraw if enabled and app is registered
 	if autoRefresh {
@@ -136,6 +152,15 @@ func SetProvider(t Theme) {
 // redraws manually.
 func SetAutoRefresh(enabled bool) {
 	autoRefresh = enabled
+}
+
+// themeName returns a stable identifier for a theme — its concrete Go type.
+// Returns an empty string for nil. Used only for bus event payloads.
+func themeName(t Theme) string {
+	if t == nil {
+		return ""
+	}
+	return reflectTypeName(t)
 }
 
 // applyGlobalStyles updates tview.Styles from the theme.
