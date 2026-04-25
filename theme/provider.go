@@ -52,71 +52,75 @@ type Primitive interface {
 }
 
 // Refreshable is an optional interface for components that need custom
-// refresh logic when the theme changes. Components implementing this
-// interface will have RefreshTheme() called automatically after SetProvider().
-//
-// Use this for components that cache colors or need to update state beyond
-// just background colors. For most components, the automatic background
-// update via Register() is sufficient.
+// refresh logic when the theme changes.
 type Refreshable interface {
 	RefreshTheme()
 }
 
-// themeHolder wraps Theme interface for atomic.Value storage.
-// atomic.Value requires consistent concrete types - this wrapper ensures
-// we always store *themeHolder regardless of the underlying Theme implementation.
+// themeHolder wraps Theme for atomic.Value storage so the concrete stored
+// type stays consistent across different Theme implementations.
 type themeHolder struct {
 	theme Theme
 }
 
-var (
-	// Use atomic.Value for lock-free theme reads to prevent deadlocks
-	// during Draw() cycles when SetProvider() is called from callbacks
-	activeTheme atomic.Value // stores *themeHolder
-
-	appInstance *tview.Application
-	appMu       sync.RWMutex
-
-	// Registry of primitives that need background updates on theme change
-	registeredPrimitives []Primitive
-	primitivesMu         sync.RWMutex
-
-	// Registry of refreshable components for custom theme refresh logic
-	registeredRefreshables []Refreshable
-	refreshablesMu         sync.RWMutex
-
-	// Callbacks to notify when theme changes
-	themeChangeCallbacks []func()
-	callbacksMu          sync.RWMutex
-
-	// autoRefresh controls whether SetProvider automatically triggers a redraw.
-	// Default is true for ergonomic theme switching.
-	autoRefresh     = true
-	autoRefreshOnce sync.Once
-)
-
-// SetProvider sets the active theme provider and updates tview global styles.
-// Also updates all registered primitives' background colors, calls RefreshTheme()
-// on registered Refreshable components, notifies callbacks, and automatically
-// triggers a redraw (unless disabled via SetAutoRefresh(false)).
+// Provider owns a theme and the observers attached to it: primitives that
+// receive automatic background updates, refreshables, and change callbacks.
 //
-// This function is safe to call from any goroutine including during Draw() cycles.
-func SetProvider(t Theme) {
-	// Capture prior theme for bus instrumentation before atomic swap.
+// The package-level Default() provider backs the convenience functions
+// (theme.Bg(), theme.Register(), theme.SetProvider(), etc.) — most apps
+// use Default() implicitly. Construct a separate *Provider to scope a
+// different theme to a subtree (preview pane, modal, test fixture) or to
+// embed the library inside another themed app without colliding on the
+// global.
+type Provider struct {
+	active atomic.Value // *themeHolder, lock-free reads for Draw paths
+
+	primitivesMu sync.RWMutex
+	primitives   []Primitive
+
+	refreshablesMu sync.RWMutex
+	refreshables   []Refreshable
+
+	callbacksMu sync.RWMutex
+	callbacks   []callbackEntry
+	callbackSeq uint64
+
+	autoRefreshMu sync.RWMutex
+	autoRefresh   bool
+}
+
+// NewProvider creates an empty Provider with auto-refresh enabled.
+// Pass the result to ComponentBase.SetTheme (or equivalent) to scope it.
+func NewProvider() *Provider {
+	return &Provider{autoRefresh: true}
+}
+
+var defaultProvider = NewProvider()
+
+// Default returns the package-level Provider used by the convenience
+// functions. Mutating this provider affects all components that have not
+// opted into a different one.
+func Default() *Provider { return defaultProvider }
+
+// --- Provider methods ---
+
+// SetTheme sets the active theme on this provider, applies global tview
+// styles (default provider only — see applyGlobalStyles), updates registered
+// primitive backgrounds, calls Refreshable.RefreshTheme on registered
+// components, fires change callbacks, and (if auto-refresh is enabled and
+// an app is registered) queues a redraw.
+func (p *Provider) SetTheme(t Theme) {
 	var prev Theme
-	if h := activeTheme.Load(); h != nil {
+	if h := p.active.Load(); h != nil {
 		prev = h.(*themeHolder).theme
 	}
+	p.active.Store(&themeHolder{theme: t})
 
-	// Store theme atomically - lock-free for readers
-	// Wrap in themeHolder to ensure consistent concrete type for atomic.Value
-	activeTheme.Store(&themeHolder{theme: t})
+	if p == defaultProvider {
+		applyGlobalStyles(t)
+	}
 
-	// Update tview global styles for components using tcell.ColorDefault
-	applyGlobalStyles(t)
-
-	// Notify theme change callbacks (sync - these should be lightweight)
-	notifyThemeChange()
+	p.notifyThemeChange()
 
 	if bus.Enabled() {
 		bus.Publish(bus.Event{
@@ -126,165 +130,173 @@ func SetProvider(t Theme) {
 		})
 	}
 
-	// Auto-trigger redraw if enabled and app is registered
-	if autoRefresh {
-		// Use a goroutine to avoid any potential deadlock when called from
-		// within tview callbacks. The QueueUpdateDraw will safely execute
-		// on the main UI thread.
+	p.autoRefreshMu.RLock()
+	auto := p.autoRefresh
+	p.autoRefreshMu.RUnlock()
+
+	if auto {
+		// Off the caller goroutine so callers inside tview callbacks
+		// don't deadlock against QueueUpdateDraw.
 		go func() {
 			QueueUpdateDraw(func() {
-				// Update all registered primitives' backgrounds
-				updateRegisteredPrimitives(t)
-
-				// Call RefreshTheme() on all registered Refreshable components
-				refreshRegisteredComponents()
+				p.updatePrimitives(t)
+				p.refreshComponents()
 			})
 		}()
 	} else {
-		// If auto-refresh is disabled, update primitives synchronously
-		// but skip the RefreshTheme calls (user handles manually)
-		updateRegisteredPrimitives(t)
+		p.updatePrimitives(t)
 	}
 }
 
-// SetAutoRefresh controls whether SetProvider automatically triggers a redraw.
-// Default is true. Set to false if you want to batch theme changes or handle
-// redraws manually.
-func SetAutoRefresh(enabled bool) {
-	autoRefresh = enabled
-}
-
-// themeName returns a stable identifier for a theme — its concrete Go type.
-// Returns an empty string for nil. Used only for bus event payloads.
-func themeName(t Theme) string {
-	if t == nil {
-		return ""
-	}
-	return reflectTypeName(t)
-}
-
-// applyGlobalStyles updates tview.Styles from the theme.
-func applyGlobalStyles(t Theme) {
-	if t == nil {
-		return
-	}
-	tview.Styles.PrimitiveBackgroundColor = t.Bg()
-	tview.Styles.ContrastBackgroundColor = t.BgLight()
-	tview.Styles.MoreContrastBackgroundColor = t.BgDark()
-	tview.Styles.BorderColor = t.Border()
-	tview.Styles.TitleColor = t.Accent()
-	tview.Styles.PrimaryTextColor = t.Fg()
-	tview.Styles.SecondaryTextColor = t.FgDim()
-}
-
-// updateRegisteredPrimitives updates backgrounds of all registered primitives.
-func updateRegisteredPrimitives(t Theme) {
-	if t == nil {
-		return
-	}
-
-	primitivesMu.RLock()
-	defer primitivesMu.RUnlock()
-
-	bg := t.Bg()
-	for _, p := range registeredPrimitives {
-		p.SetBackgroundColor(bg)
-	}
-}
-
-// refreshRegisteredComponents calls RefreshTheme() on all registered Refreshable components.
-func refreshRegisteredComponents() {
-	refreshablesMu.RLock()
-	defer refreshablesMu.RUnlock()
-
-	for _, r := range registeredRefreshables {
-		r.RefreshTheme()
-	}
-}
-
-// triggerRedraw queues a redraw if an app is registered.
-func triggerRedraw() {
-	appMu.RLock()
-	app := appInstance
-	appMu.RUnlock()
-
-	if app != nil {
-		// Use QueueUpdateDraw to safely trigger redraw from any goroutine
-		app.QueueUpdateDraw(func() {})
-	}
-}
-
-// Register adds a primitive to receive automatic background updates on theme change.
-// Call this when creating components that contain tview primitives.
-// The primitive will have SetBackgroundColor called whenever SetProvider is called.
-//
-// Returns an unregister function. Call it (or pass it to a Subscriptions set)
-// when the primitive's owner is torn down to prevent leaks.
-func Register(p Primitive) func() {
-	primitivesMu.Lock()
-	registeredPrimitives = append(registeredPrimitives, p)
-	primitivesMu.Unlock()
-	return func() { Unregister(p) }
-}
-
-// Unregister removes a primitive from automatic background updates.
-// Call this when a component is destroyed to prevent memory leaks.
-func Unregister(p Primitive) {
-	primitivesMu.Lock()
-	defer primitivesMu.Unlock()
-
-	for i, registered := range registeredPrimitives {
-		if registered == p {
-			registeredPrimitives = append(registeredPrimitives[:i], registeredPrimitives[i+1:]...)
-			return
-		}
-	}
-}
-
-// RegisterRefreshable adds a component to receive RefreshTheme() calls on theme change.
-// Use this for components that need custom refresh logic beyond background color updates.
-// Components are called in registration order after primitives are updated.
-//
-// Returns an unregister function for convenience:
-//
-//	unregister := theme.RegisterRefreshable(myComponent)
-//	defer unregister() // Clean up when component is destroyed
-func RegisterRefreshable(r Refreshable) func() {
-	refreshablesMu.Lock()
-	defer refreshablesMu.Unlock()
-	registeredRefreshables = append(registeredRefreshables, r)
-
-	// Return unregister function
-	return func() {
-		UnregisterRefreshable(r)
-	}
-}
-
-// UnregisterRefreshable removes a component from RefreshTheme() notifications.
-// Call this when a component is destroyed to prevent memory leaks.
-func UnregisterRefreshable(r Refreshable) {
-	refreshablesMu.Lock()
-	defer refreshablesMu.Unlock()
-
-	for i, registered := range registeredRefreshables {
-		if registered == r {
-			registeredRefreshables = append(registeredRefreshables[:i], registeredRefreshables[i+1:]...)
-			return
-		}
-	}
-}
-
-// Get returns the current theme (thread-safe, lock-free).
-// Returns nil if no theme has been set.
-func Get() Theme {
-	if holder := activeTheme.Load(); holder != nil {
-		return holder.(*themeHolder).theme
+// Theme returns the active theme (lock-free). Returns nil if unset.
+func (p *Provider) Theme() Theme {
+	if h := p.active.Load(); h != nil {
+		return h.(*themeHolder).theme
 	}
 	return nil
 }
 
+// SetAutoRefresh toggles automatic redraw on SetTheme. Default true.
+func (p *Provider) SetAutoRefresh(enabled bool) {
+	p.autoRefreshMu.Lock()
+	p.autoRefresh = enabled
+	p.autoRefreshMu.Unlock()
+}
+
+// Register adds a primitive for automatic background updates on theme change.
+// Returns an unregister function.
+func (p *Provider) Register(prim Primitive) func() {
+	p.primitivesMu.Lock()
+	p.primitives = append(p.primitives, prim)
+	p.primitivesMu.Unlock()
+	return func() { p.Unregister(prim) }
+}
+
+// Unregister removes a primitive from automatic updates.
+func (p *Provider) Unregister(prim Primitive) {
+	p.primitivesMu.Lock()
+	defer p.primitivesMu.Unlock()
+	for i, r := range p.primitives {
+		if r == prim {
+			p.primitives = append(p.primitives[:i], p.primitives[i+1:]...)
+			return
+		}
+	}
+}
+
+// RegisterRefreshable adds a component for RefreshTheme() on theme change.
+// Returns an unregister function.
+func (p *Provider) RegisterRefreshable(r Refreshable) func() {
+	p.refreshablesMu.Lock()
+	p.refreshables = append(p.refreshables, r)
+	p.refreshablesMu.Unlock()
+	return func() { p.UnregisterRefreshable(r) }
+}
+
+// UnregisterRefreshable removes a refreshable.
+func (p *Provider) UnregisterRefreshable(r Refreshable) {
+	p.refreshablesMu.Lock()
+	defer p.refreshablesMu.Unlock()
+	for i, reg := range p.refreshables {
+		if reg == r {
+			p.refreshables = append(p.refreshables[:i], p.refreshables[i+1:]...)
+			return
+		}
+	}
+}
+
+type callbackEntry struct {
+	id uint64
+	fn func()
+}
+
+// OnThemeChange registers a callback fired on every SetTheme call.
+// Returns an unregister function.
+func (p *Provider) OnThemeChange(fn func()) func() {
+	p.callbacksMu.Lock()
+	p.callbackSeq++
+	id := p.callbackSeq
+	p.callbacks = append(p.callbacks, callbackEntry{id: id, fn: fn})
+	p.callbacksMu.Unlock()
+	return func() {
+		p.callbacksMu.Lock()
+		defer p.callbacksMu.Unlock()
+		for i, c := range p.callbacks {
+			if c.id == id {
+				p.callbacks = append(p.callbacks[:i], p.callbacks[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+func (p *Provider) updatePrimitives(t Theme) {
+	if t == nil {
+		return
+	}
+	p.primitivesMu.RLock()
+	defer p.primitivesMu.RUnlock()
+	bg := t.Bg()
+	for _, prim := range p.primitives {
+		prim.SetBackgroundColor(bg)
+	}
+}
+
+func (p *Provider) refreshComponents() {
+	p.refreshablesMu.RLock()
+	defer p.refreshablesMu.RUnlock()
+	for _, r := range p.refreshables {
+		r.RefreshTheme()
+	}
+}
+
+func (p *Provider) notifyThemeChange() {
+	p.callbacksMu.RLock()
+	cbs := make([]func(), 0, len(p.callbacks))
+	for _, c := range p.callbacks {
+		cbs = append(cbs, c.fn)
+	}
+	p.callbacksMu.RUnlock()
+	for _, fn := range cbs {
+		fn()
+	}
+}
+
+// --- Package-level forwarders (default provider) ---
+
+// SetProvider sets the active theme on Default(). Kept for back-compat;
+// prefer Default().SetTheme(t) or a scoped Provider.
+func SetProvider(t Theme) { defaultProvider.SetTheme(t) }
+
+// SetAutoRefresh forwards to Default().
+func SetAutoRefresh(enabled bool) { defaultProvider.SetAutoRefresh(enabled) }
+
+// Get returns the active theme on Default().
+func Get() Theme { return defaultProvider.Theme() }
+
+// Register forwards to Default().
+func Register(p Primitive) func() { return defaultProvider.Register(p) }
+
+// Unregister forwards to Default().
+func Unregister(p Primitive) { defaultProvider.Unregister(p) }
+
+// RegisterRefreshable forwards to Default().
+func RegisterRefreshable(r Refreshable) func() { return defaultProvider.RegisterRefreshable(r) }
+
+// UnregisterRefreshable forwards to Default().
+func UnregisterRefreshable(r Refreshable) { defaultProvider.UnregisterRefreshable(r) }
+
+// OnThemeChange forwards to Default().
+func OnThemeChange(fn func()) func() { return defaultProvider.OnThemeChange(fn) }
+
+// --- App registration (singleton, not provider-scoped) ---
+
+var (
+	appInstance *tview.Application
+	appMu       sync.RWMutex
+)
+
 // SetApp registers the tview application for queue operations.
-// Call this after creating your tview.Application.
 func SetApp(app *tview.Application) {
 	appMu.Lock()
 	defer appMu.Unlock()
@@ -298,13 +310,12 @@ func GetApp() *tview.Application {
 	return appInstance
 }
 
-// QueueUpdate runs fn on main UI thread.
-// Falls back to immediate execution if no app instance.
+// QueueUpdate runs fn on the main UI thread. Falls back to immediate
+// execution when no app is registered (test mode).
 func QueueUpdate(fn func()) {
 	appMu.RLock()
 	app := appInstance
 	appMu.RUnlock()
-
 	if app != nil {
 		app.QueueUpdate(fn)
 	} else {
@@ -312,13 +323,12 @@ func QueueUpdate(fn func()) {
 	}
 }
 
-// QueueUpdateDraw runs fn and triggers redraw.
-// Falls back to immediate execution if no app instance.
+// QueueUpdateDraw runs fn and triggers a redraw. Falls back to immediate
+// execution when no app is registered.
 func QueueUpdateDraw(fn func()) {
 	appMu.RLock()
 	app := appInstance
 	appMu.RUnlock()
-
 	if app != nil {
 		app.QueueUpdateDraw(fn)
 	} else {
@@ -326,35 +336,25 @@ func QueueUpdateDraw(fn func()) {
 	}
 }
 
-// OnThemeChange registers a callback to be called when the theme changes.
-// Returns an unregister function to remove the callback.
-func OnThemeChange(fn func()) func() {
-	callbacksMu.Lock()
-	defer callbacksMu.Unlock()
-	themeChangeCallbacks = append(themeChangeCallbacks, fn)
+// --- Internal helpers ---
 
-	// Return unregister function
-	return func() {
-		callbacksMu.Lock()
-		defer callbacksMu.Unlock()
-		for i, cb := range themeChangeCallbacks {
-			// Compare function pointers (this works for the same function reference)
-			if &cb == &fn {
-				themeChangeCallbacks = append(themeChangeCallbacks[:i], themeChangeCallbacks[i+1:]...)
-				return
-			}
-		}
+func themeName(t Theme) string {
+	if t == nil {
+		return ""
 	}
+	return reflectTypeName(t)
 }
 
-// notifyThemeChange calls all registered theme change callbacks.
-func notifyThemeChange() {
-	callbacksMu.RLock()
-	callbacks := make([]func(), len(themeChangeCallbacks))
-	copy(callbacks, themeChangeCallbacks)
-	callbacksMu.RUnlock()
-
-	for _, fn := range callbacks {
-		fn()
+func applyGlobalStyles(t Theme) {
+	if t == nil {
+		return
 	}
+	tview.Styles.PrimitiveBackgroundColor = t.Bg()
+	tview.Styles.ContrastBackgroundColor = t.BgLight()
+	tview.Styles.MoreContrastBackgroundColor = t.BgDark()
+	tview.Styles.BorderColor = t.Border()
+	tview.Styles.TitleColor = t.Accent()
+	tview.Styles.PrimaryTextColor = t.Fg()
+	tview.Styles.SecondaryTextColor = t.FgDim()
 }
+
