@@ -8,15 +8,15 @@ import (
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 // StatusSection represents a single section in the status bar.
 type StatusSection struct {
-	Icon      string      // Icon (Nerd Font glyph)
-	Text      string      // Text to display
-	Color     tcell.Color // Static color for icon (0 = use Fg, ignored if ColorFunc set)
+	Icon      string             // Icon (Nerd Font glyph)
+	Text      string             // Text to display
+	Color     tcell.Color        // Static color for icon (0 = use Fg, ignored if ColorFunc set)
 	ColorFunc func() tcell.Color // Dynamic color function (takes precedence over Color)
 }
 

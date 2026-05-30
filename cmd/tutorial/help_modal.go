@@ -4,8 +4,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 // HelpModal displays help information.
@@ -26,7 +26,7 @@ func NewHelpModal() *HelpModal {
 	content.SetBackgroundColor(theme.Bg())
 	content.SetTextColor(theme.Fg())
 
-	helpText := `[::b]Jig Tutorial - Keyboard Shortcuts[::-]
+	helpText := `[::b]Dado Tutorial - Keyboard Shortcuts[::-]
 
 [` + theme.TagAccent() + `]Navigation[::-]
   [` + theme.TagFgDim() + `]j / k[` + theme.TagFg() + `]       Move down / up in list

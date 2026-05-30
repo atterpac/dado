@@ -10,10 +10,10 @@ import (
 type GradientType int
 
 const (
-	GradientDiagonal GradientType = iota // Top-left to bottom-right
-	GradientHorizontal                   // Left to right
-	GradientVertical                     // Top to bottom
-	GradientReverseDiagonal              // Top-right to bottom-left
+	GradientDiagonal        GradientType = iota // Top-left to bottom-right
+	GradientHorizontal                          // Left to right
+	GradientVertical                            // Top to bottom
+	GradientReverseDiagonal                     // Top-right to bottom-left
 )
 
 // String returns a human-readable name for the gradient type.

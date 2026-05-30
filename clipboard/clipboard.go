@@ -33,8 +33,8 @@ var (
 	mu sync.Mutex
 
 	// Cached availability check
-	available     *bool
-	availableMu   sync.Once
+	available   *bool
+	availableMu sync.Once
 )
 
 // Available returns true if clipboard operations are supported

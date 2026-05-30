@@ -3,7 +3,7 @@ package nav
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // Component represents a navigable view/page.

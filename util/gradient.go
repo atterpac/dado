@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // ApplyHorizontalGradient applies a left-to-right gradient to text.

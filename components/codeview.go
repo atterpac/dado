@@ -2,13 +2,10 @@ package components
 
 import (
 	"strings"
-	"sync"
 	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Language defines supported syntax highlighting languages
@@ -54,9 +51,7 @@ type Token struct {
 
 // CodeView displays syntax-highlighted code
 type CodeView struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Content
 	lines    []string
@@ -87,13 +82,14 @@ type CodeView struct {
 
 // NewCodeView creates a new code view component
 func NewCodeView() *CodeView {
-	return &CodeView{
-		Box:             tview.NewBox(),
+	c := &CodeView{
 		showLineNumbers: true,
 		tabWidth:        4,
 		highlightLine:   -1,
 		tokenCache:      make(map[int][]Token),
 	}
+	c.initWidget(tview.NewBox())
+	return c
 }
 
 // --- Configuration (Fluent API) ---
@@ -493,25 +489,26 @@ func (c *CodeView) tokenizeGeneric(line string, keywords, builtins, types map[st
 }
 
 func (c *CodeView) getTokenColor(tokenType TokenType) tcell.Color {
+	th := c.th()
 	switch tokenType {
 	case TokenKeyword:
-		return theme.Accent()
+		return th.Accent()
 	case TokenString:
-		return theme.Success()
+		return th.Success()
 	case TokenNumber:
-		return theme.Warning()
+		return th.Warning()
 	case TokenComment:
-		return theme.FgDim()
+		return th.FgDim()
 	case TokenFunction:
-		return theme.Info()
+		return th.Info()
 	case TokenType_:
-		return theme.Accent()
+		return th.Accent()
 	case TokenBuiltin:
-		return theme.Warning()
+		return th.Warning()
 	case TokenOperator, TokenPunctuation:
-		return theme.FgMuted()
+		return th.FgMuted()
 	default:
-		return theme.Fg()
+		return th.Fg()
 	}
 }
 
@@ -527,21 +524,18 @@ func (c *CodeView) Draw(screen tcell.Screen) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	highlightBg := theme.BgLight()
+	th := c.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	highlightBg := th.BgLight()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	lineNumStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 	highlightStyle := tcell.StyleDefault.Background(highlightBg)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	// Calculate line number width
 	lineNumWidth := 0
@@ -565,9 +559,7 @@ func (c *CodeView) Draw(screen tcell.Screen) {
 		if isHighlighted {
 			rowBg = highlightBg
 			// Fill background
-			for col := x; col < x+width; col++ {
-				screen.SetContent(col, rowY, ' ', nil, highlightStyle)
-			}
+			fillLine(screen, x, rowY, width, highlightStyle)
 		}
 
 		// Draw line number

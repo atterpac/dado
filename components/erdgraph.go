@@ -2,15 +2,13 @@ package components
 
 import (
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // ERDCardinality describes the cardinality of a relationship.
 type ERDCardinality int
 
 const (
-	OneToOne   ERDCardinality = iota
+	OneToOne ERDCardinality = iota
 	OneToMany
 	ManyToMany
 )
@@ -66,12 +64,12 @@ type erdGraphData struct {
 // ERDGraph is a 2D ERD visualization component that shows database tables
 // with their columns and foreign key relationships.
 type ERDGraph struct {
-	*tview.Box
+	widgetBase
 
-	data       *erdGraphData
-	nodeWidth  int // minimum node width (auto-expanded per table)
-	hSpacing   int // horizontal spacing between grid cells
-	vSpacing   int // vertical spacing between grid cells
+	data      *erdGraphData
+	nodeWidth int // minimum node width (auto-expanded per table)
+	hSpacing  int // horizontal spacing between grid cells
+	vSpacing  int // vertical spacing between grid cells
 
 	// Viewport offset for panning
 	offsetX, offsetY int
@@ -84,25 +82,16 @@ type ERDGraph struct {
 
 	// Callbacks
 	onSelect func(table *ERDTable)
-
-	subs Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (e *ERDGraph) Subs() *Subscriptions { return &e.subs }
 
 // NewERDGraph creates a new ERDGraph component.
 func NewERDGraph() *ERDGraph {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
 	g := &ERDGraph{
-		Box:       box,
 		nodeWidth: 30,
 		hSpacing:  4,
 		vSpacing:  2,
 	}
-	g.subs.Add(theme.Register(box))
+	g.initWidget(tview.NewBox())
 	return g
 }
 

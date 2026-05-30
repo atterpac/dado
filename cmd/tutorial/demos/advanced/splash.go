@@ -3,9 +3,9 @@ package advanced
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 func init() {
@@ -47,10 +47,10 @@ func (d *SplashDemo) Component() tview.Primitive {
 	// Layout: center the logo and status
 	content := tview.NewFlex().SetDirection(tview.FlexRow)
 	content.SetBackgroundColor(theme.Bg())
-	content.AddItem(nil, 0, 1, false)  // Top spacer
+	content.AddItem(nil, 0, 1, false) // Top spacer
 	content.AddItem(logoView, 8, 0, false)
 	content.AddItem(statusView, 2, 0, false)
-	content.AddItem(nil, 0, 1, false)  // Bottom spacer
+	content.AddItem(nil, 0, 1, false) // Bottom spacer
 
 	// Wrap in panel
 	panel := components.NewPanel()
@@ -73,8 +73,8 @@ const splashCode = `package main
 
 import (
     "time"
-    "github.com/atterpac/jig/components"
-    "github.com/atterpac/jig/theme"
+    "github.com/atterpac/dado/components"
+    "github.com/atterpac/dado/theme"
 )
 
 // Create splash screen

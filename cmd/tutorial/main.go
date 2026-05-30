@@ -3,13 +3,13 @@ package main
 import (
 	"log"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	_ "github.com/atterpac/jig/cmd/tutorial/demos/advanced"
-	_ "github.com/atterpac/jig/cmd/tutorial/demos/basic"
-	_ "github.com/atterpac/jig/cmd/tutorial/demos/intermediate"
-	"github.com/atterpac/jig/layout"
-	"github.com/atterpac/jig/theme"
-	"github.com/atterpac/jig/theme/themes"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	_ "github.com/atterpac/dado/cmd/tutorial/demos/advanced"
+	_ "github.com/atterpac/dado/cmd/tutorial/demos/basic"
+	_ "github.com/atterpac/dado/cmd/tutorial/demos/intermediate"
+	"github.com/atterpac/dado/layout"
+	"github.com/atterpac/dado/theme"
+	"github.com/atterpac/dado/theme/themes"
 )
 
 func main() {

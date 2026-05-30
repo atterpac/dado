@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/atterpac/jig/validators"
+	"github.com/atterpac/dado/validators"
 )
 
 // TestFormBuilder_FullWorkflow tests building a complete form with validation.
@@ -17,19 +17,19 @@ func TestFormBuilder_FullWorkflow(t *testing.T) {
 
 	form := NewFormBuilder().
 		Text("name", "Name").
-			Placeholder("Enter name").
-			Validate(validators.Required()).
-			Done().
+		Placeholder("Enter name").
+		Validate(validators.Required()).
+		Done().
 		Text("email", "Email").
-			Placeholder("user@example.com").
-			Validate(validators.Required(), validators.Email()).
-			Done().
+		Placeholder("user@example.com").
+		Validate(validators.Required(), validators.Email()).
+		Done().
 		Checkbox("subscribe", "Subscribe to newsletter").
-			Checked(true).
-			Done().
+		Checked(true).
+		Done().
 		Select("role", "Role", []string{"Admin", "User", "Guest"}).
-			Default("User").
-			Done().
+		Default("User").
+		Done().
 		OnSubmit(func(values map[string]any) {
 			submittedValues = values
 		}).
@@ -65,11 +65,11 @@ func TestFormBuilder_FullWorkflow(t *testing.T) {
 func TestFormBuilder_ValidationFlow(t *testing.T) {
 	form := NewFormBuilder().
 		Text("name", "Name").
-			Validate(validators.Required()).
-			Done().
+		Validate(validators.Required()).
+		Done().
 		Text("email", "Email").
-			Validate(validators.Required(), validators.Email()).
-			Done().
+		Validate(validators.Required(), validators.Email()).
+		Done().
 		Build()
 
 	// Initially invalid (empty)
@@ -110,14 +110,14 @@ func TestFormBuilder_SubmitFlow(t *testing.T) {
 
 	form := NewFormBuilder().
 		Text("username", "Username").
-			Value("johndoe").
-			Done().
+		Value("johndoe").
+		Done().
 		Text("password", "Password").
-			Value("secret123").
-			Done().
+		Value("secret123").
+		Done().
 		Checkbox("remember", "Remember me").
-			Checked(true).
-			Done().
+		Checked(true).
+		Done().
 		OnSubmit(func(values map[string]any) {
 			submitted = values
 		}).
@@ -142,8 +142,8 @@ func TestFormBuilder_SubmitFlow(t *testing.T) {
 func TestFormBuilder_SelectField(t *testing.T) {
 	form := NewFormBuilder().
 		Select("country", "Country", []string{"USA", "Canada", "Mexico"}).
-			Default("Canada").
-			Done().
+		Default("Canada").
+		Done().
 		Build()
 
 	sel, ok := form.GetSelect("country")
@@ -160,8 +160,8 @@ func TestFormBuilder_SelectWithValues(t *testing.T) {
 			{Label: "Inactive", Value: "inactive"},
 			{Label: "Pending", Value: "pending"},
 		}).
-			Default("active").
-			Done().
+		Default("active").
+		Done().
 		Build()
 
 	sel, ok := form.GetSelect("status")
@@ -176,8 +176,8 @@ func TestFormBuilder_SelectWithValues(t *testing.T) {
 func TestFormBuilder_MultiSelect(t *testing.T) {
 	form := NewFormBuilder().
 		MultiSelect("tags", "Tags", []string{"go", "rust", "python"}).
-			Selected([]int{0, 2}).
-			Done().
+		Selected([]int{0, 2}).
+		Done().
 		Build()
 
 	ms, ok := form.GetMultiSelect("tags")
@@ -189,8 +189,8 @@ func TestFormBuilder_MultiSelect(t *testing.T) {
 func TestFormBuilder_RadioGroup(t *testing.T) {
 	form := NewFormBuilder().
 		Radio("priority", "Priority", []string{"Low", "Medium", "High"}).
-			Selected(1).
-			Done().
+		Selected(1).
+		Done().
 		Build()
 
 	rg, ok := form.GetRadioGroup("priority")
@@ -202,10 +202,10 @@ func TestFormBuilder_RadioGroup(t *testing.T) {
 func TestFormBuilder_TextArea(t *testing.T) {
 	form := NewFormBuilder().
 		TextArea("description", "Description").
-			Placeholder("Enter description...").
-			Value("Initial text").
-			MaxLines(10).
-			Done().
+		Placeholder("Enter description...").
+		Value("Initial text").
+		MaxLines(10).
+		Done().
 		Build()
 
 	ta, ok := form.GetTextArea("description")
@@ -219,19 +219,19 @@ func TestFormBuilder_OnChangeCallbacks(t *testing.T) {
 
 	form := NewFormBuilder().
 		Text("field1", "Field 1").
-			OnChange(func(e *ChangeEvent[string]) {
-				changes = append(changes, "field1:"+e.NewValue)
-			}).
-			Done().
+		OnChange(func(e *ChangeEvent[string]) {
+			changes = append(changes, "field1:"+e.NewValue)
+		}).
+		Done().
 		Checkbox("field2", "Field 2").
-			OnChange(func(e *ChangeEvent[bool]) {
-				if e.NewValue {
-					changes = append(changes, "field2:checked")
-				} else {
-					changes = append(changes, "field2:unchecked")
-				}
-			}).
-			Done().
+		OnChange(func(e *ChangeEvent[bool]) {
+			if e.NewValue {
+				changes = append(changes, "field2:checked")
+			} else {
+				changes = append(changes, "field2:unchecked")
+			}
+		}).
+		Done().
 		Build()
 
 	// Simulate changes via input handlers
@@ -426,12 +426,12 @@ func TestCustomFieldType(t *testing.T) {
 	// Use in form builder
 	form := NewFormBuilder().
 		Custom("myfield", "custom-text", "My Custom Field").
-			Configure(func(field FormField) {
-				if tf, ok := field.(*TextField); ok {
-					tf.SetValue("configured")
-				}
-			}).
-			Done().
+		Configure(func(field FormField) {
+			if tf, ok := field.(*TextField); ok {
+				tf.SetValue("configured")
+			}
+		}).
+		Done().
 		Build()
 
 	tf, ok := form.GetTextField("myfield")

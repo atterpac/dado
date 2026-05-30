@@ -4,7 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // BottomSheetConfig configures bottom sheet dimensions and behavior.
@@ -83,7 +83,7 @@ func (b *BottomSheet) setupLayout() {
 
 	// Build bottom-anchored layout: top spacer (fills) | panel at bottom
 	b.Flex.SetDirection(tview.FlexRow)
-	b.Flex.AddItem(nil, 0, 1, false)           // Top spacer (transparent)
+	b.Flex.AddItem(nil, 0, 1, false)                  // Top spacer (transparent)
 	b.Flex.AddItem(b.panel, b.config.Height, 0, true) // Panel at bottom
 }
 

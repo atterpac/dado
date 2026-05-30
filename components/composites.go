@@ -1,12 +1,8 @@
 package components
 
 import (
-	"sync"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // =============================================================================
@@ -24,9 +20,7 @@ type StatusSection struct {
 
 // StatusBar displays status information in a horizontal bar
 type StatusBar struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Sections
 	leftSections   []StatusSection
@@ -42,10 +36,11 @@ type StatusBar struct {
 
 // NewStatusBar creates a new status bar
 func NewStatusBar() *StatusBar {
-	return &StatusBar{
-		Box:       tview.NewBox(),
+	s := &StatusBar{
 		separator: '│',
 	}
+	s.initWidget(tview.NewBox())
+	return s
 }
 
 // SetLeft sets left-aligned sections
@@ -161,24 +156,21 @@ func (s *StatusBar) Draw(screen tcell.Screen) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	bgColor := theme.BgLight()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
+	th := s.th()
+	bgColor := th.BgLight()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	sepStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	// Draw border if enabled
 	contentY := y
 	if s.showBorder && height > 1 {
-		borderStyle := tcell.StyleDefault.Background(theme.Bg()).Foreground(fgDimColor)
+		borderStyle := tcell.StyleDefault.Background(th.Bg()).Foreground(fgDimColor)
 		for col := x; col < x+width; col++ {
 			screen.SetContent(col, y, '─', nil, borderStyle)
 		}
@@ -204,12 +196,7 @@ func (s *StatusBar) Draw(screen tcell.Screen) {
 		}
 		textStyle := tcell.StyleDefault.Background(bgColor).Foreground(textColor)
 
-		for _, r := range text {
-			if col < x+width {
-				screen.SetContent(col, contentY, r, nil, textStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, contentY, x+width-col, text, textStyle)
 	}
 
 	// Render right sections (from right edge)
@@ -309,9 +296,7 @@ type SearchResult struct {
 
 // SearchBar provides search input with optional results dropdown
 type SearchBar struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Input
 	query       string
@@ -319,33 +304,34 @@ type SearchBar struct {
 	cursorPos   int
 
 	// Results
-	results       []SearchResult
-	selectedIdx   int
-	showResults   bool
-	maxResults    int
+	results     []SearchResult
+	selectedIdx int
+	showResults bool
+	maxResults  int
 
 	// Display
-	icon          string
-	showClear     bool
-	showSpinner   bool
-	spinnerFrame  int
+	icon         string
+	showClear    bool
+	showSpinner  bool
+	spinnerFrame int
 
 	// Callbacks
-	onSearch  func(query string)
-	onSelect  func(result SearchResult)
-	onCancel  func()
-	onChange  func(query string)
+	onSearch func(query string)
+	onSelect func(result SearchResult)
+	onCancel func()
+	onChange func(query string)
 }
 
 // NewSearchBar creates a new search bar
 func NewSearchBar() *SearchBar {
-	return &SearchBar{
-		Box:         tview.NewBox(),
+	s := &SearchBar{
 		placeholder: "Search...",
 		icon:        "🔍",
 		maxResults:  10,
 		selectedIdx: -1,
 	}
+	s.initWidget(tview.NewBox())
+	return s
 }
 
 // SetPlaceholder sets the placeholder text
@@ -480,11 +466,12 @@ func (s *SearchBar) Draw(screen tcell.Screen) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	bgColor := theme.Bg()
-	inputBg := theme.BgLight()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
+	th := s.th()
+	bgColor := th.Bg()
+	inputBg := th.BgLight()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	inputStyle := tcell.StyleDefault.Background(inputBg).Foreground(fgColor)
@@ -492,50 +479,29 @@ func (s *SearchBar) Draw(screen tcell.Screen) {
 	iconStyle := tcell.StyleDefault.Background(inputBg).Foreground(accentColor)
 
 	// Clear background
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	// Draw input box
 	inputY := y
 	inputHeight := 1
 
 	// Draw input background
-	for col := x; col < x+width; col++ {
-		screen.SetContent(col, inputY, ' ', nil, inputStyle)
-	}
+	fillLine(screen, x, inputY, width, inputStyle)
 
 	col := x + 1
 
 	// Draw icon
 	if s.icon != "" {
-		for _, r := range s.icon {
-			if col < x+width-1 {
-				screen.SetContent(col, inputY, r, nil, iconStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, inputY, x+width-1-col, s.icon, iconStyle)
 		col++ // space
 	}
 
 	// Draw query or placeholder
 	inputStart := col
 	if s.query == "" {
-		for _, r := range s.placeholder {
-			if col < x+width-1 {
-				screen.SetContent(col, inputY, r, nil, placeholderStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, inputY, x+width-1-col, s.placeholder, placeholderStyle)
 	} else {
-		for _, r := range s.query {
-			if col < x+width-1 {
-				screen.SetContent(col, inputY, r, nil, inputStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, inputY, x+width-1-col, s.query, inputStyle)
 	}
 
 	// Draw cursor if focused
@@ -569,7 +535,7 @@ func (s *SearchBar) Draw(screen tcell.Screen) {
 			maxVisible = len(s.results)
 		}
 
-		resultBg := theme.BgLight()
+		resultBg := th.BgLight()
 		selectedBg := accentColor
 
 		for i := 0; i < maxVisible; i++ {
@@ -591,40 +557,23 @@ func (s *SearchBar) Draw(screen tcell.Screen) {
 			}
 
 			// Clear row
-			for col := x; col < x+width; col++ {
-				screen.SetContent(col, rowY, ' ', nil, rowStyle)
-			}
+			fillLine(screen, x, rowY, width, rowStyle)
 
 			col := x + 2
 
 			// Icon
 			if result.Icon != "" {
-				for _, r := range result.Icon {
-					if col < x+width-1 {
-						screen.SetContent(col, rowY, r, nil, rowStyle)
-						col++
-					}
-				}
+				col = drawText(screen, col, rowY, x+width-1-col, result.Icon, rowStyle)
 				col++ // space
 			}
 
 			// Text
-			for _, r := range result.Text {
-				if col < x+width-1 {
-					screen.SetContent(col, rowY, r, nil, rowStyle)
-					col++
-				}
-			}
+			col = drawText(screen, col, rowY, x+width-1-col, result.Text, rowStyle)
 
 			// Description (dimmed, right-aligned)
 			if result.Description != "" && col < x+width-len(result.Description)-2 {
 				descCol := x + width - len(result.Description) - 2
-				for _, r := range result.Description {
-					if descCol < x+width-1 {
-						screen.SetContent(descCol, rowY, r, nil, dimStyle)
-						descCol++
-					}
-				}
+				drawText(screen, descCol, rowY, x+width-1-descCol, result.Description, dimStyle)
 			}
 		}
 	}

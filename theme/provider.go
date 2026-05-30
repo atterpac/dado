@@ -7,7 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/bus"
+	"github.com/atterpac/dado/bus"
 )
 
 // Theme defines the color contract all themes must implement.
@@ -357,4 +357,3 @@ func applyGlobalStyles(t Theme) {
 	tview.Styles.PrimaryTextColor = t.Fg()
 	tview.Styles.SecondaryTextColor = t.FgDim()
 }
-

@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/atterpac/jig/bus"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/bus"
+	"github.com/atterpac/dado/theme"
 )
 
 // valueEqual compares two T values using reflect.DeepEqual.

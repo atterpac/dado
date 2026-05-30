@@ -1,6 +1,6 @@
 package components
 
-import "github.com/atterpac/jig/theme"
+import "github.com/atterpac/dado/theme"
 
 // GridColumn describes a single column in the DataGrid.
 type GridColumn struct {
@@ -14,10 +14,10 @@ type GridColumn struct {
 
 // GridCell represents a single cell value in the grid.
 type GridCell struct {
-	Value    string         // Display string
-	RawValue any            // Underlying typed value
-	Status   *theme.Status  // Optional status coloring (takes precedence)
-	ReadOnly bool           // Prevents editing
+	Value    string        // Display string
+	RawValue any           // Underlying typed value
+	Status   *theme.Status // Optional status coloring (takes precedence)
+	ReadOnly bool          // Prevents editing
 }
 
 // DataGridSource provides data to a DataGrid.
@@ -68,10 +68,10 @@ func (s *SliceSource) SetSliceData(columnNames []string, rows [][]string) {
 	}
 }
 
-func (s *SliceSource) RowCount() int            { return len(s.rows) }
-func (s *SliceSource) ColCount() int             { return len(s.columns) }
-func (s *SliceSource) Columns() []GridColumn     { return s.columns }
-func (s *SliceSource) FetchRange(_, _ int)       {} // No-op for in-memory
+func (s *SliceSource) RowCount() int         { return len(s.rows) }
+func (s *SliceSource) ColCount() int         { return len(s.columns) }
+func (s *SliceSource) Columns() []GridColumn { return s.columns }
+func (s *SliceSource) FetchRange(_, _ int)   {} // No-op for in-memory
 
 // SetReadOnly marks all cells in this source as read-only, preventing edits.
 func (s *SliceSource) SetReadOnly(readOnly bool) *SliceSource {

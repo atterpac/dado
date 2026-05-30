@@ -3,8 +3,6 @@ package components
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Tab represents a single tab with content.
@@ -17,7 +15,7 @@ type Tab struct {
 
 // Tabs is a tabbed container component.
 type Tabs struct {
-	*tview.Box
+	widgetBase
 
 	tabs        []*Tab
 	activeIndex int
@@ -34,11 +32,12 @@ type Tabs struct {
 
 // NewTabs creates a new Tabs component.
 func NewTabs() *Tabs {
-	return &Tabs{
-		Box:        tview.NewBox(),
+	t := &Tabs{
 		showIcons:  true,
 		showBadges: true,
 	}
+	t.initWidget(tview.NewBox())
+	return t
 }
 
 // AddTab adds a new tab.
@@ -170,20 +169,19 @@ func (t *Tabs) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	borderColor := theme.Border()
-	errorColor := theme.Error()
+	th := t.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	borderColor := th.Border()
+	errorColor := th.Error()
 
 	tabBarHeight := 1
 
 	// Draw tab bar background
 	barStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-	for col := x; col < x+width; col++ {
-		screen.SetContent(col, y, ' ', nil, barStyle)
-	}
+	fillLine(screen, x, y, width, barStyle)
 
 	// Draw tabs
 	col := x
@@ -237,10 +235,7 @@ func (t *Tabs) Draw(screen tcell.Screen) {
 	}
 
 	// Fill remaining tab bar
-	for col < x+width {
-		screen.SetContent(col, y, ' ', nil, barStyle)
-		col++
-	}
+	fillLine(screen, col, y, x+width-col, barStyle)
 
 	// Draw underline for active tab indicator
 	underlineStyle := tcell.StyleDefault.Background(bgColor).Foreground(accentColor)

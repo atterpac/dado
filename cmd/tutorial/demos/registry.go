@@ -207,8 +207,12 @@ func StringProp(name, desc string, get func() string, set func(string), def stri
 		Type:        PropString,
 		Description: desc,
 		Get:         func() any { return get() },
-		Set:         func(v any) { if s, ok := v.(string); ok { set(s) } },
-		Default:     func() any { return def },
+		Set: func(v any) {
+			if s, ok := v.(string); ok {
+				set(s)
+			}
+		},
+		Default: func() any { return def },
 	}
 }
 
@@ -222,8 +226,12 @@ func BoolProp(name, desc string, get func() bool, set func(bool), def bool) Prop
 		Type:        PropBool,
 		Description: desc,
 		Get:         func() any { return get() },
-		Set:         func(v any) { if b, ok := v.(bool); ok { set(b) } },
-		Default:     func() any { return def },
+		Set: func(v any) {
+			if b, ok := v.(bool); ok {
+				set(b)
+			}
+		},
+		Default: func() any { return def },
 	}
 }
 
@@ -237,8 +245,12 @@ func IntProp(name, desc string, get func() int, set func(int), def int) Property
 		Type:        PropInt,
 		Description: desc,
 		Get:         func() any { return get() },
-		Set:         func(v any) { if i, ok := v.(int); ok { set(i) } },
-		Default:     func() any { return def },
+		Set: func(v any) {
+			if i, ok := v.(int); ok {
+				set(i)
+			}
+		},
+		Default: func() any { return def },
 	}
 }
 
@@ -253,15 +265,19 @@ func SelectProp(name, desc string, options []string, get func() string, set func
 		Description: desc,
 		Options:     options,
 		Get:         func() any { return get() },
-		Set:         func(v any) { if s, ok := v.(string); ok { set(s) } },
-		Default:     func() any { return def },
+		Set: func(v any) {
+			if s, ok := v.(string); ok {
+				set(s)
+			}
+		},
+		Default: func() any { return def },
 	}
 }
 
 // Registry holds all registered demos
 type Registry struct {
-	demos    []Demo
-	byName   map[string]Demo
+	demos      []Demo
+	byName     map[string]Demo
 	byCategory map[Category][]Demo
 }
 

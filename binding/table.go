@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 	"github.com/gdamore/tcell/v2"
 )
 

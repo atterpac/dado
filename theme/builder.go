@@ -247,8 +247,8 @@ func deriveColor(c Color, derive func() tcell.Color) tcell.Color {
 // builtTheme implements Theme from builder/struct.
 type builtTheme struct {
 	// Base colors
-	bg, bgLight, bgDark    tcell.Color
-	fg, fgDim, fgMuted     tcell.Color
+	bg, bgLight, bgDark tcell.Color
+	fg, fgDim, fgMuted  tcell.Color
 
 	// Accent colors
 	accent, accentDim, highlight tcell.Color
@@ -470,7 +470,7 @@ func (b *Builder) PanelTitle(v any) *Builder {
 //
 // Example:
 //
-//	darkVariant := theme.FromTheme(themes.TokyoNight).
+//	darkVariant := theme.FromTheme(themes.TokyoNightNight).
 //	    Bg("#0f0f14").
 //	    BgDark("#000000").
 //	    Build()

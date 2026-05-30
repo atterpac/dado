@@ -146,7 +146,7 @@ func TestTree_ExpandTo(t *testing.T) {
 	result := tree.ExpandTo(1)
 
 	assert.Same(t, tree, result)
-	assert.True(t, root.Expanded)          // Level 0, expanded
+	assert.True(t, root.Expanded)              // Level 0, expanded
 	assert.False(t, root.Children[0].Expanded) // Level 1, not expanded (depth=1 means expand level 0)
 }
 

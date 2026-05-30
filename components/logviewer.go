@@ -3,13 +3,10 @@ package components
 import (
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // LogLevel represents log severity
@@ -64,7 +61,7 @@ type LogEntry struct {
 	Timestamp time.Time
 	Level     LogLevel
 	Message   string
-	Source    string // Optional source/logger name
+	Source    string            // Optional source/logger name
 	Fields    map[string]string // Optional structured fields
 }
 
@@ -81,18 +78,16 @@ type LogFilter struct {
 
 // LogViewer displays streaming logs with filtering
 type LogViewer struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Data
 	entries    []LogEntry
 	maxEntries int // Max entries to keep (0 = unlimited)
 
 	// Filtering
-	filter        LogFilter
-	filteredIdx   []int // Indices into entries that pass filter
-	filterDirty   bool
+	filter      LogFilter
+	filteredIdx []int // Indices into entries that pass filter
+	filterDirty bool
 
 	// Display options
 	showTimestamp bool
@@ -102,13 +97,13 @@ type LogViewer struct {
 	wrapLines     bool
 
 	// Scroll state
-	offsetY    int
-	follow     bool // Auto-scroll to bottom
+	offsetY int
+	follow  bool // Auto-scroll to bottom
 
 	// Search
-	searchPattern  string
-	searchMatches  []int // Line indices with matches
-	currentMatch   int
+	searchPattern string
+	searchMatches []int // Line indices with matches
+	currentMatch  int
 
 	// Selection
 	selectedLine int
@@ -120,8 +115,7 @@ type LogViewer struct {
 
 // NewLogViewer creates a new log viewer component
 func NewLogViewer() *LogViewer {
-	return &LogViewer{
-		Box:           tview.NewBox(),
+	v := &LogViewer{
 		maxEntries:    10000,
 		showTimestamp: true,
 		showLevel:     true,
@@ -134,6 +128,8 @@ func NewLogViewer() *LogViewer {
 		},
 		filteredIdx: make([]int, 0),
 	}
+	v.initWidget(tview.NewBox())
+	return v
 }
 
 // --- Configuration (Fluent API) ---
@@ -454,17 +450,18 @@ func (v *LogViewer) applyFilter() {
 }
 
 func (v *LogViewer) getLevelColor(level LogLevel) tcell.Color {
+	th := v.th()
 	switch level {
 	case LogLevelDebug:
-		return theme.FgDim()
+		return th.FgDim()
 	case LogLevelInfo:
-		return theme.Info()
+		return th.Info()
 	case LogLevelWarn:
-		return theme.Warning()
+		return th.Warning()
 	case LogLevelError, LogLevelFatal:
-		return theme.Error()
+		return th.Error()
 	default:
-		return theme.Fg()
+		return th.Fg()
 	}
 }
 
@@ -484,19 +481,16 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	highlightBg := theme.BgLight()
+	th := v.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	highlightBg := th.BgLight()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	if len(v.filteredIdx) == 0 {
 		// Show empty state
@@ -580,10 +574,7 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 		// Fill rest of selected line
 		if isSelected {
 			fillStyle := tcell.StyleDefault.Background(rowBg)
-			for col < x+width {
-				screen.SetContent(col, rowY, ' ', nil, fillStyle)
-				col++
-			}
+			fillLine(screen, col, rowY, x+width-col, fillStyle)
 		}
 	}
 
@@ -594,8 +585,9 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 }
 
 func (v *LogViewer) drawScrollbar(screen tcell.Screen, x, y, height int) {
-	trackColor := theme.BgLight()
-	thumbColor := theme.FgDim()
+	th := v.th()
+	trackColor := th.BgLight()
+	thumbColor := th.FgDim()
 
 	thumbSize := height * height / len(v.filteredIdx)
 	if thumbSize < 1 {

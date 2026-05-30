@@ -5,7 +5,7 @@ import (
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // EmptyState displays a centered empty/loading/error state.

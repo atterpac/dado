@@ -34,8 +34,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/atterpac/jig/bus"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/bus"
+	"github.com/atterpac/dado/theme"
 )
 
 // Msg is the unit of communication from an Effect to its subscribers.

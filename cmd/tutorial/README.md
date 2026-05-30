@@ -1,6 +1,6 @@
-# Jig Interactive Tutorial
+# Dado Interactive Tutorial
 
-An interactive tutorial application that demonstrates jig components and patterns.
+An interactive tutorial application that demonstrates dado components and patterns.
 
 ## Running the Tutorial
 
@@ -69,8 +69,8 @@ package basic
 
 import (
     "github.com/rivo/tview"
-    "github.com/atterpac/jig/cmd/tutorial/demos"
-    "github.com/atterpac/jig/components"
+    "github.com/atterpac/dado/cmd/tutorial/demos"
+    "github.com/atterpac/dado/components"
 )
 
 func init() {
@@ -122,7 +122,7 @@ func (d *MyDemo) Reset() {
 
 ```go
 import (
-    _ "github.com/atterpac/jig/cmd/tutorial/demos/basic"
+    _ "github.com/atterpac/dado/cmd/tutorial/demos/basic"
 )
 ```
 

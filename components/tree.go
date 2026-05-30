@@ -6,7 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // TreeNode represents a node in the tree.
@@ -37,23 +37,23 @@ func (n *TreeNode) IsLeaf() bool {
 
 // Tree is a collapsible tree view component.
 type Tree struct {
-	*tview.Box
+	widgetBase
 
 	root          *TreeNode
 	flatNodes     []*TreeNode // flattened visible nodes for rendering
 	selectedIndex int
 	offset        int // scroll offset
 
-	showLines   bool
-	showIcons   bool
-	indentSize  int
+	showLines  bool
+	showIcons  bool
+	indentSize int
 
 	// Callbacks
-	onSelect     func(node *TreeNode)
-	onHighlight  func(node *TreeNode)
-	onExpand     func(node *TreeNode)
-	onCollapse   func(node *TreeNode)
-	lazyLoader   func(node *TreeNode) []*TreeNode
+	onSelect    func(node *TreeNode)
+	onHighlight func(node *TreeNode)
+	onExpand    func(node *TreeNode)
+	onCollapse  func(node *TreeNode)
+	lazyLoader  func(node *TreeNode) []*TreeNode
 
 	// Multi-select
 	multiSelect bool
@@ -62,13 +62,14 @@ type Tree struct {
 
 // NewTree creates a new Tree component.
 func NewTree() *Tree {
-	return &Tree{
-		Box:        tview.NewBox(),
+	t := &Tree{
 		showLines:  true,
 		showIcons:  true,
 		indentSize: 2,
 		selected:   make(map[*TreeNode]bool),
 	}
+	t.initWidget(tview.NewBox())
+	return t
 }
 
 // SetRoot sets the root node of the tree.
@@ -326,9 +327,10 @@ func (t *Tree) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
+	th := t.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
 	selectionBg := theme.SelectionBg()
 	selectionFg := theme.SelectionFg()
 
@@ -362,9 +364,7 @@ func (t *Tree) Draw(screen tcell.Screen) {
 		}
 
 		// Clear row
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, rowY, ' ', nil, style)
-		}
+		fillLine(screen, x, rowY, width, style)
 
 		// Build line prefix
 		var prefix string
@@ -416,7 +416,7 @@ func (t *Tree) Draw(screen tcell.Screen) {
 			if col < x+width {
 				iconStyle := lineStyle
 				if t.offset+i != t.selectedIndex && !t.selected[node] {
-					iconStyle = tcell.StyleDefault.Background(bgColor).Foreground(theme.Accent())
+					iconStyle = tcell.StyleDefault.Background(bgColor).Foreground(th.Accent())
 				}
 				screen.SetContent(col, rowY, r, nil, iconStyle)
 				col++

@@ -1,0 +1,26 @@
+name: tokyonight-night
+ident: TokyoNightNight
+default: true
+colors:
+  bg: "#1a1b26"
+  bg_light: "#24283b"
+  bg_dark: "#16161e"
+  fg: "#c0caf5"
+  fg_dim: "#565f89"
+  fg_muted: "#414868"
+  accent: "#7aa2f7"
+  accent_dim: "#bb9af7"
+  highlight: "#283457"
+  success: "#9ece6a"
+  warning: "#e0af68"
+  error: "#f7768e"
+  info: "#7dcfff"
+  border: "#15161e"
+  border_focus: "#7aa2f7"
+  header: "#16161e"
+  menu: "#1a1b26"
+  table_header: "#7aa2f7"
+  key: "#bb9af7"
+  crumb: "#7aa2f7"
+  panel_border: "#283457"
+  panel_title: "#7aa2f7"

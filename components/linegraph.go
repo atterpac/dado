@@ -2,12 +2,9 @@ package components
 
 import (
 	"math"
-	"sync"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Braille dot positions (2x4 grid per cell):
@@ -38,9 +35,9 @@ type DataSeries struct {
 type LineGraphStyle int
 
 const (
-	LineGraphDots    LineGraphStyle = iota // Individual points only
-	LineGraphSolid                         // Connected line
-	LineGraphFilled                        // Fill area under line
+	LineGraphDots   LineGraphStyle = iota // Individual points only
+	LineGraphSolid                        // Connected line
+	LineGraphFilled                       // Fill area under line
 )
 
 // AxisConfig configures axis display
@@ -52,9 +49,7 @@ type AxisConfig struct {
 
 // LineGraph renders line charts using braille characters
 type LineGraph struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Data
 	series []DataSeries
@@ -65,15 +60,15 @@ type LineGraph struct {
 	autoScale bool // Auto-calculate min/max from data
 
 	// Display options
-	style     LineGraphStyle
-	title     string
+	style      LineGraphStyle
+	title      string
 	showLegend bool
-	yAxis     AxisConfig
-	xAxis     AxisConfig
+	yAxis      AxisConfig
+	xAxis      AxisConfig
 
 	// Grid
-	showGrid   bool
-	gridColor  tcell.Color // 0 = use theme FgDim
+	showGrid  bool
+	gridColor tcell.Color // 0 = use theme FgDim
 
 	// Callbacks
 	onHover func(seriesIdx, pointIdx int, value float64)
@@ -89,8 +84,7 @@ type LineGraph struct {
 
 // NewLineGraph creates a new line graph component
 func NewLineGraph() *LineGraph {
-	return &LineGraph{
-		Box:       tview.NewBox(),
+	g := &LineGraph{
 		autoScale: true,
 		style:     LineGraphSolid,
 		yAxis: AxisConfig{
@@ -99,6 +93,8 @@ func NewLineGraph() *LineGraph {
 			Format:     "%.1f",
 		},
 	}
+	g.initWidget(tview.NewBox())
+	return g
 }
 
 // --- Configuration (Fluent API) ---
@@ -362,19 +358,16 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 	defer g.mu.Unlock()
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
+	th := g.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	// Calculate layout
 	chartX := x
@@ -517,7 +510,7 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 	canvas := g.canvas
 
 	// Color palette for series without explicit colors
-	seriesColors := [4]tcell.Color{accentColor, theme.Success(), theme.Warning(), theme.Info()}
+	seriesColors := [4]tcell.Color{accentColor, th.Success(), th.Warning(), th.Info()}
 
 	// Draw each series
 	for sIdx, series := range g.series {

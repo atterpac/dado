@@ -3,13 +3,12 @@ package components
 import (
 	"sort"
 	"strings"
-	"sync"
 	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // FinderItem represents a searchable item
@@ -37,7 +36,7 @@ type PreviewFunc func(item FinderItem) string
 
 // Finder is a fuzzy search component
 type Finder struct {
-	*tview.Box
+	widgetBase
 
 	// Items
 	items      []FinderItem
@@ -76,14 +75,11 @@ type Finder struct {
 	onChange      func(item FinderItem)
 	onCancel      func()
 	onQueryChange func(query string)
-
-	mu sync.RWMutex
 }
 
 // NewFinder creates a new fuzzy finder
 func NewFinder() *Finder {
 	f := &Finder{
-		Box:             tview.NewBox(),
 		items:           make([]FinderItem, 0),
 		filtered:        make([]FinderItem, 0),
 		categories:      make([]FinderCategory, 0),
@@ -94,6 +90,7 @@ func NewFinder() *Finder {
 		previewRatio:    0.4,
 		recentIDs:       make([]string, 0),
 	}
+	f.initWidget(tview.NewBox())
 	f.SetBorder(true)
 	return f
 }
@@ -518,8 +515,9 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
+	th := f.th()
 	// Set background color from theme
-	f.Box.SetBackgroundColor(theme.Bg())
+	f.Box.SetBackgroundColor(th.Bg())
 	f.Box.DrawForSubclass(screen, f)
 	x, y, width, height := f.GetInnerRect()
 
@@ -528,12 +526,12 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	}
 
 	// Get theme colors
-	bg := theme.Bg()
-	fg := theme.Fg()
-	fgDim := theme.FgDim()
-	fgMuted := theme.FgMuted()
-	accent := theme.Accent()
-	border := theme.Border()
+	bg := th.Bg()
+	fg := th.Fg()
+	fgDim := th.FgDim()
+	fgMuted := th.FgMuted()
+	accent := th.Accent()
+	border := th.Border()
 
 	// Base style with theme background
 	baseStyle := tcell.StyleDefault.Background(bg).Foreground(fg)
@@ -559,27 +557,15 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	}
 
 	// Draw prompt
-	for i, r := range displayPrompt {
-		screen.SetContent(x+i, y, r, nil, promptStyle)
-	}
+	drawText(screen, x, y, len(displayPrompt), displayPrompt, promptStyle)
 
 	// Draw query or placeholder
 	inputX := x + len(displayPrompt)
 	if f.query == "" && f.placeholder != "" {
 		placeholderStyle := baseStyle.Foreground(fgMuted)
-		for i, r := range f.placeholder {
-			if inputX+i >= x+listWidth {
-				break
-			}
-			screen.SetContent(inputX+i, y, r, nil, placeholderStyle)
-		}
+		drawText(screen, inputX, y, x+listWidth-inputX, f.placeholder, placeholderStyle)
 	} else {
-		for i, r := range f.query {
-			if inputX+i >= x+listWidth {
-				break
-			}
-			screen.SetContent(inputX+i, y, r, nil, inputStyle)
-		}
+		drawText(screen, inputX, y, x+listWidth-inputX, f.query, inputStyle)
 	}
 
 	// Draw cursor (only when actively searching, or always in default mode)
@@ -666,9 +652,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	} else {
 		footerText = "No matches"
 	}
-	for i, r := range footerText {
-		screen.SetContent(x+i, footerY, r, nil, footerStyle)
-	}
+	drawText(screen, x, footerY, len(footerText), footerText, footerStyle)
 
 	// Draw hints on right side of footer
 	var hints string
@@ -682,9 +666,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	}
 	hintsX := x + listWidth - len(hints)
 	if hintsX > x+len(footerText)+2 {
-		for i, r := range hints {
-			screen.SetContent(hintsX+i, footerY, r, nil, footerStyle)
-		}
+		drawText(screen, hintsX, footerY, len(hints), hints, footerStyle)
 	}
 
 	// Draw preview if enabled
@@ -704,12 +686,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 				if row >= height {
 					break
 				}
-				for col, r := range line {
-					if col >= previewWidth {
-						break
-					}
-					screen.SetContent(previewX+col, y+row, r, nil, previewStyle)
-				}
+				drawText(screen, previewX, y+row, previewWidth, line, previewStyle)
 			}
 		}
 	}
@@ -805,7 +782,7 @@ func (f *Finder) drawItem(screen tcell.Screen, x, y, width int, item FinderItem,
 		badgeText := "Recent"
 		badgeX := x + width - len(badgeText) - 1
 		if badgeX > col+2 {
-			badgeStyle := style.Foreground(theme.Highlight())
+			badgeStyle := style.Foreground(f.th().Highlight())
 			for i, r := range badgeText {
 				screen.SetContent(badgeX+i, y, r, nil, badgeStyle)
 			}

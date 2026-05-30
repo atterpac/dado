@@ -3,7 +3,7 @@ package components
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // NewConfirmModal creates a modal optimized for yes/no confirmations.

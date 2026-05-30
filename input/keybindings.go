@@ -6,7 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/bus"
+	"github.com/atterpac/dado/bus"
 )
 
 // publishInput emits a key event to the bus when enabled.

@@ -1,9 +1,6 @@
 package components
 
 import (
-	"sync"
-
-	"github.com/atterpac/jig/theme"
 	"github.com/rivo/tview"
 )
 
@@ -28,26 +25,26 @@ type editState struct {
 // inline editing, and changeset tracking. Built on tview.Box with custom rendering,
 // following the same approach as VirtualList.
 type DataGrid struct {
-	*tview.Box
+	widgetBase
 
 	// Data
 	source   DataGridSource // Data provider
 	viewport Viewport       // Virtual scroll state
 
 	// Cursor & selection
-	cursor        CellPosition   // Current cell position
-	mode          GridMode       // Current interaction mode
-	selectedRows  map[int]bool   // Multi-select row tracking
+	cursor       CellPosition // Current cell position
+	mode         GridMode     // Current interaction mode
+	selectedRows map[int]bool // Multi-select row tracking
 
 	// Editing
-	changeset *Changeset  // Dirty cell tracking
-	editState *editState  // Active edit buffer (nil when not editing)
+	changeset *Changeset // Dirty cell tracking
+	editState *editState // Active edit buffer (nil when not editing)
 
 	// Options
-	showRowNumbers bool   // Show row number gutter
-	showHeader     bool   // Show column header row
-	separator      rune   // Column separator character
-	overscan       int    // Rows to pre-fetch outside visible area
+	showRowNumbers bool // Show row number gutter
+	showHeader     bool // Show column header row
+	separator      rune // Column separator character
+	overscan       int  // Rows to pre-fetch outside visible area
 
 	// Computed layout (recalculated each Draw)
 	colWidths []int // Rendered width of each column
@@ -69,26 +66,18 @@ type DataGrid struct {
 	// deferredCallback is set by input handlers for callbacks that must
 	// run after mu is released (external callbacks that may re-enter public methods).
 	deferredCallback func()
-
-	mu sync.RWMutex
-
-	subs Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (dg *DataGrid) Subs() *Subscriptions { return &dg.subs }
 
 // NewDataGrid creates a new DataGrid component with default settings.
 func NewDataGrid() *DataGrid {
 	dg := &DataGrid{
-		Box:            tview.NewBox(),
-		changeset:      NewChangeset(),
-		selectedRows:   make(map[int]bool),
-		showHeader:     true,
-		separator:      '│',
-		overscan:       5,
+		changeset:    NewChangeset(),
+		selectedRows: make(map[int]bool),
+		showHeader:   true,
+		separator:    '│',
+		overscan:     5,
 	}
-	dg.subs.Add(theme.Register(dg.Box))
+	dg.initWidget(tview.NewBox())
 	return dg
 }
 

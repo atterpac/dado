@@ -1,7 +1,6 @@
 package components
 
 import (
-	"github.com/atterpac/jig/theme"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -58,13 +57,14 @@ func (dg *DataGrid) Draw(screen tcell.Screen) {
 //
 // Caller must hold dg.mu.
 func (dg *DataGrid) prepareDrawLocked(width, height int) (drawSnapshot, bool) {
+	th := dg.th()
 	snap := drawSnapshot{
-		bg:      theme.Bg(),
-		fg:      theme.Fg(),
-		fgDim:   theme.FgDim(),
-		accent:  theme.Accent(),
-		warning: theme.Warning(),
-		header:  theme.TableHeader(),
+		bg:      th.Bg(),
+		fg:      th.Fg(),
+		fgDim:   th.FgDim(),
+		accent:  th.Accent(),
+		warning: th.Warning(),
+		header:  th.TableHeader(),
 	}
 
 	if dg.showHeader {
@@ -134,9 +134,7 @@ func (dg *DataGrid) paintLocked(screen tcell.Screen, x, y, width, height int, sn
 	if dg.showHeader {
 		headerStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.header).Bold(true)
 		headerY := y
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, headerY, ' ', nil, headerStyle)
-		}
+		fillLine(screen, x, headerY, width, headerStyle)
 		drawX := x + snap.gutterWidth
 		dg.drawHeaderCells(screen, drawX, headerY, snap.contentWidth, snap.cols, headerStyle)
 	}
@@ -154,9 +152,7 @@ func (dg *DataGrid) paintLocked(screen tcell.Screen, x, y, width, height int, sn
 		if isSelectedRow {
 			clearStyle = clearStyle.Foreground(snap.bg)
 		}
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, screenY, ' ', nil, clearStyle)
-		}
+		fillLine(screen, x, screenY, width, clearStyle)
 
 		if dg.showRowNumbers {
 			gutterStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.fgDim)
@@ -179,11 +175,8 @@ func (dg *DataGrid) paintLocked(screen tcell.Screen, x, y, width, height int, sn
 			snap.bg, snap.fg, snap.accent, snap.warning, snap.fgDim)
 	}
 
-	for emptyY := y + snap.headerHeight + (snap.endRow - snap.startRow); emptyY < y+height; emptyY++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, emptyY, ' ', nil, baseStyle)
-		}
-	}
+	emptyStartY := y + snap.headerHeight + (snap.endRow - snap.startRow)
+	fillRect(screen, x, emptyStartY, width, y+height-emptyStartY, baseStyle)
 
 	if snap.hasVScroll {
 		dg.drawVScrollbar(screen, x+width-1, y+snap.headerHeight, snap.dataHeight)
@@ -427,8 +420,9 @@ func (dg *DataGrid) drawCellText(screen tcell.Screen, x, y, colWidth, availWidth
 
 // drawVScrollbar renders the vertical scrollbar.
 func (dg *DataGrid) drawVScrollbar(screen tcell.Screen, x, y, height int) {
-	bgColor := theme.BgLight()
-	thumbColor := theme.FgDim()
+	th := dg.th()
+	bgColor := th.BgLight()
+	thumbColor := th.FgDim()
 
 	totalRows := dg.source.RowCount()
 

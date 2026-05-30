@@ -6,7 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 const (
@@ -27,7 +27,7 @@ type TimelineLane struct {
 // Timeline displays data as a horizontal Gantt-style timeline.
 // Each lane represents a time-bounded item with status-based coloring.
 type Timeline struct {
-	*tview.Box
+	widgetBase
 	lanes        []TimelineLane
 	startTime    time.Time
 	endTime      time.Time
@@ -45,17 +45,11 @@ type Timeline struct {
 
 	// Custom bar styling (optional)
 	barStyleFn func(status *theme.Status) (rune, tcell.Color)
-
-	subs Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (t *Timeline) Subs() *Subscriptions { return &t.subs }
 
 // NewTimeline creates a new timeline/Gantt chart view.
 func NewTimeline() *Timeline {
 	t := &Timeline{
-		Box:          tview.NewBox(),
 		lanes:        []TimelineLane{},
 		zoomLevel:    1.0,
 		selectedLane: 0,
@@ -63,9 +57,7 @@ func NewTimeline() *Timeline {
 		showLegend:   true,
 	}
 
-	t.SetBackgroundColor(theme.Bg())
-
-	t.subs.Add(theme.Register(t.Box))
+	t.initWidget(tview.NewBox())
 
 	return t
 }
@@ -188,7 +180,8 @@ func (t *Timeline) calculateTimeRange() {
 
 // Draw renders the timeline view.
 func (t *Timeline) Draw(screen tcell.Screen) {
-	bgColor := theme.Bg()
+	th := t.th()
+	bgColor := th.Bg()
 	t.SetBackgroundColor(bgColor)
 
 	t.Box.DrawForSubclass(screen, t)
@@ -242,12 +235,13 @@ func (t *Timeline) Draw(screen tcell.Screen) {
 
 // drawHeader draws the time scale header.
 func (t *Timeline) drawHeader(screen tcell.Screen, x, y, width int) {
+	th := t.th()
 	barAreaWidth := width - t.labelWidth - 1
 	timeRange := t.endTime.Sub(t.startTime)
 
 	// Draw label column header
-	labelStyle := tcell.StyleDefault.Foreground(theme.PanelTitle()).Background(theme.Bg())
-	tview.Print(screen, "Event", x, y, t.labelWidth, tview.AlignLeft, theme.PanelTitle())
+	labelStyle := tcell.StyleDefault.Foreground(th.PanelTitle()).Background(th.Bg())
+	tview.Print(screen, "Event", x, y, t.labelWidth, tview.AlignLeft, th.PanelTitle())
 
 	// Draw time markers
 	markerCount := 5
@@ -278,14 +272,14 @@ func (t *Timeline) drawHeader(screen tcell.Screen, x, y, width int) {
 		}
 
 		// Draw marker
-		tview.Print(screen, marker, pos, y, 12, tview.AlignLeft, theme.FgDim())
+		tview.Print(screen, marker, pos, y, 12, tview.AlignLeft, th.FgDim())
 
 		// Draw tick mark
 		screen.SetContent(pos, y+1, '│', nil, labelStyle)
 	}
 
 	// Draw horizontal line under header
-	lineStyle := tcell.StyleDefault.Foreground(theme.Border()).Background(theme.Bg())
+	lineStyle := tcell.StyleDefault.Foreground(th.Border()).Background(th.Bg())
 	for i := x + t.labelWidth + 1; i < x+width; i++ {
 		screen.SetContent(i, y+1, '─', nil, lineStyle)
 	}
@@ -293,6 +287,7 @@ func (t *Timeline) drawHeader(screen tcell.Screen, x, y, width int) {
 
 // drawLaneLabel draws the label for a lane.
 func (t *Timeline) drawLaneLabel(screen tcell.Screen, x, y int, lane TimelineLane, selected bool) {
+	th := t.th()
 	// Truncate name if needed
 	name := lane.Name
 	maxLen := t.labelWidth - 2
@@ -306,29 +301,23 @@ func (t *Timeline) drawLaneLabel(screen tcell.Screen, x, y int, lane TimelineLan
 		style = tcell.StyleDefault.Foreground(theme.SelectionFg()).Background(theme.SelectionBg()).Bold(true)
 	} else {
 		color := t.statusColor(lane.Status)
-		style = tcell.StyleDefault.Foreground(color).Background(theme.Bg())
+		style = tcell.StyleDefault.Foreground(color).Background(th.Bg())
 	}
 
 	// Clear label area
-	for i := 0; i < t.labelWidth; i++ {
-		screen.SetContent(x+i, y, ' ', nil, style)
-	}
+	fillLine(screen, x, y, t.labelWidth, style)
 
 	// Draw name
-	for i, r := range name {
-		if x+i >= x+t.labelWidth {
-			break
-		}
-		screen.SetContent(x+i, y, r, nil, style)
-	}
+	drawText(screen, x, y, t.labelWidth, name, style)
 
 	// Draw separator
-	sepStyle := tcell.StyleDefault.Foreground(theme.Border()).Background(theme.Bg())
+	sepStyle := tcell.StyleDefault.Foreground(th.Border()).Background(th.Bg())
 	screen.SetContent(x+t.labelWidth, y, '│', nil, sepStyle)
 }
 
 // drawLaneBar draws the timeline bar for a lane.
 func (t *Timeline) drawLaneBar(screen tcell.Screen, x, y, width int, lane TimelineLane, timeRange time.Duration, selected bool) {
+	th := t.th()
 	// Calculate bar position and width
 	startOffset := lane.StartTime.Sub(t.startTime)
 	barStart := int(float64(width) * float64(startOffset) / float64(timeRange))
@@ -361,14 +350,14 @@ func (t *Timeline) drawLaneBar(screen tcell.Screen, x, y, width int, lane Timeli
 
 	// Get bar style
 	barChar, barColor := t.barStyle(lane.Status)
-	barStyle := tcell.StyleDefault.Foreground(barColor).Background(theme.Bg())
+	barStyle := tcell.StyleDefault.Foreground(barColor).Background(th.Bg())
 
 	if selected {
 		barStyle = barStyle.Bold(true)
 	}
 
 	// Draw empty space before bar
-	emptyStyle := tcell.StyleDefault.Foreground(theme.BgLight()).Background(theme.Bg())
+	emptyStyle := tcell.StyleDefault.Foreground(th.BgLight()).Background(th.Bg())
 	for i := 0; i < barStart && i < width; i++ {
 		screen.SetContent(x+i, y, '·', nil, emptyStyle)
 	}
@@ -386,16 +375,17 @@ func (t *Timeline) drawLaneBar(screen tcell.Screen, x, y, width int, lane Timeli
 
 // drawLegend draws the status legend at the bottom.
 func (t *Timeline) drawLegend(screen tcell.Screen, x, y, width int) {
+	th := t.th()
 	// Default legend items - can be customized via SetBarStyleFn
 	legend := []struct {
 		char   rune
 		status string
 		color  tcell.Color
 	}{
-		{'█', "Completed", theme.Success()},
-		{'▓', "Running", theme.Info()},
-		{'░', "Failed", theme.Error()},
-		{'▒', "Pending", theme.FgDim()},
+		{'█', "Completed", th.Success()},
+		{'▓', "Running", th.Info()},
+		{'░', "Failed", th.Error()},
+		{'▒', "Pending", th.FgDim()},
 	}
 
 	pos := x
@@ -404,11 +394,11 @@ func (t *Timeline) drawLegend(screen tcell.Screen, x, y, width int) {
 			break
 		}
 
-		style := tcell.StyleDefault.Foreground(item.color).Background(theme.Bg())
+		style := tcell.StyleDefault.Foreground(item.color).Background(th.Bg())
 		screen.SetContent(pos, y, item.char, nil, style)
 		pos++
 
-		labelStyle := tcell.StyleDefault.Foreground(theme.FgDim()).Background(theme.Bg())
+		labelStyle := tcell.StyleDefault.Foreground(th.FgDim()).Background(th.Bg())
 		for _, r := range item.status {
 			screen.SetContent(pos, y, r, nil, labelStyle)
 			pos++
@@ -428,7 +418,7 @@ func (t *Timeline) barStyle(status *theme.Status) (rune, tcell.Color) {
 	if status != nil {
 		return '█', status.Color()
 	}
-	return '▒', theme.FgDim()
+	return '▒', t.th().FgDim()
 }
 
 // statusColor returns the color for a status.
@@ -443,7 +433,7 @@ func (t *Timeline) statusColor(status *theme.Status) tcell.Color {
 	if status != nil {
 		return status.Color()
 	}
-	return theme.FgDim()
+	return t.th().FgDim()
 }
 
 // InputHandler handles keyboard input.

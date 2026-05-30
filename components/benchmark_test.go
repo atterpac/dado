@@ -7,7 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/validators"
+	"github.com/atterpac/dado/validators"
 )
 
 // ============================================================================
@@ -156,17 +156,17 @@ func BenchmarkValidation_Composite(b *testing.B) {
 func BenchmarkForm_ValidateAll(b *testing.B) {
 	form := NewFormBuilder().
 		Text("name", "Name").
-			Validate(validators.Required()).
-			Value("John").
-			Done().
+		Validate(validators.Required()).
+		Value("John").
+		Done().
 		Text("email", "Email").
-			Validate(validators.Required(), validators.Email()).
-			Value("john@example.com").
-			Done().
+		Validate(validators.Required(), validators.Email()).
+		Value("john@example.com").
+		Done().
 		Text("phone", "Phone").
-			Validate(validators.Required(), validators.Pattern(`^\d{3}-\d{4}$`)).
-			Value("123-4567").
-			Done().
+		Validate(validators.Required(), validators.Pattern(`^\d{3}-\d{4}$`)).
+		Value("123-4567").
+		Done().
 		Build()
 
 	b.ResetTimer()

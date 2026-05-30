@@ -1,4 +1,4 @@
-// Package testutil provides testing utilities for the jig TUI component library.
+// Package testutil provides testing utilities for the dado TUI component library.
 package testutil
 
 import (
@@ -9,7 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // EventCollector captures events for testing with thread-safe access.
@@ -271,14 +271,14 @@ func TypeString(handler func(*tcell.EventKey, func(tview.Primitive)), s string) 
 // MockComponent implements nav.Component for testing.
 type MockComponent struct {
 	tview.Primitive
-	name         string
-	StartCalled  bool
-	StopCalled   bool
-	StartCount   int
-	StopCount    int
-	hints        []components.KeyHint
-	onStart      func()
-	onStop       func()
+	name        string
+	StartCalled bool
+	StopCalled  bool
+	StartCount  int
+	StopCount   int
+	hints       []components.KeyHint
+	onStart     func()
+	onStop      func()
 }
 
 // NewMockComponent creates a new MockComponent with the given name.

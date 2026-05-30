@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/atterpac/jig/validators"
+	"github.com/atterpac/dado/validators"
 )
 
 // FormFieldFactory creates a new FormField instance.

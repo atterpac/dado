@@ -6,7 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // GraphNodeType defines the visual type of a node.
@@ -88,7 +88,7 @@ func (d *GraphTreeData) GetEdge(from, to string) *GraphTreeEdge {
 
 // GraphTree is a tree view specialized for displaying workflow relationships.
 type GraphTree struct {
-	*tview.Box
+	widgetBase
 
 	data          *GraphTreeData
 	flatNodes     []*GraphTreeNode // flattened visible nodes for rendering
@@ -99,17 +99,18 @@ type GraphTree struct {
 	indentSize     int
 
 	// Callbacks
-	onChange      func(node *GraphTreeNode)
-	onSelect      func(node *GraphTreeNode)
+	onChange       func(node *GraphTreeNode)
+	onSelect       func(node *GraphTreeNode)
 	onLoadChildren func(nodeID string) ([]*GraphTreeNode, []*GraphTreeEdge)
 }
 
 // NewGraphTree creates a new GraphTree component.
 func NewGraphTree() *GraphTree {
-	return &GraphTree{
-		Box:        tview.NewBox(),
+	t := &GraphTree{
 		indentSize: 3,
 	}
+	t.initWidget(tview.NewBox())
+	return t
 }
 
 // SetData sets the tree data.
@@ -184,9 +185,10 @@ func (t *GraphTree) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
+	th := t.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
 	selectionBg := theme.SelectionBg()
 	selectionFg := theme.SelectionFg()
 
@@ -219,9 +221,7 @@ func (t *GraphTree) Draw(screen tcell.Screen) {
 		}
 
 		// Clear row
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, rowY, ' ', nil, style)
-		}
+		fillLine(screen, x, rowY, width, style)
 
 		col := x
 
@@ -251,7 +251,7 @@ func (t *GraphTree) Draw(screen tcell.Screen) {
 
 		indicatorStyle := prefixStyle
 		if !isSelected {
-			indicatorStyle = tcell.StyleDefault.Background(bgColor).Foreground(theme.Accent())
+			indicatorStyle = tcell.StyleDefault.Background(bgColor).Foreground(th.Accent())
 		}
 		for _, r := range indicator {
 			if col < x+width {
@@ -400,21 +400,22 @@ func (t *GraphTree) isLastChild(parent *GraphTreeNode, childID string) bool {
 }
 
 func (t *GraphTree) getStatusColor(status string) tcell.Color {
+	th := t.th()
 	switch strings.ToLower(status) {
 	case "running":
-		return theme.Info()
+		return th.Info()
 	case "completed":
-		return theme.Success()
+		return th.Success()
 	case "failed":
-		return theme.Error()
+		return th.Error()
 	case "canceled", "cancelled":
-		return theme.Warning()
+		return th.Warning()
 	case "terminated":
-		return theme.Error()
+		return th.Error()
 	case "timedout", "timed_out":
-		return theme.Warning()
+		return th.Warning()
 	default:
-		return theme.FgDim()
+		return th.FgDim()
 	}
 }
 

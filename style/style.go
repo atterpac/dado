@@ -1,5 +1,5 @@
 // Package style provides a fluent, value-based style builder inspired by
-// Charmbracelet's Lip Gloss. It composes alongside jig's theme system rather
+// Charmbracelet's Lip Gloss. It composes alongside dado's theme system rather
 // than replacing it.
 //
 // A Style is an immutable value: every builder method returns a new Style,
@@ -31,7 +31,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // Style is an immutable value describing visual decoration.
@@ -44,9 +44,9 @@ type Style struct {
 	blink     bool
 	dim       bool
 
-	fg    *colorRef
-	bg    *colorRef
-	bdr   *colorRef // border color, if a border is set
+	fg  *colorRef
+	bg  *colorRef
+	bdr *colorRef // border color, if a border is set
 
 	border *BorderSet // nil = no border
 

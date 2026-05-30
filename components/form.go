@@ -60,7 +60,7 @@ type FormField interface {
 
 // Form is a container for form fields with focus management.
 type Form struct {
-	*tview.Box
+	widgetBase
 
 	fields       []FormField
 	focusedIndex int
@@ -73,9 +73,9 @@ type Form struct {
 
 // NewForm creates a new Form container.
 func NewForm() *Form {
-	return &Form{
-		Box: tview.NewBox(),
-	}
+	f := &Form{}
+	f.initWidget(tview.NewBox())
+	return f
 }
 
 // AddField adds a field to the form.

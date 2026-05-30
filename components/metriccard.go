@@ -1,12 +1,8 @@
 package components
 
 import (
-	"sync"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Trend indicates value direction
@@ -32,9 +28,7 @@ func (t Trend) Icon() string {
 
 // MetricCard displays a metric with optional sparkline and trend
 type MetricCard struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Primary display
 	label string
@@ -42,18 +36,18 @@ type MetricCard struct {
 	unit  string
 
 	// Trend
-	trend       Trend
-	trendValue  string // e.g., "+12%"
-	trendGood   bool   // Is the trend direction good? (affects color)
+	trend      Trend
+	trendValue string // e.g., "+12%"
+	trendGood  bool   // Is the trend direction good? (affects color)
 
 	// Sparkline data
-	sparkData   []float64
-	sparkMax    float64
-	showSpark   bool
+	sparkData []float64
+	sparkMax  float64
+	showSpark bool
 
 	// Styling
-	showBorder  bool
-	compact     bool // Compact mode (single line)
+	showBorder bool
+	compact    bool // Compact mode (single line)
 
 	// Thresholds for value coloring
 	warningThreshold float64
@@ -64,11 +58,12 @@ type MetricCard struct {
 
 // NewMetricCard creates a new metric card component
 func NewMetricCard() *MetricCard {
-	return &MetricCard{
-		Box:        tview.NewBox(),
+	m := &MetricCard{
 		showBorder: true,
 		trend:      TrendNeutral,
 	}
+	m.initWidget(tview.NewBox())
+	return m
 }
 
 // --- Configuration (Fluent API) ---
@@ -222,23 +217,20 @@ func (m *MetricCard) Draw(screen tcell.Screen) {
 	defer m.mu.RUnlock()
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	successColor := theme.Success()
-	warningColor := theme.Warning()
-	errorColor := theme.Error()
+	th := m.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	successColor := th.Success()
+	warningColor := th.Warning()
+	errorColor := th.Error()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	borderStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	contentX := x
 	contentY := y
@@ -288,12 +280,7 @@ func (m *MetricCard) drawCompact(screen tcell.Screen, x, y, width int, bgColor, 
 	// Label
 	if m.label != "" {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
-		for _, r := range m.label {
-			if col < x+width {
-				screen.SetContent(col, y, r, nil, labelStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, y, x+width-col, m.label, labelStyle)
 		screen.SetContent(col, y, ':', nil, labelStyle)
 		col++
 		screen.SetContent(col, y, ' ', nil, labelStyle)
@@ -303,22 +290,12 @@ func (m *MetricCard) drawCompact(screen tcell.Screen, x, y, width int, bgColor, 
 	// Value
 	valueColor := m.getValueColor(fgColor, successColor, warningColor, errorColor)
 	valueStyle := tcell.StyleDefault.Background(bgColor).Foreground(valueColor)
-	for _, r := range m.value {
-		if col < x+width {
-			screen.SetContent(col, y, r, nil, valueStyle)
-			col++
-		}
-	}
+	col = drawText(screen, col, y, x+width-col, m.value, valueStyle)
 
 	// Unit
 	if m.unit != "" {
 		unitStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
-		for _, r := range m.unit {
-			if col < x+width {
-				screen.SetContent(col, y, r, nil, unitStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, y, x+width-col, m.unit, unitStyle)
 	}
 
 	// Trend (always render to keep layout stable)
@@ -341,18 +318,8 @@ func (m *MetricCard) drawCompact(screen tcell.Screen, x, y, width int, bgColor, 
 		trendStyle := tcell.StyleDefault.Background(bgColor).Foreground(trendColor)
 
 		icon := m.trend.Icon()
-		for _, r := range icon {
-			if col < x+width {
-				screen.SetContent(col, y, r, nil, trendStyle)
-				col++
-			}
-		}
-		for _, r := range m.trendValue {
-			if col < x+width {
-				screen.SetContent(col, y, r, nil, trendStyle)
-				col++
-			}
-		}
+		col = drawText(screen, col, y, x+width-col, icon, trendStyle)
+		col = drawText(screen, col, y, x+width-col, m.trendValue, trendStyle)
 	}
 }
 

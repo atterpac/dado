@@ -6,8 +6,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // SelectOption represents an option in a select dropdown.
@@ -19,7 +17,7 @@ type SelectOption struct {
 // Select is a dropdown selection component.
 // It implements IndexedValueProvider[string].
 type Select struct {
-	*tview.Box
+	widgetBase
 	BaseEventEmitter
 
 	name        string
@@ -37,11 +35,12 @@ type Select struct {
 
 // NewSelect creates a new Select component.
 func NewSelect(name string) *Select {
-	return &Select{
-		Box:      tview.NewBox(),
+	s := &Select{
 		name:     name,
 		selected: -1,
 	}
+	s.initWidget(tview.NewBox())
+	return s
 }
 
 // SetLabel sets the field label.
@@ -189,25 +188,20 @@ func (s *Select) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	borderColor := theme.Border()
-	borderFocusColor := theme.BorderFocus()
+	th := s.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	borderColor := th.Border()
+	borderFocusColor := th.BorderFocus()
 
 	row := y
 
 	// Draw label if present
 	if s.label != "" {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, r := range s.label {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, s.label, labelStyle)
 		row++
 	}
 
@@ -235,9 +229,7 @@ func (s *Select) Draw(screen tcell.Screen) {
 
 	// Clear inner area
 	clearStyle := tcell.StyleDefault.Background(bgColor)
-	for col := x + 1; col < x+width-1; col++ {
-		screen.SetContent(col, row, ' ', nil, clearStyle)
-	}
+	fillLine(screen, x+1, row, width-2, clearStyle)
 
 	// Draw selected value or placeholder
 	col := x + 2
@@ -251,12 +243,7 @@ func (s *Select) Draw(screen tcell.Screen) {
 		displayStyle = placeholderStyle
 	}
 
-	for _, r := range displayText {
-		if col < x+width-4 {
-			screen.SetContent(col, row, r, nil, displayStyle)
-			col++
-		}
-	}
+	drawText(screen, col, row, width-6, displayText, displayStyle)
 
 	// Draw dropdown indicator
 	indicatorStyle := tcell.StyleDefault.Background(bgColor).Foreground(accentColor)
@@ -295,18 +282,10 @@ func (s *Select) Draw(screen tcell.Screen) {
 			}
 
 			// Draw option background
-			for col := x; col < x+width; col++ {
-				screen.SetContent(col, row, ' ', nil, optStyle)
-			}
+			fillLine(screen, x, row, width, optStyle)
 
 			// Draw option text
-			col := x + 2
-			for _, r := range opt.Label {
-				if col < x+width-2 {
-					screen.SetContent(col, row, r, nil, optStyle)
-					col++
-				}
-			}
+			drawText(screen, x+2, row, width-4, opt.Label, optStyle)
 			row++
 		}
 	}
@@ -418,7 +397,7 @@ func (s *Select) GetFieldHeight() int {
 // MultiSelect allows multiple option selection.
 // It implements MultiValueProvider[string].
 type MultiSelect struct {
-	*tview.Box
+	widgetBase
 	BaseEventEmitter
 
 	name     string
@@ -436,11 +415,12 @@ type MultiSelect struct {
 
 // NewMultiSelect creates a new MultiSelect component.
 func NewMultiSelect(name string) *MultiSelect {
-	return &MultiSelect{
-		Box:      tview.NewBox(),
+	m := &MultiSelect{
 		name:     name,
 		selected: make(map[int]bool),
 	}
+	m.initWidget(tview.NewBox())
+	return m
 }
 
 // SetLabel sets the field label.
@@ -587,26 +567,21 @@ func (m *MultiSelect) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	successColor := theme.Success()
-	borderColor := theme.Border()
-	borderFocusColor := theme.BorderFocus()
+	th := m.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	successColor := th.Success()
+	borderColor := th.Border()
+	borderFocusColor := th.BorderFocus()
 
 	row := y
 
 	// Draw label if present
 	if m.label != "" {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, r := range m.label {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, m.label, labelStyle)
 		row++
 	}
 
@@ -647,9 +622,7 @@ func (m *MultiSelect) Draw(screen tcell.Screen) {
 		rowStyle := tcell.StyleDefault.Background(rowBg).Foreground(rowFg)
 
 		// Clear row
-		for col := x + 1; col < x+width-1; col++ {
-			screen.SetContent(col, row, ' ', nil, rowStyle)
-		}
+		fillLine(screen, x+1, row, width-2, rowStyle)
 
 		// Draw checkbox
 		col := x + 2
@@ -676,12 +649,7 @@ func (m *MultiSelect) Draw(screen tcell.Screen) {
 
 		// Draw label
 		col++
-		for _, r := range opt.Label {
-			if col < x+width-2 {
-				screen.SetContent(col, row, r, nil, rowStyle)
-				col++
-			}
-		}
+		drawText(screen, col, row, x+width-2-col, opt.Label, rowStyle)
 		row++
 	}
 

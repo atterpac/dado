@@ -1,13 +1,12 @@
 package components
 
 import (
-	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // =============================================================================
@@ -28,9 +27,7 @@ const (
 
 // Badge is a small label or count indicator
 type Badge struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	text    string
 	variant BadgeVariant
@@ -40,12 +37,13 @@ type Badge struct {
 
 // NewBadge creates a new badge
 func NewBadge(text string) *Badge {
-	return &Badge{
-		Box:     tview.NewBox(),
+	b := &Badge{
 		text:    text,
 		variant: BadgeDefault,
 		pill:    true,
 	}
+	b.initWidget(tview.NewBox())
+	return b
 }
 
 // SetText sets the badge text
@@ -88,19 +86,20 @@ func (b *Badge) GetText() string {
 }
 
 func (b *Badge) getColors() (bg, fg tcell.Color) {
+	t := b.th()
 	switch b.variant {
 	case BadgePrimary:
-		return theme.Accent(), theme.Bg()
+		return t.Accent(), t.Bg()
 	case BadgeSuccess:
-		return theme.Success(), theme.Bg()
+		return t.Success(), t.Bg()
 	case BadgeWarning:
-		return theme.Warning(), theme.Bg()
+		return t.Warning(), t.Bg()
 	case BadgeError:
-		return theme.Error(), theme.Bg()
+		return t.Error(), t.Bg()
 	case BadgeInfo:
-		return theme.Info(), theme.Bg()
+		return t.Info(), t.Bg()
 	default:
-		return theme.BgLight(), theme.Fg()
+		return t.BgLight(), t.Fg()
 	}
 }
 
@@ -118,51 +117,18 @@ func (b *Badge) Draw(screen tcell.Screen) {
 
 	bgColor, fgColor := b.getColors()
 	style := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-	bgStyle := tcell.StyleDefault.Background(theme.Bg())
 
-	// Build display string
+	// Build display string with optional pill padding.
 	display := b.text
 	if b.icon != "" {
 		display = b.icon + " " + display
 	}
-
-	// Calculate badge width
-	badgeWidth := len(display)
 	if b.pill {
-		badgeWidth += 2 // Padding for pill
+		display = " " + display + " "
 	}
 
-	// Center in available space
-	startX := x + (width-badgeWidth)/2
-	if startX < x {
-		startX = x
-	}
-
-	// Clear background
-	for col := x; col < x+width; col++ {
-		screen.SetContent(col, y, ' ', nil, bgStyle)
-	}
-
-	col := startX
-
-	// Left padding/bracket
-	if b.pill && col < x+width {
-		screen.SetContent(col, y, ' ', nil, style)
-		col++
-	}
-
-	// Content
-	for _, r := range display {
-		if col < x+width {
-			screen.SetContent(col, y, r, nil, style)
-			col++
-		}
-	}
-
-	// Right padding/bracket
-	if b.pill && col < x+width {
-		screen.SetContent(col, y, ' ', nil, style)
-	}
+	fillLine(screen, x, y, width, tcell.StyleDefault.Background(b.th().Bg()))
+	drawCentered(screen, x, y, width, display, style)
 }
 
 // GetFieldHeight returns preferred height
@@ -190,9 +156,7 @@ func (b *Badge) Width() int {
 
 // Chip is a removable tag element
 type Chip struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	text      string
 	icon      string
@@ -206,10 +170,9 @@ type Chip struct {
 
 // NewChip creates a new chip
 func NewChip(text string) *Chip {
-	return &Chip{
-		Box:  tview.NewBox(),
-		text: text,
-	}
+	c := &Chip{text: text}
+	c.initWidget(tview.NewBox())
+	return c
 }
 
 // SetText sets the chip text
@@ -295,70 +258,45 @@ func (c *Chip) Draw(screen tcell.Screen) {
 	defer c.mu.RUnlock()
 
 	// Get colors
-	bgColor := theme.Bg()
-	chipBg := theme.BgLight()
-	chipFg := theme.Fg()
+	t := c.th()
+	bgColor := t.Bg()
+	chipBg := t.BgLight()
+	chipFg := t.Fg()
 
 	if c.selected {
-		chipBg = theme.Accent()
-		chipFg = theme.Bg()
+		chipBg = t.Accent()
+		chipFg = t.Bg()
 	}
 	if c.disabled {
-		chipFg = theme.FgDim()
+		chipFg = t.FgDim()
 	}
 
-	bgStyle := tcell.StyleDefault.Background(bgColor)
 	chipStyle := tcell.StyleDefault.Background(chipBg).Foreground(chipFg)
-	removeStyle := tcell.StyleDefault.Background(chipBg).Foreground(theme.Error())
+	removeStyle := tcell.StyleDefault.Background(chipBg).Foreground(t.Error())
 
-	// Build display string
-	display := c.text
+	// Body: " text " (plus a trailing space when removable, before the ✕).
+	body := c.text
 	if c.icon != "" {
-		display = c.icon + " " + display
+		body = c.icon + " " + body
 	}
-
-	chipWidth := len(display) + 2 // Padding
+	body = " " + body + " "
+	chipWidth := runeLen(body)
 	if c.removable {
 		chipWidth += 2 // " ✕"
 	}
 
-	// Center
 	startX := x + (width-chipWidth)/2
 	if startX < x {
 		startX = x
 	}
+	right := x + width
 
-	// Clear background
-	for col := x; col < x+width; col++ {
-		screen.SetContent(col, y, ' ', nil, bgStyle)
-	}
+	fillLine(screen, x, y, width, tcell.StyleDefault.Background(bgColor))
+	col := drawText(screen, startX, y, right-startX, body, chipStyle)
 
-	col := startX
-
-	// Left padding
-	if col < x+width {
-		screen.SetContent(col, y, ' ', nil, chipStyle)
-		col++
-	}
-
-	// Content
-	for _, r := range display {
-		if col < x+width {
-			screen.SetContent(col, y, r, nil, chipStyle)
-			col++
-		}
-	}
-
-	// Remove button
-	if c.removable && col < x+width {
-		screen.SetContent(col, y, ' ', nil, chipStyle)
-		col++
-		if col < x+width {
-			screen.SetContent(col, y, '✕', nil, removeStyle)
-			col++
-		}
-	} else if col < x+width {
-		screen.SetContent(col, y, ' ', nil, chipStyle)
+	if c.removable && col < right {
+		col = drawText(screen, col, y, right-col, " ", chipStyle)
+		drawText(screen, col, y, right-col, "✕", removeStyle)
 	}
 }
 
@@ -395,9 +333,7 @@ const (
 
 // Divider is a visual separator
 type Divider struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	orientation DividerOrientation
 	label       string
@@ -406,20 +342,22 @@ type Divider struct {
 
 // NewDivider creates a new horizontal divider
 func NewDivider() *Divider {
-	return &Divider{
-		Box:         tview.NewBox(),
+	d := &Divider{
 		orientation: DividerHorizontal,
 		style:       '─',
 	}
+	d.initWidget(tview.NewBox())
+	return d
 }
 
 // NewVerticalDivider creates a new vertical divider
 func NewVerticalDivider() *Divider {
-	return &Divider{
-		Box:         tview.NewBox(),
+	d := &Divider{
 		orientation: DividerVertical,
 		style:       '│',
 	}
+	d.initWidget(tview.NewBox())
+	return d
 }
 
 // SetLabel sets an optional centered label
@@ -463,19 +401,17 @@ func (d *Divider) Draw(screen tcell.Screen) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	bgColor := theme.Bg()
-	fgColor := theme.FgDim()
-	labelColor := theme.Fg()
+	t := d.th()
+	bgColor := t.Bg()
+	fgColor := t.FgDim()
+	labelColor := t.Fg()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	lineStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 	labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(labelColor)
 
 	if d.orientation == DividerHorizontal {
-		// Clear area
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, y, ' ', nil, bgStyle)
-		}
+		fillLine(screen, x, y, width, bgStyle)
 
 		if d.label != "" {
 			// Draw line with label in middle
@@ -526,12 +462,10 @@ const (
 
 // Skeleton is an animated loading placeholder
 type Skeleton struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	variant  SkeletonVariant
-	lines    int           // Number of text lines
+	lines    int // Number of text lines
 	animated bool
 	frame    int
 	interval time.Duration
@@ -541,13 +475,14 @@ type Skeleton struct {
 
 // NewSkeleton creates a new skeleton loader
 func NewSkeleton() *Skeleton {
-	return &Skeleton{
-		Box:      tview.NewBox(),
+	s := &Skeleton{
 		variant:  SkeletonText,
 		lines:    1,
 		animated: true,
 		interval: 150 * time.Millisecond,
 	}
+	s.initWidget(tview.NewBox())
+	return s
 }
 
 // SetVariant sets the skeleton shape
@@ -632,27 +567,23 @@ func (s *Skeleton) Draw(screen tcell.Screen) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	bgColor := theme.Bg()
+	t := s.th()
+	bgColor := t.Bg()
 	// Animate between shades
 	var fgColor tcell.Color
 	switch s.frame {
 	case 0:
-		fgColor = theme.BgLight()
+		fgColor = t.BgLight()
 	case 1:
-		fgColor = theme.FgDim()
+		fgColor = t.FgDim()
 	case 2:
-		fgColor = theme.BgLight()
+		fgColor = t.BgLight()
 	}
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	skelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 
-	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	switch s.variant {
 	case SkeletonText:

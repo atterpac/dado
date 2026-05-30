@@ -1,5 +1,5 @@
 // Package bus provides an opt-in pub/sub event bus for observing internal
-// state changes across jig: binding mutations, theme switches, page navigation,
+// state changes across dado: binding mutations, theme switches, page navigation,
 // async loader transitions, input events, and effect dispatches.
 //
 // The bus is disabled by default and incurs only a single atomic.Bool load

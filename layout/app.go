@@ -8,10 +8,10 @@ import (
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/effect"
-	"github.com/atterpac/jig/nav"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/effect"
+	"github.com/atterpac/dado/nav"
+	"github.com/atterpac/dado/theme"
 )
 
 // AppConfig configures the application layout.
@@ -63,6 +63,7 @@ type App struct {
 	userInputCapture func(*tcell.EventKey) *tcell.EventKey // User's custom input capture
 	effects          *effect.Dispatcher
 	subs             components.Subscriptions
+	themeState       *themeState
 }
 
 // NewApp creates a new application with the given configuration.
@@ -300,6 +301,14 @@ func (a *App) setupModalInputCapture() {
 			return nil
 		}
 
+		// Theme selector toggle, when enabled via EnableThemes.
+		if a.themeState != nil && event.Key() == a.themeState.key {
+			go func() {
+				a.app.QueueUpdateDraw(a.openThemeSelector)
+			}()
+			return nil
+		}
+
 		// Check if current page is a modal with auto-dismiss
 		if behavior := a.pages.CurrentModalBehavior(); behavior != nil {
 			// Handle auto-dismiss on Escape
@@ -387,9 +396,9 @@ func (m *modalWrapper) OnDismiss() bool {
 	return true // Always allow dismiss
 }
 
-func (m *modalWrapper) Draw(screen tcell.Screen)       { m.modal.Draw(screen) }
-func (m *modalWrapper) GetRect() (int, int, int, int)  { return m.modal.GetRect() }
-func (m *modalWrapper) SetRect(x, y, w, h int)         { m.modal.SetRect(x, y, w, h) }
+func (m *modalWrapper) Draw(screen tcell.Screen)      { m.modal.Draw(screen) }
+func (m *modalWrapper) GetRect() (int, int, int, int) { return m.modal.GetRect() }
+func (m *modalWrapper) SetRect(x, y, w, h int)        { m.modal.SetRect(x, y, w, h) }
 func (m *modalWrapper) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return m.modal.InputHandler()
 }

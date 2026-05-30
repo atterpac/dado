@@ -3,7 +3,7 @@ package components
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // Layout wraps tview.Flex with a simpler API for common layout patterns.

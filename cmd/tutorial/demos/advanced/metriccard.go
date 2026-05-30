@@ -6,8 +6,8 @@ import (
 
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
 )
 
 func init() {
@@ -96,7 +96,7 @@ func (d *MetricCardDemo) Component() tview.Primitive {
 
 const metricCardCode = `package main
 
-import "github.com/atterpac/jig/components"
+import "github.com/atterpac/dado/components"
 
 // Create a metric card
 card := components.NewMetricCard().

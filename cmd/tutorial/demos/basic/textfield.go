@@ -3,8 +3,8 @@ package basic
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
 )
 
 func init() {
@@ -58,8 +58,8 @@ func (d *TextFieldDemo) Component() tview.Primitive {
 const textFieldCode = `package main
 
 import (
-    "github.com/atterpac/jig/components"
-    "github.com/atterpac/jig/validators"
+    "github.com/atterpac/dado/components"
+    "github.com/atterpac/dado/validators"
 )
 
 // Create a text field

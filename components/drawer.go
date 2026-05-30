@@ -4,7 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // DrawerPosition specifies which edge the drawer appears from.
@@ -97,7 +97,7 @@ func (d *Drawer) setupLayout() {
 	switch d.config.Position {
 	case DrawerRight:
 		// Left spacer (fills available space) | drawer panel (fixed width)
-		d.Flex.AddItem(nil, 0, 1, false)       // Transparent spacer
+		d.Flex.AddItem(nil, 0, 1, false) // Transparent spacer
 		d.Flex.AddItem(d.panel, d.config.Width, 0, true)
 	case DrawerLeft:
 		// Drawer panel (fixed width) | right spacer (fills available space)
@@ -168,11 +168,7 @@ func (d *Drawer) drawBackdrop(screen tcell.Screen) {
 		backdropWidth = width - d.config.Width
 	}
 
-	for row := y; row < y+height; row++ {
-		for col := backdropX; col < backdropX+backdropWidth; col++ {
-			screen.SetContent(col, row, ' ', nil, style)
-		}
-	}
+	fillRect(screen, backdropX, y, backdropWidth, height, style)
 }
 
 // InputHandler handles input with drawer behavior.

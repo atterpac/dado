@@ -6,9 +6,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/bus"
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/bus"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 // publishNav emits a navigation event when the bus is enabled.
@@ -29,8 +29,8 @@ type Pages struct {
 	stack          []Component
 	focusStack     []tview.Primitive // Saved focus for modal restoration
 	onChange       func(Component)
-	onModalDismiss func(Modal) // Optional callback when any modal dismisses
-	counter        int         // For generating unique page names
+	onModalDismiss func(Modal)        // Optional callback when any modal dismisses
+	counter        int                // For generating unique page names
 	app            *tview.Application // Reference for focus management
 	crumbs         *Crumbs            // Optional breadcrumb component
 	subs           components.Subscriptions

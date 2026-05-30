@@ -1,12 +1,8 @@
 package components
 
 import (
-	"sync"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // HeatMapCell represents a single cell in the heat map
@@ -28,14 +24,12 @@ const (
 
 // HeatMap renders a grid with color intensity based on values
 type HeatMap struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Data (2D grid, row-major)
-	cells   [][]HeatMapCell
-	rows    int
-	cols    int
+	cells [][]HeatMapCell
+	rows  int
+	cols  int
 
 	// Labels
 	rowLabels []string
@@ -48,11 +42,11 @@ type HeatMap struct {
 
 	// Display options
 	title       string
-	cellWidth   int                                    // Width per cell (0 = auto)
-	cellHeight  int                                    // Height per cell (default 1)
+	cellWidth   int // Width per cell (0 = auto)
+	cellHeight  int // Height per cell (default 1)
 	colorScale  ColorScale
-	colorFunc   func(normalized float64) tcell.Color  // Custom color function
-	showValues  bool                                   // Show values in cells
+	colorFunc   func(normalized float64) tcell.Color // Custom color function
+	showValues  bool                                 // Show values in cells
 	valueFormat string
 
 	// Characters
@@ -65,8 +59,7 @@ type HeatMap struct {
 
 // NewHeatMap creates a new heat map component
 func NewHeatMap() *HeatMap {
-	return &HeatMap{
-		Box:         tview.NewBox(),
+	h := &HeatMap{
 		autoScale:   true,
 		cellWidth:   3,
 		cellHeight:  1,
@@ -74,6 +67,8 @@ func NewHeatMap() *HeatMap {
 		valueFormat: "%.0f",
 		cellChar:    '█',
 	}
+	h.initWidget(tview.NewBox())
+	return h
 }
 
 // --- Configuration (Fluent API) ---
@@ -330,10 +325,10 @@ func (h *HeatMap) getColor(normalized float64) tcell.Color {
 		if h.colorFunc != nil {
 			return h.colorFunc(normalized)
 		}
-		return theme.Accent()
+		return h.th().Accent()
 
 	default:
-		return theme.Accent()
+		return h.th().Accent()
 	}
 }
 
@@ -350,18 +345,15 @@ func (h *HeatMap) Draw(screen tcell.Screen) {
 	defer h.mu.RUnlock()
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
+	th := h.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	if len(h.cells) == 0 {
 		return

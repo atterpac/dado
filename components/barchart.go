@@ -1,12 +1,8 @@
 package components
 
 import (
-	"sync"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // BarOrientation defines bar direction
@@ -26,9 +22,7 @@ type BarItem struct {
 
 // BarChart renders horizontal or vertical bar charts
 type BarChart struct {
-	*tview.Box
-
-	mu sync.RWMutex
+	widgetBase
 
 	// Data
 	items []BarItem
@@ -39,15 +33,15 @@ type BarChart struct {
 	autoScale bool
 
 	// Display options
-	orientation   BarOrientation
-	title         string
-	showValues    bool          // Show value next to/above bar
-	showLabels    bool          // Show labels
-	barWidth      int           // Width for vertical bars (0 = auto)
-	barGap        int           // Gap between bars
-	valueFormat   string        // Printf format for values
-	filledChar    rune          // Character for filled portion
-	emptyChar     rune          // Character for empty portion
+	orientation BarOrientation
+	title       string
+	showValues  bool   // Show value next to/above bar
+	showLabels  bool   // Show labels
+	barWidth    int    // Width for vertical bars (0 = auto)
+	barGap      int    // Gap between bars
+	valueFormat string // Printf format for values
+	filledChar  rune   // Character for filled portion
+	emptyChar   rune   // Character for empty portion
 
 	// Callbacks
 	onSelect func(index int, item BarItem)
@@ -55,8 +49,7 @@ type BarChart struct {
 
 // NewBarChart creates a new bar chart component
 func NewBarChart() *BarChart {
-	return &BarChart{
-		Box:         tview.NewBox(),
+	c := &BarChart{
 		autoScale:   true,
 		orientation: BarHorizontal,
 		showValues:  true,
@@ -66,6 +59,8 @@ func NewBarChart() *BarChart {
 		filledChar:  '█',
 		emptyChar:   '░',
 	}
+	c.initWidget(tview.NewBox())
+	return c
 }
 
 // --- Configuration (Fluent API) ---
@@ -253,19 +248,16 @@ func (c *BarChart) Draw(screen tcell.Screen) {
 	defer c.mu.RUnlock()
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
+	th := c.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 
 	// Clear area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	if len(c.items) == 0 {
 		return
@@ -280,11 +272,7 @@ func (c *BarChart) Draw(screen tcell.Screen) {
 	if c.title != "" {
 		titleStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 		col := chartX + (chartWidth-len(c.title))/2
-		for i, r := range c.title {
-			if col+i < chartX+chartWidth {
-				screen.SetContent(col+i, chartY, r, nil, titleStyle)
-			}
-		}
+		drawText(screen, col, chartY, chartX+chartWidth-col, c.title, titleStyle)
 		chartY++
 		chartHeight--
 	}
@@ -349,11 +337,7 @@ func (c *BarChart) drawHorizontal(screen tcell.Screen, x, y, width, height int, 
 		// Draw label
 		if c.showLabels && item.Label != "" {
 			labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
-			for j, r := range item.Label {
-				if x+j < x+labelWidth-1 {
-					screen.SetContent(x+j, barY, r, nil, labelStyle)
-				}
-			}
+			drawText(screen, x, barY, labelWidth-1, item.Label, labelStyle)
 		}
 
 		// Calculate filled width
@@ -389,11 +373,7 @@ func (c *BarChart) drawHorizontal(screen tcell.Screen, x, y, width, height int, 
 			valueStr := formatFloat(item.Value, c.valueFormat)
 			valueStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 			valueX := barX + barWidth + 1
-			for j, r := range valueStr {
-				if valueX+j < x+width {
-					screen.SetContent(valueX+j, barY, r, nil, valueStyle)
-				}
-			}
+			drawText(screen, valueX, barY, x+width-valueX, valueStr, valueStyle)
 		}
 	}
 }

@@ -3,8 +3,6 @@ package components
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // ButtonVariant defines the visual style of a button.
@@ -26,7 +24,7 @@ const (
 // Button is a clickable button component.
 // It wraps button functionality with themed defaults and a cleaner API.
 type Button struct {
-	*tview.Box
+	widgetBase
 
 	label    string
 	variant  ButtonVariant
@@ -38,15 +36,11 @@ type Button struct {
 
 // NewButton creates a new Button with the given label.
 func NewButton(label string) *Button {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
 	b := &Button{
-		Box:     box,
 		label:   label,
 		variant: ButtonDefault,
 	}
-
+	b.initWidget(tview.NewBox())
 	return b
 }
 
@@ -97,39 +91,40 @@ func (b *Button) Draw(screen tcell.Screen) {
 
 	// Get colors based on variant and state
 	var bgColor, fgColor tcell.Color
+	th := b.th()
 
 	if b.disabled {
-		bgColor = theme.BgLight()
-		fgColor = theme.FgMuted()
+		bgColor = th.BgLight()
+		fgColor = th.FgMuted()
 	} else if b.focused {
 		switch b.variant {
 		case ButtonDanger:
-			bgColor = theme.Error()
-			fgColor = theme.Bg()
+			bgColor = th.Error()
+			fgColor = th.Bg()
 		case ButtonGhost:
-			bgColor = theme.Accent()
-			fgColor = theme.Bg()
+			bgColor = th.Accent()
+			fgColor = th.Bg()
 		case ButtonSecondary:
-			bgColor = theme.AccentDim()
-			fgColor = theme.Bg()
+			bgColor = th.AccentDim()
+			fgColor = th.Bg()
 		default: // ButtonDefault, ButtonPrimary
-			bgColor = theme.Accent()
-			fgColor = theme.Bg()
+			bgColor = th.Accent()
+			fgColor = th.Bg()
 		}
 	} else {
 		switch b.variant {
 		case ButtonDanger:
-			bgColor = theme.BgLight()
-			fgColor = theme.Error()
+			bgColor = th.BgLight()
+			fgColor = th.Error()
 		case ButtonGhost:
-			bgColor = theme.Bg()
-			fgColor = theme.Accent()
+			bgColor = th.Bg()
+			fgColor = th.Accent()
 		case ButtonSecondary:
-			bgColor = theme.BgLight()
-			fgColor = theme.FgDim()
+			bgColor = th.BgLight()
+			fgColor = th.FgDim()
 		default: // ButtonDefault, ButtonPrimary
-			bgColor = theme.BgLight()
-			fgColor = theme.Accent()
+			bgColor = th.BgLight()
+			fgColor = th.Accent()
 		}
 	}
 
@@ -139,9 +134,7 @@ func (b *Button) Draw(screen tcell.Screen) {
 	buttonY := y + (height-1)/2
 
 	// Draw button background
-	for col := x; col < x+width; col++ {
-		screen.SetContent(col, buttonY, ' ', nil, style)
-	}
+	fillLine(screen, x, buttonY, width, style)
 
 	// Draw label centered
 	labelRunes := []rune(b.label)

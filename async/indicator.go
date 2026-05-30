@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 	"github.com/rivo/tview"
 )
 
@@ -417,7 +417,7 @@ func (p *primitiveIndicator) Hide() {
 	}
 }
 
-func (p *primitiveIndicator) Success() {}
+func (p *primitiveIndicator) Success()        {}
 func (p *primitiveIndicator) Error(err error) {}
 
 // --- Noop Indicator ---

@@ -3,9 +3,9 @@ package advanced
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 func init() {
@@ -67,7 +67,7 @@ func (d *FinderDemo) Component() tview.Primitive {
 const finderCode = `package main
 
 import (
-    "github.com/atterpac/jig/components"
+    "github.com/atterpac/dado/components"
 )
 
 // Create finder

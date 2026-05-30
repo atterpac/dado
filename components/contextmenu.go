@@ -1,8 +1,6 @@
 package components
 
 import (
-	"sync"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -31,7 +29,7 @@ type MenuSection struct {
 
 // ContextMenu is the popup menu component
 type ContextMenu struct {
-	*tview.Box
+	widgetBase
 
 	items         []MenuItem
 	sections      []MenuSection
@@ -48,20 +46,18 @@ type ContextMenu struct {
 	// Callbacks
 	onSelect func(item MenuItem)
 	onClose  func()
-
-	mu sync.RWMutex
 }
 
 // NewContextMenu creates a new context menu
 func NewContextMenu() *ContextMenu {
 	m := &ContextMenu{
-		Box:           tview.NewBox(),
 		items:         make([]MenuItem, 0),
 		sections:      make([]MenuSection, 0),
 		flatItems:     make([]MenuItem, 0),
 		selectedIndex: 0,
 		menuWidth:     20,
 	}
+	m.initWidget(tview.NewBox())
 	m.SetBorder(true)
 	return m
 }
@@ -471,9 +467,7 @@ func (m *ContextMenu) drawItem(screen tcell.Screen, x, y, width int, item MenuIt
 	}
 
 	// Clear line
-	for i := 0; i < width; i++ {
-		screen.SetContent(x+i, y, ' ', nil, style)
-	}
+	fillLine(screen, x, y, width, style)
 
 	col := x
 
@@ -492,13 +486,7 @@ func (m *ContextMenu) drawItem(screen tcell.Screen, x, y, width int, item MenuIt
 	}
 
 	// Draw label
-	for _, r := range item.Label {
-		if col >= x+width-2 {
-			break
-		}
-		screen.SetContent(col, y, r, nil, style)
-		col++
-	}
+	col = drawText(screen, col, y, (x+width-2)-col, item.Label, style)
 
 	// Draw submenu arrow or shortcut on right
 	if len(item.Submenu) > 0 {

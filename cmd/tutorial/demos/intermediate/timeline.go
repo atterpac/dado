@@ -5,9 +5,9 @@ import (
 
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 func init() {
@@ -73,8 +73,8 @@ const timelineCode = `package main
 
 import (
     "time"
-    "github.com/atterpac/jig/components"
-    "github.com/atterpac/jig/theme"
+    "github.com/atterpac/dado/components"
+    "github.com/atterpac/dado/theme"
 )
 
 // Create timeline

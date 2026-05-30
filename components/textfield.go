@@ -7,14 +7,13 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
-	"github.com/atterpac/jig/validators"
+	"github.com/atterpac/dado/validators"
 )
 
 // TextField is a single-line text input with validation.
 // It implements ValueProvider[string].
 type TextField struct {
-	*tview.Box
+	widgetBase
 	BaseEventEmitter
 
 	name        string
@@ -42,10 +41,11 @@ type TextField struct {
 
 // NewTextField creates a new TextField.
 func NewTextField(name string) *TextField {
-	return &TextField{
-		Box:  tview.NewBox(),
+	t := &TextField{
 		name: name,
 	}
+	t.initWidget(tview.NewBox())
+	return t
 }
 
 // SetLabel sets the field label.
@@ -143,7 +143,6 @@ func (t *TextField) SetOnSubmit(handler SubmitHandler) *TextField {
 	return t
 }
 
-
 // emitChange emits a change event to all handlers.
 func (t *TextField) emitChange(oldValue, newValue string) {
 	event := NewChangeEvent(t.name, oldValue, newValue)
@@ -209,26 +208,21 @@ func (t *TextField) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	errorColor := theme.Error()
-	borderColor := theme.Border()
-	borderFocusColor := theme.BorderFocus()
+	th := t.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	errorColor := th.Error()
+	borderColor := th.Border()
+	borderFocusColor := th.BorderFocus()
 
 	row := y
 
 	// Draw label if present
 	if t.label != "" && height > 1 {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, r := range t.label {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, t.label, labelStyle)
 		row++
 	}
 
@@ -273,20 +267,12 @@ func (t *TextField) Draw(screen tcell.Screen) {
 
 	// Clear input area
 	clearStyle := tcell.StyleDefault.Background(bgColor)
-	for col := x + 1; col < x+width-1; col++ {
-		screen.SetContent(col, row, ' ', nil, clearStyle)
-	}
+	fillLine(screen, x+1, row, width-2, clearStyle)
 
 	// Draw value or placeholder
 	if t.value == "" && !t.focused {
 		// Draw placeholder
-		col := inputX
-		for _, r := range t.placeholder {
-			if col < inputX+inputWidth {
-				screen.SetContent(col, row, r, nil, placeholderStyle)
-				col++
-			}
-		}
+		drawText(screen, inputX, row, inputWidth, t.placeholder, placeholderStyle)
 	} else {
 		// Draw value
 		visibleValue := t.value
@@ -342,13 +328,7 @@ func (t *TextField) Draw(screen tcell.Screen) {
 	// Draw error message if present
 	if t.error != "" && row < y+height {
 		errorStyle := tcell.StyleDefault.Background(bgColor).Foreground(errorColor)
-		col := x
-		for _, r := range "  " + t.error {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, errorStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, "  "+t.error, errorStyle)
 	}
 }
 
@@ -467,7 +447,7 @@ func (t *TextField) GetFieldHeight() int {
 // TextArea is a multi-line text input.
 // It implements ValueProvider[string].
 type TextArea struct {
-	*tview.Box
+	widgetBase
 	BaseEventEmitter
 
 	name        string
@@ -489,12 +469,13 @@ type TextArea struct {
 
 // NewTextArea creates a new TextArea.
 func NewTextArea(name string) *TextArea {
-	return &TextArea{
-		Box:      tview.NewBox(),
+	t := &TextArea{
 		name:     name,
 		lines:    []string{""},
 		maxLines: 100,
 	}
+	t.initWidget(tview.NewBox())
+	return t
 }
 
 // SetLabel sets the field label.
@@ -581,25 +562,20 @@ func (t *TextArea) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	borderColor := theme.Border()
-	borderFocusColor := theme.BorderFocus()
+	th := t.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	borderColor := th.Border()
+	borderFocusColor := th.BorderFocus()
 
 	row := y
 
 	// Draw label if present
 	if t.label != "" {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, r := range t.label {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, t.label, labelStyle)
 		row++
 	}
 
@@ -643,9 +619,7 @@ func (t *TextArea) Draw(screen tcell.Screen) {
 
 		// Clear line
 		clearStyle := tcell.StyleDefault.Background(bgColor)
-		for col := x + 1; col < x+width-1; col++ {
-			screen.SetContent(col, row, ' ', nil, clearStyle)
-		}
+		fillLine(screen, x+1, row, width-2, clearStyle)
 
 		if lineIdx < len(t.lines) {
 			line := t.lines[lineIdx]
@@ -670,14 +644,7 @@ func (t *TextArea) Draw(screen tcell.Screen) {
 			}
 		} else if lineIdx == 0 && len(t.lines) == 1 && t.lines[0] == "" && !t.focused {
 			// Draw placeholder on first empty line
-			col := x + 2
-			for _, r := range t.placeholder {
-				if col >= x+width-2 {
-					break
-				}
-				screen.SetContent(col, row, r, nil, placeholderStyle)
-				col++
-			}
+			drawText(screen, x+2, row, width-4, t.placeholder, placeholderStyle)
 		}
 		row++
 	}

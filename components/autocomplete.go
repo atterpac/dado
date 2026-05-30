@@ -6,7 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // Suggestion represents an autocomplete suggestion.
@@ -28,7 +28,7 @@ type HistoryProvider func(direction int) string
 
 // AutocompleteInput is an input field with autocomplete support.
 type AutocompleteInput struct {
-	*tview.Box
+	widgetBase
 	text           string
 	cursorPos      int
 	filteredSuggs  []Suggestion
@@ -50,25 +50,16 @@ type AutocompleteInput struct {
 	// Providers
 	suggestionFn SuggestionProvider
 	historyFn    HistoryProvider
-
-	subs Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (ai *AutocompleteInput) Subs() *Subscriptions { return &ai.subs }
 
 // NewAutocompleteInput creates a new autocomplete input field.
 func NewAutocompleteInput() *AutocompleteInput {
 	ai := &AutocompleteInput{
-		Box:            tview.NewBox(),
 		maxSuggestions: 8,
 		prompt:         "> ",
 		placeholder:    "Type to search...",
 	}
-	ai.SetBackgroundColor(theme.Bg())
-
-	ai.subs.Add(theme.Register(ai.Box))
-
+	ai.initWidget(tview.NewBox())
 	return ai
 }
 
@@ -241,15 +232,16 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 	}
 
 	// Colors
-	borderStyle := tcell.StyleDefault.Foreground(theme.PanelBorder()).Background(theme.Bg())
-	titleStyle := tcell.StyleDefault.Foreground(theme.Accent()).Background(theme.Bg()).Bold(true)
-	textStyle := tcell.StyleDefault.Foreground(theme.Fg()).Background(theme.Bg())
-	promptStyle := tcell.StyleDefault.Foreground(theme.Accent()).Background(theme.Bg())
-	placeholderStyle := tcell.StyleDefault.Foreground(theme.FgDim()).Background(theme.Bg())
-	hintStyle := tcell.StyleDefault.Foreground(theme.FgDim()).Background(theme.Bg())
-	suggestionStyle := tcell.StyleDefault.Foreground(theme.Fg()).Background(theme.BgLight())
-	selectedStyle := tcell.StyleDefault.Foreground(theme.Bg()).Background(theme.Accent())
-	categoryStyle := tcell.StyleDefault.Foreground(theme.FgDim()).Background(theme.BgLight())
+	th := ai.th()
+	borderStyle := tcell.StyleDefault.Foreground(th.PanelBorder()).Background(th.Bg())
+	titleStyle := tcell.StyleDefault.Foreground(th.Accent()).Background(th.Bg()).Bold(true)
+	textStyle := tcell.StyleDefault.Foreground(th.Fg()).Background(th.Bg())
+	promptStyle := tcell.StyleDefault.Foreground(th.Accent()).Background(th.Bg())
+	placeholderStyle := tcell.StyleDefault.Foreground(th.FgDim()).Background(th.Bg())
+	hintStyle := tcell.StyleDefault.Foreground(th.FgDim()).Background(th.Bg())
+	suggestionStyle := tcell.StyleDefault.Foreground(th.Fg()).Background(th.BgLight())
+	selectedStyle := tcell.StyleDefault.Foreground(th.Bg()).Background(th.Accent())
+	categoryStyle := tcell.StyleDefault.Foreground(th.FgDim()).Background(th.BgLight())
 
 	// Calculate content area (inside border)
 	inputRows := 3
@@ -270,50 +262,27 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 	// Draw title if set
 	if ai.title != "" {
 		title := " " + ai.title + " "
-		titleRunes := []rune(title)
 		titleX := x + 2
-		for i, r := range titleRunes {
-			if titleX+i >= x+width-1 {
-				break
-			}
-			screen.SetContent(titleX+i, y, r, nil, titleStyle)
-		}
+		drawText(screen, titleX, y, x+width-1-titleX, title, titleStyle)
 	}
 
 	// Draw prompt and input
 	contentY := y + 1
 	contentX := x + 2
 
-	for _, r := range []rune(ai.prompt) {
-		if contentX >= x+width-2 {
-			break
-		}
-		screen.SetContent(contentX, contentY, r, nil, promptStyle)
-		contentX++
-	}
+	contentX = drawText(screen, contentX, contentY, x+width-2-contentX, ai.prompt, promptStyle)
 
 	// Draw input text or placeholder
 	if ai.text == "" && ai.placeholder != "" {
-		for i, r := range []rune(ai.placeholder) {
-			if contentX+i >= x+width-2 {
-				break
-			}
-			screen.SetContent(contentX+i, contentY, r, nil, placeholderStyle)
-		}
+		drawText(screen, contentX, contentY, x+width-2-contentX, ai.placeholder, placeholderStyle)
 	} else {
-		inputRunes := []rune(ai.text)
-		for i, r := range inputRunes {
-			if contentX+i >= x+width-2 {
-				break
-			}
-			screen.SetContent(contentX+i, contentY, r, nil, textStyle)
-		}
+		drawText(screen, contentX, contentY, x+width-2-contentX, ai.text, textStyle)
 	}
 
 	// Draw cursor
 	cursorX := contentX + ai.cursorPos
 	if cursorX < x+width-2 {
-		cursorStyle := tcell.StyleDefault.Foreground(theme.Bg()).Background(theme.Fg())
+		cursorStyle := tcell.StyleDefault.Foreground(th.Bg()).Background(th.Fg())
 		if ai.cursorPos < len(ai.text) {
 			r := []rune(ai.text)[ai.cursorPos]
 			screen.SetContent(cursorX, contentY, r, nil, cursorStyle)
@@ -372,28 +341,18 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 				}
 
 				// Clear row
-				for cx := suggX + 1; cx < suggX+suggWidth-1; cx++ {
-					screen.SetContent(cx, rowY, ' ', nil, style)
-				}
+				fillLine(screen, suggX+1, rowY, suggWidth-2, style)
 
 				// Draw category tag if present
 				textOffset := suggX + 2
 				if sugg.Category != "" {
 					catTag := "[" + sugg.Category + "]"
-					for ci, r := range []rune(catTag) {
-						if suggX+2+ci < suggX+suggWidth-1 {
-							screen.SetContent(suggX+2+ci, rowY, r, nil, catStyle)
-						}
-					}
+					drawText(screen, suggX+2, rowY, suggWidth-3, catTag, catStyle)
 					textOffset = suggX + 2 + len([]rune(catTag)) + 1
 				}
 
 				// Draw suggestion text
-				for ti, r := range []rune(sugg.Text) {
-					if textOffset+ti < suggX+suggWidth-1 {
-						screen.SetContent(textOffset+ti, rowY, r, nil, style)
-					}
-				}
+				drawText(screen, textOffset, rowY, suggX+suggWidth-1-textOffset, sugg.Text, style)
 
 				// Draw description if space permits
 				if sugg.Description != "" {
@@ -404,11 +363,7 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 						if i == ai.selectedIndex {
 							descStyle = selectedStyle
 						}
-						for di, r := range []rune(desc) {
-							if descOffset+di < suggX+suggWidth-2 {
-								screen.SetContent(descOffset+di, rowY, r, nil, descStyle)
-							}
-						}
+						drawText(screen, descOffset, rowY, suggX+suggWidth-2-descOffset, desc, descStyle)
 					}
 				}
 

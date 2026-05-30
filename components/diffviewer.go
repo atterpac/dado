@@ -8,19 +8,17 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // DiffLineType indicates the type of diff line
 type DiffLineType int
 
 const (
-	DiffLineContext  DiffLineType = iota // Unchanged line
-	DiffLineAdded                        // Added line (+)
-	DiffLineRemoved                      // Removed line (-)
-	DiffLineHeader                       // Hunk header (@@ ... @@)
-	DiffLineFile                         // File header (diff --git, ---, +++)
+	DiffLineContext DiffLineType = iota // Unchanged line
+	DiffLineAdded                       // Added line (+)
+	DiffLineRemoved                     // Removed line (-)
+	DiffLineHeader                      // Hunk header (@@ ... @@)
+	DiffLineFile                        // File header (diff --git, ---, +++)
 )
 
 // DiffLine represents a single line in the diff
@@ -60,7 +58,7 @@ type DiffStats struct {
 
 // DiffViewer displays diff content with syntax highlighting
 type DiffViewer struct {
-	*tview.Box
+	widgetBase
 
 	result        *DiffResult
 	lines         []DiffLine // Flattened lines for display
@@ -77,18 +75,19 @@ type DiffViewer struct {
 	showSelection    bool // Show selection indicators
 
 	// Callbacks
-	onLineSelect   func(line DiffLine)
-	onHunkAction   func(hunkIndex int, lines []DiffLine) // Called for hunk-level operations
-	onLinesAction  func(lines []DiffLine)                // Called for selected lines operations
+	onLineSelect  func(line DiffLine)
+	onHunkAction  func(hunkIndex int, lines []DiffLine) // Called for hunk-level operations
+	onLinesAction func(lines []DiffLine)                // Called for selected lines operations
 }
 
 // NewDiffViewer creates a new diff viewer component
 func NewDiffViewer() *DiffViewer {
-	return &DiffViewer{
-		Box:             tview.NewBox(),
+	d := &DiffViewer{
 		showLineNumbers: true,
 		contextLines:    3,
 	}
+	d.initWidget(tview.NewBox())
+	return d
 }
 
 // SetDiff computes and displays diff between old and new content
@@ -363,15 +362,16 @@ func (d *DiffViewer) Draw(screen tcell.Screen) {
 		return
 	}
 
-	// Colors (read at draw time per jig rules)
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	addedColor := theme.Success()
-	removedColor := theme.Error()
-	headerColor := theme.Info()
-	warningColor := theme.Warning()
+	// Colors (read at draw time per dado rules)
+	th := d.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	addedColor := th.Success()
+	removedColor := th.Error()
+	headerColor := th.Info()
+	warningColor := th.Warning()
 
 	// Ensure selection is visible
 	d.ensureVisible()
@@ -417,9 +417,7 @@ func (d *DiffViewer) Draw(screen tcell.Screen) {
 		}
 
 		// Clear the row
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, rowY, ' ', nil, lineStyle)
-		}
+		fillLine(screen, x, rowY, width, lineStyle)
 
 		col := x
 

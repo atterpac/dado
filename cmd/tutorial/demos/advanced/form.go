@@ -3,10 +3,10 @@ package advanced
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
-	"github.com/atterpac/jig/validators"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
+	"github.com/atterpac/dado/validators"
 )
 
 func init() {
@@ -31,19 +31,19 @@ func (d *FormDemo) Component() tview.Primitive {
 	// Build a form using the FormBuilder
 	d.form = components.NewFormBuilder().
 		Text("username", "Username").
-			Placeholder("Enter username").
-			Validate(validators.Required(), validators.MinLength(3)).
-			Done().
+		Placeholder("Enter username").
+		Validate(validators.Required(), validators.MinLength(3)).
+		Done().
 		Text("email", "Email").
-			Placeholder("user@example.com").
-			Validate(validators.Required(), validators.Email()).
-			Done().
+		Placeholder("user@example.com").
+		Validate(validators.Required(), validators.Email()).
+		Done().
 		Select("role", "Role", []string{"Admin", "User", "Guest"}).
-			Default("User").
-			Done().
+		Default("User").
+		Done().
 		Checkbox("newsletter", "Subscribe to newsletter").
-			Checked(true).
-			Done().
+		Checked(true).
+		Done().
 		OnSubmit(func(values map[string]any) {
 			// Handle form submission
 		}).
@@ -61,8 +61,8 @@ func (d *FormDemo) Component() tview.Primitive {
 const formCode = `package main
 
 import (
-    "github.com/atterpac/jig/components"
-    "github.com/atterpac/jig/validators"
+    "github.com/atterpac/dado/components"
+    "github.com/atterpac/dado/validators"
 )
 
 // Build a form using FormBuilder

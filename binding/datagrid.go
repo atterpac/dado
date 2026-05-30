@@ -3,8 +3,8 @@ package binding
 import (
 	"sync"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 // DataGridBinding binds typed data to a DataGrid component.
@@ -12,8 +12,8 @@ import (
 type DataGridBinding[T any] struct {
 	grid      *components.DataGrid
 	data      []T
-	colMapper func(T) []string       // Convert item to column string values
-	colNames  func() []string         // Column names
+	colMapper func(T) []string                         // Convert item to column string values
+	colNames  func() []string                          // Column names
 	fetcher   func(start, count int) ([]T, int, error) // Lazy: fetch page, returns (items, total, err)
 
 	mu sync.RWMutex
@@ -171,11 +171,11 @@ func (b *DataGridBinding[T]) rebuildSource() {
 
 // bindingLazySource implements DataGridSource with lazy fetching via the binding's fetcher.
 type bindingLazySource[T any] struct {
-	binding   *DataGridBinding[T]
-	total     int
-	colDefs   []components.GridColumn
-	cache     map[int][]components.GridCell
-	cacheMu   sync.RWMutex
+	binding *DataGridBinding[T]
+	total   int
+	colDefs []components.GridColumn
+	cache   map[int][]components.GridCell
+	cacheMu sync.RWMutex
 }
 
 // NewLazySource creates a lazy-loading DataGridSource backed by the binding's fetcher.
@@ -196,8 +196,8 @@ func (b *DataGridBinding[T]) NewLazySource(totalCount int) *bindingLazySource[T]
 	return src
 }
 
-func (s *bindingLazySource[T]) RowCount() int             { return s.total }
-func (s *bindingLazySource[T]) ColCount() int              { return len(s.colDefs) }
+func (s *bindingLazySource[T]) RowCount() int                    { return s.total }
+func (s *bindingLazySource[T]) ColCount() int                    { return len(s.colDefs) }
 func (s *bindingLazySource[T]) Columns() []components.GridColumn { return s.colDefs }
 
 func (s *bindingLazySource[T]) Cell(row, col int) components.GridCell {

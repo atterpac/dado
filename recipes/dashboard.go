@@ -7,18 +7,18 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/nav"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/nav"
+	"github.com/atterpac/dado/theme"
 )
 
 // DashboardSection represents a section in the dashboard.
 type DashboardSection struct {
-	Title    string
-	Span     int           // number of columns to span (1-4)
-	Content  tview.Primitive
-	Refresh  time.Duration // refresh interval, 0 for no auto-refresh
-	OnRefresh func()       // called on refresh
+	Title     string
+	Span      int // number of columns to span (1-4)
+	Content   tview.Primitive
+	Refresh   time.Duration // refresh interval, 0 for no auto-refresh
+	OnRefresh func()        // called on refresh
 }
 
 // Dashboard is a multi-pane status dashboard.

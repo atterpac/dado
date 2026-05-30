@@ -47,8 +47,8 @@ func TestPublishAndSubscribe(t *testing.T) {
 	t.Cleanup(b.Close)
 
 	var (
-		mu   sync.Mutex
-		got  []Event
+		mu  sync.Mutex
+		got []Event
 	)
 	b.Subscribe(nil, func(e Event) {
 		mu.Lock()

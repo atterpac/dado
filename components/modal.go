@@ -4,7 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // ModalBehavior configures how a modal handles input and lifecycle.
@@ -41,8 +41,8 @@ func DefaultModalBehavior() ModalBehavior {
 // ModalConfig configures modal dimensions and behavior.
 type ModalConfig struct {
 	Title     string
-	Width     int  // Fixed width (0 = use min/max calculation)
-	Height    int  // Fixed height (0 = use min/max calculation)
+	Width     int // Fixed width (0 = use min/max calculation)
+	Height    int // Fixed height (0 = use min/max calculation)
 	MinWidth  int
 	MaxWidth  int
 	MinHeight int
@@ -249,11 +249,7 @@ func (m *Modal) drawBackdrop(screen tcell.Screen) {
 
 	style := tcell.StyleDefault.Background(darkBg)
 
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, style)
-		}
-	}
+	fillRect(screen, x, y, width, height, style)
 }
 
 // InputHandler handles input with base modal behavior.

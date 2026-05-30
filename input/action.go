@@ -6,7 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // KeyAction represents a single key binding with its handler.

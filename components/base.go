@@ -7,7 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 var componentIDCounter uint64
@@ -235,7 +235,7 @@ func (cb *ComponentBase) Start() {
 // Stop is called when the component is no longer the active view.
 // Releases all registered Subscriptions after the user-provided onStop
 // runs. If the wrapped primitive exposes a Subs() *Subscriptions
-// accessor (the convention used by jig's leaf widgets), its
+// accessor (the convention used by dado's leaf widgets), its
 // subscriptions are released as well so theme/binding hooks attached
 // inside the widget's own constructor are torn down with the component.
 func (cb *ComponentBase) Stop() {

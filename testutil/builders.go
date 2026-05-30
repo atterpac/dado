@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // TextFieldBuilder provides fluent test setup for TextField.

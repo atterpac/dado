@@ -1,18 +1,17 @@
 package components
 
 import (
-	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // ProgressBar is a horizontal progress bar component.
 type ProgressBar struct {
-	*tview.Box
+	widgetBase
 
 	progress       float64 // 0.0 to 1.0
 	label          string
@@ -28,12 +27,13 @@ type ProgressBar struct {
 
 // NewProgressBar creates a new ProgressBar.
 func NewProgressBar() *ProgressBar {
-	return &ProgressBar{
-		Box:            tview.NewBox(),
+	p := &ProgressBar{
 		showPercentage: true,
 		filledChar:     '█',
 		emptyChar:      '░',
 	}
+	p.initWidget(tview.NewBox())
+	return p
 }
 
 // SetProgress sets the progress (0.0 to 1.0).
@@ -90,24 +90,19 @@ func (p *ProgressBar) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	successColor := theme.Success()
+	th := p.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	successColor := th.Success()
 
 	row := y
 
 	// Draw label if present
 	if p.label != "" && height > 1 {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, r := range p.label {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, p.label, labelStyle)
 		row++
 	}
 
@@ -145,12 +140,7 @@ func (p *ProgressBar) Draw(screen tcell.Screen) {
 		percentStr := itoa(int(p.progress*100)) + "%"
 		percentStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 		col++ // space
-		for _, r := range percentStr {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, percentStyle)
-				col++
-			}
-		}
+		drawText(screen, col, row, x+width-col, percentStr, percentStyle)
 	}
 }
 
@@ -183,7 +173,7 @@ var spinnerFrames = map[SpinnerStyle][]string{
 
 // Spinner is an animated loading indicator.
 type Spinner struct {
-	*tview.Box
+	widgetBase
 
 	style    SpinnerStyle
 	label    string
@@ -191,17 +181,17 @@ type Spinner struct {
 	running  bool
 	interval time.Duration
 
-	mu     sync.Mutex
 	stopCh chan struct{}
 }
 
 // NewSpinner creates a new Spinner.
 func NewSpinner() *Spinner {
-	return &Spinner{
-		Box:      tview.NewBox(),
+	s := &Spinner{
 		style:    SpinnerDots,
 		interval: 100 * time.Millisecond,
 	}
+	s.initWidget(tview.NewBox())
+	return s
 }
 
 // SetStyle sets the spinner style.
@@ -288,9 +278,10 @@ func (s *Spinner) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	accentColor := theme.Accent()
+	th := s.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	accentColor := th.Accent()
 
 	s.mu.Lock()
 	frames := spinnerFrames[s.style]
@@ -312,12 +303,7 @@ func (s *Spinner) Draw(screen tcell.Screen) {
 	if s.label != "" {
 		col++ // space
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		for _, r := range s.label {
-			if col < x+width {
-				screen.SetContent(col, y, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, col, y, x+width-col, s.label, labelStyle)
 	}
 }
 
@@ -328,7 +314,7 @@ func (s *Spinner) GetFieldHeight() int {
 
 // Gauge is a circular/arc style progress indicator.
 type Gauge struct {
-	*tview.Box
+	widgetBase
 
 	value    float64 // 0.0 to 1.0
 	label    string
@@ -338,10 +324,11 @@ type Gauge struct {
 
 // NewGauge creates a new Gauge.
 func NewGauge() *Gauge {
-	return &Gauge{
-		Box:      tview.NewBox(),
+	g := &Gauge{
 		maxValue: 100,
 	}
+	g.initWidget(tview.NewBox())
+	return g
 }
 
 // SetValue sets the gauge value (0.0 to 1.0).
@@ -384,13 +371,14 @@ func (g *Gauge) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
-	successColor := theme.Success()
-	warningColor := theme.Warning()
-	errorColor := theme.Error()
+	th := g.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
+	successColor := th.Success()
+	warningColor := th.Warning()
+	errorColor := th.Error()
 
 	// Determine color based on value
 	var valueColor tcell.Color
@@ -431,9 +419,7 @@ func (g *Gauge) Draw(screen tcell.Screen) {
 	clearStyle := tcell.StyleDefault.Background(bgColor)
 	for r := row; r < y+height-1; r++ {
 		screen.SetContent(x, r, '│', nil, borderStyle)
-		for col := x + 1; col < x+width-1; col++ {
-			screen.SetContent(col, r, ' ', nil, clearStyle)
-		}
+		fillLine(screen, x+1, r, width-2, clearStyle)
 		screen.SetContent(x+width-1, r, '│', nil, borderStyle)
 	}
 
@@ -492,7 +478,7 @@ func (g *Gauge) GetFieldHeight() int {
 
 // Sparkline is a minimal line chart for metrics.
 type Sparkline struct {
-	*tview.Box
+	widgetBase
 
 	values   []float64
 	maxValue float64
@@ -501,9 +487,9 @@ type Sparkline struct {
 
 // NewSparkline creates a new Sparkline.
 func NewSparkline() *Sparkline {
-	return &Sparkline{
-		Box: tview.NewBox(),
-	}
+	s := &Sparkline{}
+	s.initWidget(tview.NewBox())
+	return s
 }
 
 // SetValues sets the data points.
@@ -545,9 +531,10 @@ func (s *Sparkline) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	accentColor := theme.Accent()
+	th := s.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	accentColor := th.Accent()
 
 	// Sparkline characters (8 levels)
 	sparkChars := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
@@ -570,13 +557,7 @@ func (s *Sparkline) Draw(screen tcell.Screen) {
 	// Draw label if present
 	if s.label != "" && height > 1 {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, r := range s.label {
-			if col < x+width {
-				screen.SetContent(col, row, r, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, s.label, labelStyle)
 		row++
 	}
 

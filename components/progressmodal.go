@@ -2,7 +2,6 @@ package components
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -11,7 +10,7 @@ import (
 
 // ProgressModal is a modal dialog for displaying progress of long-running operations
 type ProgressModal struct {
-	*tview.Box
+	widgetBase
 
 	// Content
 	title      string
@@ -41,19 +40,17 @@ type ProgressModal struct {
 
 	// Focus management
 	previousFocus tview.Primitive
-
-	mu sync.RWMutex
 }
 
 // NewProgressModal creates a new progress modal
 func NewProgressModal() *ProgressModal {
 	p := &ProgressModal{
-		Box:          tview.NewBox(),
 		width:        50,
 		showBackdrop: true,
 		progress:     -1, // Indeterminate by default
 		spinnerStop:  make(chan struct{}),
 	}
+	p.initWidget(tview.NewBox())
 	p.SetBorder(true)
 	return p
 }
@@ -283,11 +280,7 @@ func (p *ProgressModal) Draw(screen tcell.Screen) {
 
 	// Draw modal background
 	bgStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
-	for y := modalY; y < modalY+modalHeight; y++ {
-		for x := modalX; x < modalX+modalWidth; x++ {
-			screen.SetContent(x, y, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, modalX, modalY, modalWidth, modalHeight, bgStyle)
 
 	// Draw border
 	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)

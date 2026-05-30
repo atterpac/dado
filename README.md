@@ -1,4 +1,4 @@
-# Jig
+# Dado
 
 > **Caution:** This is a personal project for building personal tools and may not work as expected.
 
@@ -11,12 +11,12 @@ A Go TUI component library built on [tview](https://github.com/rivo/tview) for c
 - **Runtime Theme Switching** - Press `T` to change themes on the fly
 - **Vim-style Navigation** - `j/k` movement, `g/G` for top/bottom
 - **Data Binding** - Two-way form and table binding with struct tags
-- **CLI Scaffolding** - `jig new <name>` to bootstrap projects
+- **CLI Scaffolding** - `dado new <name>` to bootstrap projects
 
 ## Installation
 
 ```bash
-go get github.com/atterpac/jig
+go get github.com/atterpac/dado
 ```
 
 ## Quick Start
@@ -25,8 +25,8 @@ go get github.com/atterpac/jig
 package main
 
 import (
-    "github.com/atterpac/jig/layout"
-    "github.com/atterpac/jig/theme"
+    "github.com/atterpac/dado/layout"
+    "github.com/atterpac/dado/theme"
 )
 
 func main() {

@@ -3,8 +3,6 @@ package components
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // MasterDetailConfig provides configuration for NewMasterDetailViewConfig.
@@ -33,7 +31,7 @@ type MasterDetailConfig struct {
 //	    SetDetailContent(preview).
 //	    SetRatio(0.6)
 type MasterDetailView struct {
-	*tview.Box
+	widgetBase
 
 	// Internal layout
 	split       *Split
@@ -60,10 +58,10 @@ type MasterDetailView struct {
 	// Search functionality
 	searchEnabled   bool
 	searchText      string
-	baseMasterTitle string // Original title without search suffix
-	onSearch        func(query string) // Called when search text changes
-	onSearchSubmit  func(query string) // Called when search is submitted
-	onSearchCancel  func()             // Called when search is cancelled
+	baseMasterTitle string                                              // Original title without search suffix
+	onSearch        func(query string)                                  // Called when search text changes
+	onSearchSubmit  func(query string)                                  // Called when search is submitted
+	onSearchCancel  func()                                              // Called when search is cancelled
 	showSearchFunc  func(currentText string, callbacks SearchCallbacks) // External search UI handler
 
 	// Callbacks
@@ -74,12 +72,7 @@ type MasterDetailView struct {
 
 	// Key hints (for nav.Component)
 	hints []KeyHint
-
-	subs Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (m *MasterDetailView) Subs() *Subscriptions { return &m.subs }
 
 // SearchCallbacks provides callbacks for search UI integration.
 type SearchCallbacks struct {
@@ -90,11 +83,7 @@ type SearchCallbacks struct {
 
 // NewMasterDetailView creates a new master-detail layout.
 func NewMasterDetailView() *MasterDetailView {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
 	m := &MasterDetailView{
-		Box:           box,
 		split:         NewSplit(),
 		masterPanel:   NewPanel(),
 		detailPanel:   NewPanel(),
@@ -116,7 +105,7 @@ func NewMasterDetailView() *MasterDetailView {
 	// Set initial panel content
 	m.updatePanels()
 
-	m.subs.Add(theme.Register(box))
+	m.initWidget(tview.NewBox())
 
 	return m
 }
@@ -604,7 +593,7 @@ func (m *MasterDetailView) Hints() []KeyHint {
 // Draw renders the master-detail view.
 func (m *MasterDetailView) Draw(screen tcell.Screen) {
 	// Update background color from theme
-	m.Box.SetBackgroundColor(theme.Bg())
+	m.Box.SetBackgroundColor(m.th().Bg())
 	m.Box.DrawForSubclass(screen, m)
 
 	x, y, width, height := m.GetInnerRect()

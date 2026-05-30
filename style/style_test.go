@@ -87,4 +87,3 @@ func TestColorTagDefaultEmpty(t *testing.T) {
 		t.Fatalf("ColorDefault should produce empty tag, got %q", got)
 	}
 }
-

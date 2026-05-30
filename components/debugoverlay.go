@@ -8,8 +8,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/bus"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/bus"
+	"github.com/atterpac/dado/theme"
 )
 
 // DebugOverlay is a runtime view of bus events. Subscribes to bus.Default()
@@ -236,4 +236,3 @@ func (d *DebugOverlay) toggleSource(src string) {
 		d.sources[src] = true
 	}
 }
-

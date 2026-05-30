@@ -3,7 +3,7 @@ package binding
 import (
 	"strings"
 
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // BindTableToSlice is a convenience function for simple table binding.

@@ -3,9 +3,6 @@ package components
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/theme"
 )
 
 // Align specifies text alignment.
@@ -33,30 +30,18 @@ const (
 // Panel is a container with rounded borders and optional title.
 // It delegates focus and input handling to its content.
 type Panel struct {
-	*tview.Box
+	widgetBase
 	content    tview.Primitive
 	title      string
 	titleColor tcell.Color // 0 means use theme default (Accent)
 	titleAlign TitleAlign  // Title alignment (default: center)
 	focused    bool        // Manual focus state for visual indication
-	subs       Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (p *Panel) Subs() *Subscriptions { return &p.subs }
 
 // NewPanel creates a new Panel container.
 func NewPanel() *Panel {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
-	p := &Panel{
-		Box: box,
-	}
-
-	// Register for automatic theme updates
-	p.subs.Add(theme.Register(box))
-
+	p := &Panel{}
+	p.initWidget(tview.NewBox())
 	return p
 }
 
@@ -111,17 +96,18 @@ func (p *Panel) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors from theme at draw time
-	bgColor := theme.Bg()
-	borderColor := theme.PanelBorder()
+	th := p.th()
+	bgColor := th.Bg()
+	borderColor := th.PanelBorder()
 	if p.focused {
-		borderColor = theme.Accent()
+		borderColor = th.Accent()
 	}
 	titleColor := p.titleColor
 	if titleColor == 0 {
 		if p.focused {
-			titleColor = theme.Accent()
+			titleColor = th.Accent()
 		} else {
-			titleColor = theme.PanelTitle()
+			titleColor = th.PanelTitle()
 		}
 	}
 
@@ -172,11 +158,7 @@ func (p *Panel) Draw(screen tcell.Screen) {
 
 	// Fill background
 	bgStyle := tcell.StyleDefault.Background(bgColor)
-	for row := y + 1; row < y+height-1; row++ {
-		for col := x + 1; col < x+width-1; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x+1, y+1, width-2, height-2, bgStyle)
 
 	// Draw content inside border
 	if p.content != nil {

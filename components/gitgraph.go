@@ -7,8 +7,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Box drawing characters for git graph
@@ -301,7 +299,7 @@ func parseMergeBranch(message string) string {
 
 // GitGraph is a git commit graph visualization component
 type GitGraph struct {
-	*tview.Box
+	widgetBase
 
 	graph         *GitGraphData
 	selectedIndex int
@@ -323,14 +321,15 @@ type GitGraph struct {
 
 // NewGitGraph creates a new git graph component
 func NewGitGraph() *GitGraph {
-	return &GitGraph{
-		Box:        tview.NewBox(),
+	g := &GitGraph{
 		showRefs:   true,
 		showHash:   true,
 		showAuthor: false,
 		showDate:   false,
 		dateFormat: "2006-01-02",
 	}
+	g.initWidget(tview.NewBox())
+	return g
 }
 
 // SetGraph sets the commit graph data to render
@@ -526,32 +525,29 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 		return
 	}
 
-	bgColor := theme.Bg()
+	th := g.th()
+	bgColor := th.Bg()
 
 	// Fill entire area with background color first
 	bgStyle := tcell.StyleDefault.Background(bgColor)
-	for row := 0; row < height; row++ {
-		for col := 0; col < width; col++ {
-			screen.SetContent(x+col, y+row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	if g.graph == nil || len(g.graph.Commits) == 0 {
 		return
 	}
 
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
-	accentColor := theme.Accent()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
+	accentColor := th.Accent()
 
 	laneColors := g.laneColors
 	if len(laneColors) == 0 {
 		laneColors = []tcell.Color{
-			theme.Accent(),
-			theme.Success(),
-			theme.Warning(),
-			theme.Info(),
-			theme.Error(),
+			th.Accent(),
+			th.Success(),
+			th.Warning(),
+			th.Info(),
+			th.Error(),
 			tcell.ColorMediumPurple,
 			tcell.ColorDarkCyan,
 		}
@@ -577,9 +573,7 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			rowStyle = rowStyle.Background(accentColor).Foreground(bgColor)
 		}
 
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, rowY, ' ', nil, rowStyle)
-		}
+		fillLine(screen, x, rowY, width, rowStyle)
 
 		col := x
 		states := rowStates[rowIndex]

@@ -3,8 +3,6 @@ package components
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // HintGrid renders a collection of KeyHint items in a multi-row pill layout.
@@ -12,25 +10,16 @@ import (
 // onto multiple rows when they don't fit the available width, and centers
 // each row horizontally.
 type HintGrid struct {
-	*tview.Box
+	widgetBase
 	hints []KeyHint
-	subs  Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (g *HintGrid) Subs() *Subscriptions { return &g.subs }
 
 // NewHintGrid creates a new hint grid.
 func NewHintGrid() *HintGrid {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
 	g := &HintGrid{
-		Box:   box,
 		hints: make([]KeyHint, 0),
 	}
-
-	g.subs.Add(theme.Register(box))
+	g.initWidget(tview.NewBox())
 	return g
 }
 
@@ -109,9 +98,10 @@ func (g *HintGrid) Draw(screen tcell.Screen) {
 		return
 	}
 
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	accentColor := theme.Accent()
+	th := g.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	accentColor := th.Accent()
 
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	keyStyle := tcell.StyleDefault.Background(accentColor).Foreground(bgColor)
@@ -127,9 +117,7 @@ func (g *HintGrid) Draw(screen tcell.Screen) {
 		}
 
 		// Clear the line
-		for i := x; i < x+width; i++ {
-			screen.SetContent(i, drawY, ' ', nil, bgStyle)
-		}
+		fillLine(screen, x, drawY, width, bgStyle)
 
 		// Calculate total width of this row for centering
 		rowWidth := 0
@@ -160,12 +148,7 @@ func (g *HintGrid) Draw(screen tcell.Screen) {
 
 			// Draw key pill: [Key]
 			keyText := "[" + h.Key + "]"
-			for _, r := range keyText {
-				if currentX < x+width {
-					screen.SetContent(currentX, drawY, r, nil, keyStyle)
-					currentX++
-				}
-			}
+			currentX = drawText(screen, currentX, drawY, x+width-currentX, keyText, keyStyle)
 
 			// Draw space
 			if currentX < x+width {
@@ -174,12 +157,7 @@ func (g *HintGrid) Draw(screen tcell.Screen) {
 			}
 
 			// Draw description
-			for _, r := range h.Description {
-				if currentX < x+width {
-					screen.SetContent(currentX, drawY, r, nil, descStyle)
-					currentX++
-				}
-			}
+			currentX = drawText(screen, currentX, drawY, x+width-currentX, h.Description, descStyle)
 		}
 	}
 }

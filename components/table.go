@@ -7,7 +7,7 @@ import (
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 )
 
 // TableCell defines styling for a single cell.
@@ -407,7 +407,6 @@ func (t *Table) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 		}
 	})
 }
-
 
 // notifySelectionChange calls the selection change callback.
 func (t *Table) notifySelectionChange() {

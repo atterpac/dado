@@ -3,8 +3,8 @@ package advanced
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
 )
 
 func init() {
@@ -63,7 +63,7 @@ index 1234567..abcdefg 100644
 const diffViewerCode = `package main
 
 import (
-    "github.com/atterpac/jig/components"
+    "github.com/atterpac/dado/components"
 )
 
 // Create diff viewer

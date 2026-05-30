@@ -5,8 +5,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // GraphNode represents a node in the 2D node graph.
@@ -61,7 +59,7 @@ func (d *NodeGraphData) AddEdge(edge *GraphEdge) {
 
 // NodeGraph is a 2D node graph visualization component.
 type NodeGraph struct {
-	*tview.Box
+	widgetBase
 
 	data           *NodeGraphData
 	nodeWidth      int
@@ -80,11 +78,12 @@ type NodeGraph struct {
 
 // NewNodeGraph creates a new NodeGraph component.
 func NewNodeGraph() *NodeGraph {
-	return &NodeGraph{
-		Box:        tview.NewBox(),
+	g := &NodeGraph{
 		nodeWidth:  18,
 		nodeHeight: 3,
 	}
+	g.initWidget(tview.NewBox())
+	return g
 }
 
 // SetData sets the graph data and computes layout.
@@ -217,7 +216,7 @@ func (g *NodeGraph) computeLayout() {
 
 	for level := 0; level <= maxLevel; level++ {
 		nodes := levelNodes[level]
-		startX := -(len(nodes) * horizSpacing) / 2 + horizSpacing/2
+		startX := -(len(nodes)*horizSpacing)/2 + horizSpacing/2
 
 		for i, nodeID := range nodes {
 			node := g.data.GetNode(nodeID)
@@ -255,16 +254,13 @@ func (g *NodeGraph) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	fgDimColor := theme.FgDim()
+	th := g.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	fgDimColor := th.FgDim()
 
 	// Clear the area
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, tcell.StyleDefault.Background(bgColor))
-		}
-	}
+	fillRect(screen, x, y, width, height, tcell.StyleDefault.Background(bgColor))
 
 	// Draw edges first (behind nodes)
 	for _, edge := range g.data.edges {
@@ -433,7 +429,8 @@ func (g *NodeGraph) drawEdge(screen tcell.Screen, viewX, viewY, viewWidth, viewH
 	toY := viewY + toNode.y - g.offsetY
 
 	// Determine edge style
-	edgeColor := theme.FgDim()
+	th := g.th()
+	edgeColor := th.FgDim()
 	var vertChar, horizChar, downChar rune
 	switch edge.Type {
 	case GraphEdgeSolid:
@@ -444,14 +441,14 @@ func (g *NodeGraph) drawEdge(screen tcell.Screen, viewX, viewY, viewWidth, viewH
 		vertChar = '┆'
 		horizChar = '╌'
 		downChar = '▼'
-		edgeColor = theme.Warning()
+		edgeColor = th.Warning()
 	case GraphEdgeDotted:
 		vertChar = '┊'
 		horizChar = '·'
 		downChar = '▼'
 	}
 
-	edgeStyle := tcell.StyleDefault.Background(theme.Bg()).Foreground(edgeColor)
+	edgeStyle := tcell.StyleDefault.Background(th.Bg()).Foreground(edgeColor)
 
 	// Draw simple vertical line for parent-child (assuming hierarchical layout)
 	if fromX == toX {
@@ -532,21 +529,22 @@ func (g *NodeGraph) truncateLabel(s string, maxLen int) string {
 }
 
 func (g *NodeGraph) getStatusColor(status string) tcell.Color {
+	th := g.th()
 	switch strings.ToLower(status) {
 	case "running":
-		return theme.Info()
+		return th.Info()
 	case "completed":
-		return theme.Success()
+		return th.Success()
 	case "failed":
-		return theme.Error()
+		return th.Error()
 	case "canceled", "cancelled":
-		return theme.Warning()
+		return th.Warning()
 	case "terminated":
-		return theme.Error()
+		return th.Error()
 	case "timedout", "timed_out":
-		return theme.Warning()
+		return th.Warning()
 	default:
-		return theme.FgDim()
+		return th.FgDim()
 	}
 }
 

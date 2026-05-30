@@ -202,14 +202,14 @@ func TestForm_Render(t *testing.T) {
 
 	form := NewFormBuilder().
 		Text("name", "Name").
-			Value("John Doe").
-			Done().
+		Value("John Doe").
+		Done().
 		Text("email", "Email").
-			Value("john@example.com").
-			Done().
+		Value("john@example.com").
+		Done().
 		Checkbox("subscribe", "Subscribe").
-			Checked(true).
-			Done().
+		Checked(true).
+		Done().
 		Build()
 
 	screen.drawPrimitive(form)

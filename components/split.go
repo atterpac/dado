@@ -3,8 +3,6 @@ package components
 import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // SplitDirection defines the split orientation.
@@ -19,7 +17,7 @@ const (
 
 // Split is a resizable split pane container.
 type Split struct {
-	*tview.Box
+	widgetBase
 
 	direction SplitDirection
 	ratio     float64 // 0.0 to 1.0, proportion of first pane
@@ -28,35 +26,24 @@ type Split struct {
 	first  tview.Primitive
 	second tview.Primitive
 
-	resizable    bool
-	showDivider  bool
-	focusedPane  int // 0 = first, 1 = second
+	resizable   bool
+	showDivider bool
+	focusedPane int // 0 = first, 1 = second
 
 	// Callbacks
 	onResize func(ratio float64)
-
-	subs Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (s *Split) Subs() *Subscriptions { return &s.subs }
 
 // NewSplit creates a new Split component.
 func NewSplit() *Split {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
 	s := &Split{
-		Box:         box,
 		direction:   SplitHorizontal,
 		ratio:       0.5,
 		minSize:     5,
 		resizable:   true,
 		showDivider: true,
 	}
-
-	s.subs.Add(theme.Register(box))
-
+	s.initWidget(tview.NewBox())
 	return s
 }
 
@@ -164,8 +151,9 @@ func (s *Split) FocusedPane() int {
 
 // Draw renders the split panes.
 func (s *Split) Draw(screen tcell.Screen) {
+	th := s.th()
 	// Update background color from theme
-	s.Box.SetBackgroundColor(theme.Bg())
+	s.Box.SetBackgroundColor(th.Bg())
 
 	s.Box.DrawForSubclass(screen, s)
 	x, y, width, height := s.GetInnerRect()
@@ -175,9 +163,9 @@ func (s *Split) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	borderColor := theme.Border()
-	borderFocusColor := theme.BorderFocus()
+	bgColor := th.Bg()
+	borderColor := th.Border()
+	borderFocusColor := th.BorderFocus()
 
 	var firstX, firstY, firstW, firstH int
 	var secondX, secondY, secondW, secondH int

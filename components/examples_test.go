@@ -3,8 +3,8 @@ package components_test
 import (
 	"fmt"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/validators"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/validators"
 )
 
 // This file contains testable examples that appear in godoc.
@@ -128,15 +128,15 @@ func ExampleNewFormBuilder() {
 	// Build a form with the FormBuilder API
 	form := components.NewFormBuilder().
 		Text("name", "Name").
-			Placeholder("Enter your name").
-			Validate(validators.Required()).
-			Done().
+		Placeholder("Enter your name").
+		Validate(validators.Required()).
+		Done().
 		Text("email", "Email").
-			Validate(validators.Required(), validators.Email()).
-			Done().
+		Validate(validators.Required(), validators.Email()).
+		Done().
 		Checkbox("notify", "Email notifications").
-			Checked(true).
-			Done().
+		Checked(true).
+		Done().
 		OnSubmit(func(values map[string]any) {
 			name := values["name"].(string)
 			email := values["email"].(string)

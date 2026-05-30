@@ -3,8 +3,8 @@ package basic
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
 )
 
 func init() {
@@ -45,7 +45,7 @@ func (d *TextAreaDemo) Component() tview.Primitive {
 const textAreaCode = `package main
 
 import (
-    "github.com/atterpac/jig/components"
+    "github.com/atterpac/dado/components"
 )
 
 // Create text area

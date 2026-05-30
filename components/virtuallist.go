@@ -5,8 +5,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // VirtualListItem represents a single item in the list
@@ -32,7 +30,7 @@ type RenderFunc func(index int, item VirtualListItem, width int, selected bool) 
 
 // VirtualList efficiently renders large lists using virtualization
 type VirtualList struct {
-	*tview.Box
+	widgetBase
 
 	// Data
 	items      []VirtualListItem
@@ -51,7 +49,7 @@ type VirtualList struct {
 	cacheMu    sync.RWMutex
 
 	// Options
-	overscan          int  // Items to render outside visible area
+	overscan          int // Items to render outside visible area
 	showScrollbar     bool
 	showIndex         bool
 	defaultItemHeight int
@@ -65,13 +63,14 @@ type VirtualList struct {
 
 // NewVirtualList creates a new virtual list component
 func NewVirtualList() *VirtualList {
-	return &VirtualList{
-		Box:               tview.NewBox(),
+	v := &VirtualList{
 		cache:             make(map[int]*VirtualListItem),
 		overscan:          5,
 		showScrollbar:     true,
 		defaultItemHeight: 1,
 	}
+	v.initWidget(tview.NewBox())
+	return v
 }
 
 // SetItems sets all items directly (for smaller lists)
@@ -369,12 +368,13 @@ func (v *VirtualList) Draw(screen tcell.Screen) {
 // prepareDraw fits the viewport, prefetches the visible window, and
 // returns the geometry the paint phase needs.
 func (v *VirtualList) prepareDraw(width, height int) vlSnapshot {
+	th := v.th()
 	snap := vlSnapshot{
 		contentWidth: width,
-		bg:           theme.Bg(),
-		fg:           theme.Fg(),
-		fgDim:        theme.FgDim(),
-		accent:       theme.Accent(),
+		bg:           th.Bg(),
+		fg:           th.Fg(),
+		fgDim:        th.FgDim(),
+		accent:       th.Accent(),
 	}
 	if v.showScrollbar && v.totalCount > height {
 		snap.contentWidth--
@@ -416,9 +416,7 @@ func (v *VirtualList) paint(screen tcell.Screen, x, y, width, height int, snap v
 			rowStyle = tcell.StyleDefault.Background(snap.accent).Foreground(snap.bg)
 		}
 
-		for col := x; col < x+snap.contentWidth; col++ {
-			screen.SetContent(col, rowY, ' ', nil, rowStyle)
-		}
+		fillLine(screen, x, rowY, snap.contentWidth, rowStyle)
 
 		col := x
 
@@ -461,8 +459,9 @@ func (v *VirtualList) paint(screen tcell.Screen, x, y, width, height int, snap v
 }
 
 func (v *VirtualList) drawScrollbar(screen tcell.Screen, x, y, height int) {
-	bgColor := theme.BgLight()
-	thumbColor := theme.FgDim()
+	th := v.th()
+	bgColor := th.BgLight()
+	thumbColor := th.FgDim()
 
 	// Calculate thumb size and position
 	thumbSize := height * height / v.totalCount

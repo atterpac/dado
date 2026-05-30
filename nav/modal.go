@@ -1,6 +1,6 @@
 package nav
 
-import "github.com/atterpac/jig/components"
+import "github.com/atterpac/dado/components"
 
 // Modal is the unified interface for modal components.
 // Implement this interface to have your component treated as a modal

@@ -29,8 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atterpac/jig/bus"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/bus"
+	"github.com/atterpac/dado/theme"
 )
 
 // publishLoader emits a loader lifecycle event when the bus is enabled.

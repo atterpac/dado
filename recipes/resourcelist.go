@@ -7,10 +7,10 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/input"
-	"github.com/atterpac/jig/nav"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/input"
+	"github.com/atterpac/dado/nav"
+	"github.com/atterpac/dado/theme"
 )
 
 // ResourceList is a K9s-style filterable resource list with actions.
@@ -49,11 +49,11 @@ type ResourceList[T any] struct {
 // NewResourceList creates a new ResourceList.
 func NewResourceList[T any]() *ResourceList[T] {
 	r := &ResourceList[T]{
-		Flex:     tview.NewFlex().SetDirection(tview.FlexRow),
-		table:    components.NewTable(),
+		Flex:      tview.NewFlex().SetDirection(tview.FlexRow),
+		table:     components.NewTable(),
 		filterBar: input.NewCommandBar(),
-		hintBar:  components.NewKeyHintBar(),
-		actions:  input.NewActionRegistry(),
+		hintBar:   components.NewKeyHintBar(),
+		actions:   input.NewActionRegistry(),
 	}
 
 	// Setup table

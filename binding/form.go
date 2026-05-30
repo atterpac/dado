@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // FormBinding provides two-way binding between a struct and a Form.

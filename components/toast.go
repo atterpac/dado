@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/theme"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -72,8 +72,8 @@ const (
 type ToastManager struct {
 	toasts          []*Toast
 	position        ToastPosition
-	maxVisible      int           // Max toasts shown at once
-	maxWidth        int           // Max toast width
+	maxVisible      int // Max toasts shown at once
+	maxWidth        int // Max toast width
 	defaultDuration time.Duration
 
 	app *tview.Application // For QueueUpdateDraw
@@ -346,11 +346,7 @@ func (m *ToastManager) drawToast(screen tcell.Screen, toast *Toast, screenWidth,
 	iconStyle := tcell.StyleDefault.Background(bgColor).Foreground(iconColor)
 
 	// Draw background
-	for row := y; row < y+toastHeight; row++ {
-		for col := x; col < x+toastWidth; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, toastWidth, toastHeight, bgStyle)
 
 	// Draw border
 	m.drawToastBorder(screen, x, y, toastWidth, toastHeight, borderStyle)

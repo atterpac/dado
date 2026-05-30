@@ -5,9 +5,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/theme"
 )
 
 // KeyHint represents a single key binding hint.
@@ -18,25 +15,17 @@ type KeyHint struct {
 
 // KeyHintBar displays key hints in a pill style at the bottom of views/modals.
 type KeyHintBar struct {
-	*tview.Box
+	widgetBase
 	Hints []KeyHint
-	subs  Subscriptions
 }
-
-// Subs returns the widget's subscription set; released by ComponentBase.Stop.
-func (k *KeyHintBar) Subs() *Subscriptions { return &k.subs }
 
 // NewKeyHintBar creates a new key hint bar.
 func NewKeyHintBar() *KeyHintBar {
-	box := tview.NewBox()
-	box.SetBackgroundColor(theme.Bg())
-
 	k := &KeyHintBar{
-		Box:   box,
 		Hints: make([]KeyHint, 0),
 	}
 
-	k.subs.Add(theme.Register(box))
+	k.initWidget(tview.NewBox())
 
 	return k
 }
@@ -69,9 +58,10 @@ func (k *KeyHintBar) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors from theme at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	accentColor := theme.Accent()
+	th := k.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	accentColor := th.Accent()
 
 	// Build the hint string and calculate positions
 	var parts []hintPart
@@ -113,9 +103,7 @@ func (k *KeyHintBar) Draw(screen tcell.Screen) {
 	descStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 
 	// Clear the line first
-	for i := x; i < x+width; i++ {
-		screen.SetContent(i, drawY, ' ', nil, bgStyle)
-	}
+	fillLine(screen, x, drawY, width, bgStyle)
 
 	// Draw hints
 	for _, part := range parts {
@@ -124,12 +112,7 @@ func (k *KeyHintBar) Draw(screen tcell.Screen) {
 			style = keyStyle
 		}
 
-		for _, r := range part.text {
-			if currentX < x+width {
-				screen.SetContent(currentX, drawY, r, nil, style)
-				currentX++
-			}
-		}
+		currentX = drawText(screen, currentX, drawY, x+width-currentX, part.text, style)
 	}
 }
 

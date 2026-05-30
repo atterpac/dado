@@ -3,9 +3,9 @@ package basic
 import (
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/cmd/tutorial/demos"
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
 )
 
 func init() {
@@ -56,8 +56,8 @@ func (d *EmptyStateDemo) Component() tview.Primitive {
 const emptyStateCode = `package main
 
 import (
-    "github.com/atterpac/jig/components"
-    "github.com/atterpac/jig/theme"
+    "github.com/atterpac/dado/components"
+    "github.com/atterpac/dado/theme"
 )
 
 // Create an empty state display

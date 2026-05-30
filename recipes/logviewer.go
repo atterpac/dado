@@ -7,10 +7,10 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/input"
-	"github.com/atterpac/jig/nav"
-	"github.com/atterpac/jig/theme"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/input"
+	"github.com/atterpac/dado/nav"
+	"github.com/atterpac/dado/theme"
 )
 
 // LogLine represents a single log entry.

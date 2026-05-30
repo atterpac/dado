@@ -4,9 +4,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/components"
-	"github.com/atterpac/jig/theme"
-	"github.com/atterpac/jig/theme/themes"
+	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/theme"
+	"github.com/atterpac/dado/theme/themes"
 )
 
 // ThemePicker is a modal for selecting themes.

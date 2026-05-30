@@ -5,7 +5,7 @@ import (
 	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // ListNavigator provides standard list navigation behavior.

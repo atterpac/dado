@@ -7,20 +7,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/atterpac/jig/components"
+	"github.com/atterpac/dado/components"
 )
 
 // mockComponent implements nav.Component for testing.
 type mockComponent struct {
 	tview.Primitive
-	name         string
-	startCalled  bool
-	stopCalled   bool
-	startCount   int
-	stopCount    int
-	hints        []components.KeyHint
-	onStart      func()
-	onStop       func()
+	name        string
+	startCalled bool
+	stopCalled  bool
+	startCount  int
+	stopCount   int
+	hints       []components.KeyHint
+	onStart     func()
+	onStop      func()
 }
 
 func newMockComponent(name string) *mockComponent {
@@ -511,11 +511,11 @@ func TestPages_LifecycleOrdering(t *testing.T) {
 	pages.Pop()
 
 	expected := []string{
-		"c1-start",  // Initial push
-		"c1-stop",   // c1 stopped when c2 pushed
-		"c2-start",  // c2 starts
-		"c2-stop",   // c2 stopped when popped
-		"c1-start",  // c1 re-started
+		"c1-start", // Initial push
+		"c1-stop",  // c1 stopped when c2 pushed
+		"c2-start", // c2 starts
+		"c2-stop",  // c2 stopped when popped
+		"c1-start", // c1 re-started
 	}
 	assert.Equal(t, expected, order)
 }

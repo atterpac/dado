@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Draw renders the ERD graph.
@@ -34,15 +32,12 @@ func (g *ERDGraph) Draw(screen tcell.Screen) {
 		}
 	}
 
-	bgColor := theme.Bg()
+	th := g.th()
+	bgColor := th.Bg()
 
 	// Clear the area.
 	bgStyle := tcell.StyleDefault.Background(bgColor)
-	for row := y; row < y+height; row++ {
-		for col := x; col < x+width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, x, y, width, height, bgStyle)
 
 	// Draw edges behind nodes. Inactive (dotted) first, then active (solid)
 	// so solid lines win at overlapping cells.
@@ -80,15 +75,16 @@ func setIfVisible(screen tcell.Screen, sx, sy, vx, vy, vw, vh int, ch rune, styl
 // drawNode renders a single table node with header, separator, and columns.
 // isNeighbor is true when this table is directly connected to the focused table via FK.
 func (g *ERDGraph) drawNode(screen tcell.Screen, vx, vy, vw, vh int, t *ERDTable, isNeighbor bool) {
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
+	th := g.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
 
 	isFocused := g.data.focusID == t.ID
-	borderColor := theme.Border()
+	borderColor := th.Border()
 	if isFocused {
-		borderColor = theme.BorderFocus()
+		borderColor = th.BorderFocus()
 	} else if isNeighbor {
-		borderColor = theme.Info()
+		borderColor = th.Info()
 	}
 
 	sx := vx + t.x - g.offsetX
@@ -105,15 +101,15 @@ func (g *ERDGraph) drawNode(screen tcell.Screen, vx, vy, vw, vh int, t *ERDTable
 
 	// Header row (row 1): │   tablename   │
 	headerY := sy + 1
-	accentColor := theme.Accent()
+	accentColor := th.Accent()
 	headerBg := accentColor
 	headerFg := bgColor
 	if !isFocused {
 		if isNeighbor {
-			headerBg = theme.Info()
+			headerBg = th.Info()
 			headerFg = bgColor
 		} else {
-			headerBg = theme.BgLight()
+			headerBg = th.BgLight()
 			headerFg = fgColor
 		}
 	}
@@ -145,9 +141,9 @@ func (g *ERDGraph) drawNode(screen tcell.Screen, vx, vy, vw, vh int, t *ERDTable
 	setIfVisible(screen, sx+t.width-1, sepY, vx, vy, vw, vh, '┤', borderStyle)
 
 	// Column rows
-	pkColor := theme.Warning()
-	fkColor := theme.Info()
-	dimColor := theme.FgDim()
+	pkColor := th.Warning()
+	fkColor := th.Info()
+	dimColor := th.FgDim()
 
 	for i, col := range t.Columns {
 		rowY := sy + 3 + i
@@ -228,7 +224,8 @@ func (g *ERDGraph) drawEdge(screen tcell.Screen, vx, vy, vw, vh int, rel *ERDRel
 		return
 	}
 
-	bgColor := theme.Bg()
+	th := g.th()
+	bgColor := th.Bg()
 	var edgeColor tcell.Color
 	var lineH, lineV rune
 
@@ -236,12 +233,12 @@ func (g *ERDGraph) drawEdge(screen tcell.Screen, vx, vy, vw, vh int, rel *ERDRel
 		// Active edges: solid lines, accent color.
 		lineH = '─'
 		lineV = '│'
-		edgeColor = theme.Accent()
+		edgeColor = th.Accent()
 	} else {
 		// Inactive edges: dotted lines, dim color.
 		lineH = '·'
 		lineV = '·'
-		edgeColor = theme.FgDim()
+		edgeColor = th.FgDim()
 	}
 
 	edgeStyle := tcell.StyleDefault.Background(bgColor).Foreground(edgeColor)
@@ -415,8 +412,9 @@ func (g *ERDGraph) drawFKInfoPanel(screen tcell.Screen, vx, vy, vw, vh int) {
 	}
 	var lines []fkLine
 
-	accentColor := theme.Accent()
-	infoColor := theme.Info()
+	th := g.th()
+	accentColor := th.Accent()
+	infoColor := th.Info()
 
 	for _, rel := range g.data.relations {
 		if rel.FromTable == focusID {
@@ -451,7 +449,7 @@ func (g *ERDGraph) drawFKInfoPanel(screen tcell.Screen, vx, vy, vw, vh int) {
 	// Add header.
 	headerLine := fmt.Sprintf(" %s — Foreign Keys ", focused.Name)
 	allLines := make([]fkLine, 0, len(lines)+1)
-	allLines = append(allLines, fkLine{text: headerLine, color: theme.Fg()})
+	allLines = append(allLines, fkLine{text: headerLine, color: th.Fg()})
 	allLines = append(allLines, lines...)
 
 	// Compute panel dimensions.
@@ -474,8 +472,8 @@ func (g *ERDGraph) drawFKInfoPanel(screen tcell.Screen, vx, vy, vw, vh int) {
 		py = vy
 	}
 
-	bgColor := theme.BgLight()
-	borderColor := theme.Border()
+	bgColor := th.BgLight()
+	borderColor := th.Border()
 	bgStyle := tcell.StyleDefault.Background(bgColor).Foreground(borderColor)
 
 	// Draw panel background and text.

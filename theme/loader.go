@@ -13,9 +13,9 @@ import (
 
 // ThemeConfig represents a theme loaded from a config file.
 type ThemeConfig struct {
-	Name   string       `json:"name"`
-	Colors ColorConfig  `json:"colors"`
-	Status []StatusDef  `json:"statuses,omitempty"`
+	Name   string      `json:"name"`
+	Colors ColorConfig `json:"colors"`
+	Status []StatusDef `json:"statuses,omitempty"`
 }
 
 // ColorConfig holds all theme color definitions.
@@ -65,22 +65,22 @@ type ConfigTheme struct {
 	config ThemeConfig
 	colors struct {
 		// Base colors
-		bg, bgLight, bgDark          tcell.Color
-		fg, fgDim, fgMuted           tcell.Color
+		bg, bgLight, bgDark tcell.Color
+		fg, fgDim, fgMuted  tcell.Color
 
 		// Accent colors
 		accent, accentDim, highlight tcell.Color
 
 		// Semantic colors
-		success, warning, err, info  tcell.Color
+		success, warning, err, info tcell.Color
 
 		// Border colors
-		border, borderFocus          tcell.Color
+		border, borderFocus tcell.Color
 
 		// UI element colors
-		header, menu, tableHeader    tcell.Color
-		key, crumb                   tcell.Color
-		panelBorder, panelTitle      tcell.Color
+		header, menu, tableHeader tcell.Color
+		key, crumb                tcell.Color
+		panelBorder, panelTitle   tcell.Color
 	}
 }
 

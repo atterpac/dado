@@ -39,32 +39,32 @@ const (
 	KeySpace     Key = tcell.KeyRune // Special handling needed
 
 	// Ctrl key combinations
-	KeyCtrlA     Key = tcell.KeyCtrlA
-	KeyCtrlB     Key = tcell.KeyCtrlB
-	KeyCtrlC     Key = tcell.KeyCtrlC
-	KeyCtrlD     Key = tcell.KeyCtrlD
-	KeyCtrlE     Key = tcell.KeyCtrlE
-	KeyCtrlF     Key = tcell.KeyCtrlF
-	KeyCtrlG     Key = tcell.KeyCtrlG
-	KeyCtrlH     Key = tcell.KeyCtrlH
-	KeyCtrlI     Key = tcell.KeyCtrlI
-	KeyCtrlJ     Key = tcell.KeyCtrlJ
-	KeyCtrlK     Key = tcell.KeyCtrlK
-	KeyCtrlL     Key = tcell.KeyCtrlL
-	KeyCtrlM     Key = tcell.KeyCtrlM
-	KeyCtrlN     Key = tcell.KeyCtrlN
-	KeyCtrlO     Key = tcell.KeyCtrlO
-	KeyCtrlP     Key = tcell.KeyCtrlP
-	KeyCtrlQ     Key = tcell.KeyCtrlQ
-	KeyCtrlR     Key = tcell.KeyCtrlR
-	KeyCtrlS     Key = tcell.KeyCtrlS
-	KeyCtrlT     Key = tcell.KeyCtrlT
-	KeyCtrlU     Key = tcell.KeyCtrlU
-	KeyCtrlV     Key = tcell.KeyCtrlV
-	KeyCtrlW     Key = tcell.KeyCtrlW
-	KeyCtrlX     Key = tcell.KeyCtrlX
-	KeyCtrlY     Key = tcell.KeyCtrlY
-	KeyCtrlZ     Key = tcell.KeyCtrlZ
+	KeyCtrlA Key = tcell.KeyCtrlA
+	KeyCtrlB Key = tcell.KeyCtrlB
+	KeyCtrlC Key = tcell.KeyCtrlC
+	KeyCtrlD Key = tcell.KeyCtrlD
+	KeyCtrlE Key = tcell.KeyCtrlE
+	KeyCtrlF Key = tcell.KeyCtrlF
+	KeyCtrlG Key = tcell.KeyCtrlG
+	KeyCtrlH Key = tcell.KeyCtrlH
+	KeyCtrlI Key = tcell.KeyCtrlI
+	KeyCtrlJ Key = tcell.KeyCtrlJ
+	KeyCtrlK Key = tcell.KeyCtrlK
+	KeyCtrlL Key = tcell.KeyCtrlL
+	KeyCtrlM Key = tcell.KeyCtrlM
+	KeyCtrlN Key = tcell.KeyCtrlN
+	KeyCtrlO Key = tcell.KeyCtrlO
+	KeyCtrlP Key = tcell.KeyCtrlP
+	KeyCtrlQ Key = tcell.KeyCtrlQ
+	KeyCtrlR Key = tcell.KeyCtrlR
+	KeyCtrlS Key = tcell.KeyCtrlS
+	KeyCtrlT Key = tcell.KeyCtrlT
+	KeyCtrlU Key = tcell.KeyCtrlU
+	KeyCtrlV Key = tcell.KeyCtrlV
+	KeyCtrlW Key = tcell.KeyCtrlW
+	KeyCtrlX Key = tcell.KeyCtrlX
+	KeyCtrlY Key = tcell.KeyCtrlY
+	KeyCtrlZ Key = tcell.KeyCtrlZ
 )
 
 // Bind creates a simple key binding that calls the handler when the key is pressed.
@@ -200,7 +200,7 @@ func (kb *KeyBindings) BindString(keyStr string, handler func()) *KeyBindings {
 	return kb
 }
 
-// OnKey is an alias for On that accepts jig Key constants.
+// OnKey is an alias for On that accepts dado Key constants.
 // Deprecated: Use Bind instead for simpler handlers.
 func (kb *KeyBindings) OnKey(key Key, handler Handler) *KeyBindings {
 	return kb.On(key, handler)

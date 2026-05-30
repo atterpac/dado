@@ -43,9 +43,9 @@ type Task struct {
 	ID          string
 	Name        string
 	Status      TaskStatus
-	Progress    float64   // 0.0 to 1.0 (-1 for indeterminate)
-	Message     string    // Current status message
-	Error       error     // Error if failed
+	Progress    float64 // 0.0 to 1.0 (-1 for indeterminate)
+	Message     string  // Current status message
+	Error       error   // Error if failed
 	StartedAt   time.Time
 	CompletedAt time.Time
 	Result      any // Result data on completion

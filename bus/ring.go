@@ -4,10 +4,10 @@ import "sync"
 
 // ring is a fixed-capacity circular buffer of Events with newest-last snapshot semantics.
 type ring struct {
-	mu    sync.Mutex
-	buf   []Event
-	head  int  // next write index
-	full  bool // true once the buffer has wrapped at least once
+	mu   sync.Mutex
+	buf  []Event
+	head int  // next write index
+	full bool // true once the buffer has wrapped at least once
 }
 
 func newRing(cap int) *ring {

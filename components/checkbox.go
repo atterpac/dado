@@ -5,14 +5,12 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	"github.com/atterpac/jig/theme"
 )
 
 // Checkbox is a boolean toggle component.
 // It implements ValueProvider[bool].
 type Checkbox struct {
-	*tview.Box
+	widgetBase
 	BaseEventEmitter
 
 	name    string
@@ -26,10 +24,11 @@ type Checkbox struct {
 
 // NewCheckbox creates a new Checkbox.
 func NewCheckbox(name string) *Checkbox {
-	return &Checkbox{
-		Box:  tview.NewBox(),
+	c := &Checkbox{
 		name: name,
 	}
+	c.initWidget(tview.NewBox())
+	return c
 }
 
 // SetLabel sets the checkbox label.
@@ -112,10 +111,11 @@ func (c *Checkbox) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	accentColor := theme.Accent()
-	successColor := theme.Success()
+	th := c.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	accentColor := th.Accent()
+	successColor := th.Success()
 
 	style := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
 	if c.focused {
@@ -144,12 +144,7 @@ func (c *Checkbox) Draw(screen tcell.Screen) {
 	// Draw label
 	col++
 	labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-	for _, r := range c.label {
-		if col < x+width {
-			screen.SetContent(col, y, r, nil, labelStyle)
-			col++
-		}
-	}
+	drawText(screen, col, y, x+width-col, c.label, labelStyle)
 }
 
 // InputHandler handles keyboard input.
@@ -203,7 +198,7 @@ func (c *Checkbox) GetFieldHeight() int {
 // RadioGroup is a single-choice option group.
 // It implements IndexedValueProvider[string].
 type RadioGroup struct {
-	*tview.Box
+	widgetBase
 	BaseEventEmitter
 
 	name     string
@@ -219,11 +214,12 @@ type RadioGroup struct {
 
 // NewRadioGroup creates a new RadioGroup.
 func NewRadioGroup(name string) *RadioGroup {
-	return &RadioGroup{
-		Box:      tview.NewBox(),
+	r := &RadioGroup{
 		name:     name,
 		selected: -1,
 	}
+	r.initWidget(tview.NewBox())
+	return r
 }
 
 // SetLabel sets the group label.
@@ -342,23 +338,18 @@ func (r *RadioGroup) Draw(screen tcell.Screen) {
 	}
 
 	// Get colors at draw time
-	bgColor := theme.Bg()
-	fgColor := theme.Fg()
-	accentColor := theme.Accent()
-	successColor := theme.Success()
+	th := r.th()
+	bgColor := th.Bg()
+	fgColor := th.Fg()
+	accentColor := th.Accent()
+	successColor := th.Success()
 
 	row := y
 
 	// Draw label if present
 	if r.label != "" {
 		labelStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
-		col := x
-		for _, ch := range r.label {
-			if col < x+width {
-				screen.SetContent(col, row, ch, nil, labelStyle)
-				col++
-			}
-		}
+		drawText(screen, x, row, width, r.label, labelStyle)
 		row++
 	}
 
@@ -383,9 +374,7 @@ func (r *RadioGroup) Draw(screen tcell.Screen) {
 
 		// Clear row
 		clearStyle := tcell.StyleDefault.Background(rowBg)
-		for c := x; c < x+width; c++ {
-			screen.SetContent(c, row, ' ', nil, clearStyle)
-		}
+		fillLine(screen, x, row, width, clearStyle)
 
 		// Draw radio button
 		radioStyle := rowStyle
@@ -409,12 +398,7 @@ func (r *RadioGroup) Draw(screen tcell.Screen) {
 
 		// Draw option label
 		col++
-		for _, ch := range opt {
-			if col < x+width {
-				screen.SetContent(col, row, ch, nil, rowStyle)
-				col++
-			}
-		}
+		drawText(screen, col, row, x+width-col, opt, rowStyle)
 		row++
 	}
 }

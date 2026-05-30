@@ -7,172 +7,46 @@ import (
 	"github.com/rivo/tview"
 )
 
-// Convenience color getters that wrap Get().Color()
-// These read from active theme at call time for live switching.
+// Convenience color getters forward to the default provider's accessors
+// (theme/provider_colors.go), which read the active theme at call time for
+// live switching and apply the package fallbacks when no theme is set.
 
 // Base colors
 
-func Bg() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Bg()
-	}
-	return tcell.ColorDefault
-}
-
-func BgLight() tcell.Color {
-	if t := Get(); t != nil {
-		return t.BgLight()
-	}
-	return tcell.ColorDefault
-}
-
-func BgDark() tcell.Color {
-	if t := Get(); t != nil {
-		return t.BgDark()
-	}
-	return tcell.ColorDefault
-}
-
-func Fg() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Fg()
-	}
-	return tcell.ColorDefault
-}
-
-func FgDim() tcell.Color {
-	if t := Get(); t != nil {
-		return t.FgDim()
-	}
-	return tcell.ColorGray
-}
-
-func FgMuted() tcell.Color {
-	if t := Get(); t != nil {
-		return t.FgMuted()
-	}
-	return tcell.ColorDarkGray
-}
+func Bg() tcell.Color      { return defaultProvider.Bg() }
+func BgLight() tcell.Color { return defaultProvider.BgLight() }
+func BgDark() tcell.Color  { return defaultProvider.BgDark() }
+func Fg() tcell.Color      { return defaultProvider.Fg() }
+func FgDim() tcell.Color   { return defaultProvider.FgDim() }
+func FgMuted() tcell.Color { return defaultProvider.FgMuted() }
 
 // Accent colors
 
-func Accent() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Accent()
-	}
-	return tcell.ColorBlue
-}
-
-func AccentDim() tcell.Color {
-	if t := Get(); t != nil {
-		return t.AccentDim()
-	}
-	return tcell.ColorBlue
-}
-
-func Highlight() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Highlight()
-	}
-	return tcell.ColorYellow
-}
+func Accent() tcell.Color    { return defaultProvider.Accent() }
+func AccentDim() tcell.Color { return defaultProvider.AccentDim() }
+func Highlight() tcell.Color { return defaultProvider.Highlight() }
 
 // Semantic colors
 
-func Success() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Success()
-	}
-	return tcell.ColorGreen
-}
-
-func Warning() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Warning()
-	}
-	return tcell.ColorYellow
-}
-
-func Error() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Error()
-	}
-	return tcell.ColorRed
-}
-
-func Info() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Info()
-	}
-	return tcell.ColorBlue
-}
+func Success() tcell.Color { return defaultProvider.Success() }
+func Warning() tcell.Color { return defaultProvider.Warning() }
+func Error() tcell.Color   { return defaultProvider.Error() }
+func Info() tcell.Color    { return defaultProvider.Info() }
 
 // Border colors
 
-func Border() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Border()
-	}
-	return tcell.ColorGray
-}
-
-func BorderFocus() tcell.Color {
-	if t := Get(); t != nil {
-		return t.BorderFocus()
-	}
-	return tcell.ColorWhite
-}
+func Border() tcell.Color      { return defaultProvider.Border() }
+func BorderFocus() tcell.Color { return defaultProvider.BorderFocus() }
 
 // UI element colors
 
-func Header() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Header()
-	}
-	return tcell.ColorDefault
-}
-
-func Menu() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Menu()
-	}
-	return tcell.ColorDefault
-}
-
-func TableHeader() tcell.Color {
-	if t := Get(); t != nil {
-		return t.TableHeader()
-	}
-	return tcell.ColorBlue
-}
-
-func Key() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Key()
-	}
-	return tcell.ColorBlue
-}
-
-func Crumb() tcell.Color {
-	if t := Get(); t != nil {
-		return t.Crumb()
-	}
-	return tcell.ColorBlue
-}
-
-func PanelBorder() tcell.Color {
-	if t := Get(); t != nil {
-		return t.PanelBorder()
-	}
-	return tcell.ColorGray
-}
-
-func PanelTitle() tcell.Color {
-	if t := Get(); t != nil {
-		return t.PanelTitle()
-	}
-	return tcell.ColorBlue
-}
+func Header() tcell.Color      { return defaultProvider.Header() }
+func Menu() tcell.Color        { return defaultProvider.Menu() }
+func TableHeader() tcell.Color { return defaultProvider.TableHeader() }
+func Key() tcell.Color         { return defaultProvider.Key() }
+func Crumb() tcell.Color       { return defaultProvider.Crumb() }
+func PanelBorder() tcell.Color { return defaultProvider.PanelBorder() }
+func PanelTitle() tcell.Color  { return defaultProvider.PanelTitle() }
 
 // Tag color functions for tview color tags [#hexcolor]text[-]
 

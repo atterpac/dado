@@ -9,8 +9,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/atterpac/jig/theme"
-	"github.com/atterpac/jig/theme/themes"
+	"github.com/atterpac/dado/theme"
+	"github.com/atterpac/dado/theme/themes"
 )
 
 // Splash displays a centered splash screen with optional gradient logo,
@@ -368,11 +368,7 @@ func (s *Splash) Draw(screen tcell.Screen) {
 	// Fill entire screen with background color
 	width, height := screen.Size()
 	bgStyle := tcell.StyleDefault.Background(theme.Bg())
-	for row := 0; row < height; row++ {
-		for col := 0; col < width; col++ {
-			screen.SetContent(col, row, ' ', nil, bgStyle)
-		}
-	}
+	fillRect(screen, 0, 0, width, height, bgStyle)
 
 	// Draw children on top
 	s.Flex.Draw(screen)

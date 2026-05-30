@@ -141,7 +141,10 @@ func (ts *TestScreen) DumpTrimmed() string {
 }
 
 // AssertContains fails the test if the screen does not contain the text.
-func (ts *TestScreen) AssertContains(t interface{ Helper(); Errorf(string, ...any) }, text string) {
+func (ts *TestScreen) AssertContains(t interface {
+	Helper()
+	Errorf(string, ...any)
+}, text string) {
 	t.Helper()
 	if !ts.ContainsText(text) {
 		t.Errorf("screen does not contain %q\n%s", text, ts.Dump())
@@ -149,7 +152,10 @@ func (ts *TestScreen) AssertContains(t interface{ Helper(); Errorf(string, ...an
 }
 
 // AssertNotContains fails the test if the screen contains the text.
-func (ts *TestScreen) AssertNotContains(t interface{ Helper(); Errorf(string, ...any) }, text string) {
+func (ts *TestScreen) AssertNotContains(t interface {
+	Helper()
+	Errorf(string, ...any)
+}, text string) {
 	t.Helper()
 	if ts.ContainsText(text) {
 		t.Errorf("screen should not contain %q\n%s", text, ts.Dump())
@@ -157,7 +163,10 @@ func (ts *TestScreen) AssertNotContains(t interface{ Helper(); Errorf(string, ..
 }
 
 // AssertTextAt fails the test if the text at (x, y) does not match.
-func (ts *TestScreen) AssertTextAt(t interface{ Helper(); Errorf(string, ...any) }, x, y int, expected string) {
+func (ts *TestScreen) AssertTextAt(t interface {
+	Helper()
+	Errorf(string, ...any)
+}, x, y int, expected string) {
 	t.Helper()
 	actual := ts.GetContent(x, y, len(expected))
 	if actual != expected {
