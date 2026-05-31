@@ -369,6 +369,11 @@ func (m *ContextMenu) Draw(screen tcell.Screen) {
 		return
 	}
 
+	th := m.th()
+	bg := th.Bg()
+	fg := th.Fg()
+	border := th.BorderFocus()
+
 	screenWidth, screenHeight := screen.Size()
 
 	// Calculate menu dimensions
@@ -389,19 +394,16 @@ func (m *ContextMenu) Draw(screen tcell.Screen) {
 		y = 0
 	}
 
-	// Draw background
-	bgStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	bgStyle := tcell.StyleDefault.Background(bg).Foreground(fg)
 	for row := y; row < y+menuHeight && row < screenHeight; row++ {
 		for col := x; col < x+m.menuWidth && col < screenWidth; col++ {
 			screen.SetContent(col, row, ' ', nil, bgStyle)
 		}
 	}
 
-	// Draw border
-	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+	borderStyle := tcell.StyleDefault.Background(bg).Foreground(border)
 	m.drawBorder(screen, x, y, m.menuWidth, menuHeight, borderStyle)
 
-	// Draw items
 	for i, item := range m.flatItems {
 		itemY := y + 1 + i
 		if itemY >= screenHeight-1 {
@@ -415,7 +417,6 @@ func (m *ContextMenu) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Draw active submenu
 	if m.activeSubmenu != nil {
 		m.activeSubmenu.Draw(screen)
 	}
@@ -450,61 +451,56 @@ func (m *ContextMenu) drawDivider(screen tcell.Screen, x, y, width int, style tc
 }
 
 func (m *ContextMenu) drawItem(screen tcell.Screen, x, y, width int, item MenuItem, selected bool) {
-	// Determine style based on state
-	style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
+	th := m.th()
+	bg := th.Bg()
+	fg := th.Fg()
+	dim := th.FgDim()
+	accent := th.Accent()
+	success := th.Success()
+	errColor := th.Error()
 
+	style := tcell.StyleDefault.Background(bg).Foreground(fg)
 	if item.Disabled {
-		style = style.Foreground(tcell.ColorDarkGray)
+		style = style.Foreground(dim)
 	} else if item.Danger {
-		style = style.Foreground(tcell.ColorRed)
+		style = style.Foreground(errColor)
 	}
-
 	if selected && !item.Disabled {
-		style = tcell.StyleDefault.Background(tcell.ColorBlue).Foreground(tcell.ColorWhite)
+		style = tcell.StyleDefault.Background(accent).Foreground(bg)
 		if item.Danger {
-			style = style.Background(tcell.ColorDarkRed)
+			style = tcell.StyleDefault.Background(errColor).Foreground(bg)
 		}
 	}
 
-	// Clear line
 	fillLine(screen, x, y, width, style)
 
 	col := x
-
-	// Draw checkbox or bullet
 	if item.Checked {
-		screen.SetContent(col, y, '●', nil, style.Foreground(tcell.ColorGreen))
+		screen.SetContent(col, y, '●', nil, style.Foreground(success))
 		col += 2
 	} else if item.Icon != "" {
 		for _, r := range item.Icon {
 			screen.SetContent(col, y, r, nil, style)
 			col++
 		}
-		col++ // Space after icon
+		col++
 	} else {
-		col += 2 // Indent
+		col += 2
 	}
 
-	// Draw label
 	col = drawText(screen, col, y, (x+width-2)-col, item.Label, style)
 
-	// Draw submenu arrow or shortcut on right
+	mutedStyle := style.Foreground(dim)
+	if selected {
+		mutedStyle = style // keep inverted bg, just slightly dimmer text isn't needed when selected
+	}
 	if len(item.Submenu) > 0 {
-		arrowX := x + width - 2
-		arrowStyle := style
-		if !selected {
-			arrowStyle = style.Foreground(tcell.ColorDarkGray)
-		}
-		screen.SetContent(arrowX, y, '→', nil, arrowStyle)
+		screen.SetContent(x+width-2, y, '→', nil, mutedStyle)
 	} else if item.Shortcut != "" {
-		shortcutStyle := style
-		if !selected {
-			shortcutStyle = style.Foreground(tcell.ColorDarkGray)
-		}
 		shortcutX := x + width - len(item.Shortcut) - 1
 		if shortcutX > col+2 {
 			for i, r := range item.Shortcut {
-				screen.SetContent(shortcutX+i, y, r, nil, shortcutStyle)
+				screen.SetContent(shortcutX+i, y, r, nil, mutedStyle)
 			}
 		}
 	}
