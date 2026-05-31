@@ -285,6 +285,25 @@ func (m *ContextMenu) ShowAt(x, y int) {
 	m.selectedIndex = m.findNextSelectable(-1)
 }
 
+// ShowCentered displays the menu centered within a screen of the given dimensions.
+func (m *ContextMenu) ShowCentered(screenW, screenH int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	menuHeight := len(m.flatItems) + 2
+	x := (screenW - m.menuWidth) / 2
+	y := (screenH - menuHeight) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	m.position.x = x
+	m.position.y = y
+	m.visible = true
+	m.selectedIndex = m.findNextSelectable(-1)
+}
+
 // Close closes the menu and any open submenus
 func (m *ContextMenu) Close() {
 	m.mu.Lock()
