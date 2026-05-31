@@ -18,7 +18,11 @@ func (g *ERDGraph) Draw(screen tcell.Screen) {
 	// Auto-center on first draw after data is set.
 	if g.needsCenter {
 		g.needsCenter = false
-		g.centerOnFocused()
+		if g.fitAll {
+			g.centerOnAll()
+		} else {
+			g.centerOnFocused()
+		}
 	}
 
 	// Precompute the set of tables connected to the focused table.

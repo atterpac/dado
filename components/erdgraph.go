@@ -76,6 +76,7 @@ type ERDGraph struct {
 
 	// Auto-center flag
 	needsCenter bool
+	fitAll      bool // center the whole graph bounds instead of focused node
 
 	// Focus state
 	focused bool
@@ -131,6 +132,14 @@ func (g *ERDGraph) SetSpacing(h, v int) *ERDGraph {
 	return g
 }
 
+// SetFit makes the initial viewport center the bounding box of all nodes rather
+// than the focused node. Useful for read-only/thumbnail views where all tables
+// should be visible at once.
+func (g *ERDGraph) SetFit(fit bool) *ERDGraph {
+	g.fitAll = fit
+	return g
+}
+
 // SetOnSelect sets the callback fired when the user presses Enter on a focused table.
 func (g *ERDGraph) SetOnSelect(fn func(table *ERDTable)) *ERDGraph {
 	g.onSelect = fn
@@ -183,6 +192,35 @@ func (g *ERDGraph) HasFocus() bool {
 }
 
 // centerOnFocused centers the viewport on the currently focused node.
+// centerOnAll centers the viewport so the bounding box of all nodes is centered.
+func (g *ERDGraph) centerOnAll() {
+	if g.data == nil || len(g.data.tables) == 0 {
+		return
+	}
+	_, _, width, height := g.GetInnerRect()
+	if width <= 0 || height <= 0 {
+		return
+	}
+	minX, minY := 1<<30, 1<<30
+	maxX, maxY := -1<<30, -1<<30
+	for _, t := range g.data.tables {
+		if t.x < minX {
+			minX = t.x
+		}
+		if t.y < minY {
+			minY = t.y
+		}
+		if t.x+t.width > maxX {
+			maxX = t.x + t.width
+		}
+		if t.y+t.height > maxY {
+			maxY = t.y + t.height
+		}
+	}
+	g.offsetX = minX + (maxX-minX)/2 - width/2
+	g.offsetY = minY + (maxY-minY)/2 - height/2
+}
+
 func (g *ERDGraph) centerOnFocused() {
 	if g.data == nil || g.data.focusID == "" {
 		return
