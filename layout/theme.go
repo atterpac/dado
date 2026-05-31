@@ -103,6 +103,11 @@ func sortedThemeNames(m map[string]theme.Theme) []string {
 	return names
 }
 
+// OpenThemeSelector opens the live-preview theme selector programmatically.
+// No-op if EnableThemes was not called or the selector is already open.
+// Must be called on the UI thread (or via QueueUpdateDraw).
+func (a *App) OpenThemeSelector() { a.openThemeSelector() }
+
 // openThemeSelector pushes the live-preview theme selector onto the page stack.
 func (a *App) openThemeSelector() {
 	ts := a.themeState
