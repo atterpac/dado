@@ -26,3 +26,17 @@ go.work.sum
 .DS_Store
 
 docs/static/
+
+# Generated test images — run `task docs:images` to write to docs/images/components/
+components/testdata/images/
+
+# Internal design / working docs and generated dashboard screenshots
+/docs/
+/components/docs/
+
+# docs-site (Astro): deps, build output, and generated assets/content
+docs-site/node_modules/
+docs-site/dist/
+docs-site/.astro/
+docs-site/public/images/
+docs-site/src/content/api/
