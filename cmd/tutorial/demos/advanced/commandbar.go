@@ -1,10 +1,10 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/input"
 	"github.com/atterpac/dado/theme"
 )
@@ -26,15 +26,14 @@ type CommandBarDemo struct {
 }
 
 // Component returns the demo component.
-func (d *CommandBarDemo) Component() tview.Primitive {
+func (d *CommandBarDemo) Component() core.Widget {
 	// Create command bar
 	cmdBar := input.NewCommandBar()
 	cmdBar.Show(input.CommandTypeFilter)
 
 	// Status text to show what's happening
-	status := tview.NewTextView()
+	status := core.NewTextView()
 	status.SetDynamicColors(true)
-	status.SetTextAlign(tview.AlignCenter)
 	status.SetBackgroundColor(theme.Bg())
 	status.SetText("[" + theme.TagFgDim() + "]Type to filter, Enter to submit, Esc to cancel[-]")
 
@@ -47,9 +46,8 @@ func (d *CommandBarDemo) Component() tview.Primitive {
 	})
 
 	// Instructions
-	instructions := tview.NewTextView()
+	instructions := core.NewTextView()
 	instructions.SetDynamicColors(true)
-	instructions.SetTextAlign(tview.AlignCenter)
 	instructions.SetBackgroundColor(theme.Bg())
 	instructions.SetText("CommandBar Demo\n\n" +
 		"[" + theme.TagFgDim() + "]Supports different modes:[-]\n" +
@@ -58,7 +56,7 @@ func (d *CommandBarDemo) Component() tview.Primitive {
 		"[" + theme.TagAccent() + "]?[-] Search mode")
 
 	// Layout
-	layout := tview.NewFlex().SetDirection(tview.FlexRow)
+	layout := core.NewFlex()
 	layout.SetBackgroundColor(theme.Bg())
 	layout.AddItem(instructions, 0, 1, false)
 	layout.AddItem(status, 3, 0, false)

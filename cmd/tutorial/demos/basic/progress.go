@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +26,7 @@ type ProgressDemo struct {
 }
 
 // Component returns the demo component.
-func (d *ProgressDemo) Component() tview.Primitive {
+func (d *ProgressDemo) Component() core.Widget {
 	d.showPercent = true
 
 	d.progress = components.NewProgressBar().

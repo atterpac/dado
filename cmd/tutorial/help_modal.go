@@ -2,16 +2,16 @@ package main
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
 // HelpModal displays help information.
 type HelpModal struct {
 	*components.Modal
-	content *tview.TextView
+	content *core.TextView
 	subs    components.Subscriptions
 }
 
@@ -20,11 +20,10 @@ func (m *HelpModal) Subs() *components.Subscriptions { return &m.subs }
 
 // NewHelpModal creates a new help modal.
 func NewHelpModal() *HelpModal {
-	content := tview.NewTextView()
+	content := core.NewTextView()
 	content.SetDynamicColors(true)
 	content.SetScrollable(true)
-	content.SetBackgroundColor(theme.Bg())
-	content.SetTextColor(theme.Fg())
+	content.Box.SetBackgroundColor(theme.Bg())
 
 	helpText := `[::b]Dado Tutorial - Keyboard Shortcuts[::-]
 
@@ -74,7 +73,7 @@ func NewHelpModal() *HelpModal {
 		content: content,
 	}
 
-	m.subs.Add(theme.Register(content))
+	m.subs.Add(theme.RegisterFn(func(c tcell.Color) { content.Box.SetBackgroundColor(c) }))
 
 	return m
 }
@@ -93,8 +92,8 @@ func (m *HelpModal) Hints() []components.KeyHint {
 }
 
 // Focus handles focus.
-func (m *HelpModal) Focus(delegate func(tview.Primitive)) {
-	delegate(m.content)
+func (m *HelpModal) Focus() {
+	m.content.Focus()
 }
 
 // HasFocus returns focus state.
@@ -102,28 +101,23 @@ func (m *HelpModal) HasFocus() bool {
 	return m.content.HasFocus()
 }
 
-// InputHandler handles keyboard input.
-func (m *HelpModal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				row, _ := m.content.GetScrollOffset()
-				m.content.ScrollTo(row+1, 0)
-				return
-			case 'k':
-				row, _ := m.content.GetScrollOffset()
-				if row > 0 {
-					m.content.ScrollTo(row-1, 0)
-				}
-				return
+func (m *HelpModal) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
+			row, _ := m.content.GetScrollOffset()
+			m.content.ScrollTo(row+1, 0)
+			return true
+		case 'k':
+			row, _ := m.content.GetScrollOffset()
+			if row > 0 {
+				m.content.ScrollTo(row-1, 0)
 			}
+			return true
 		}
+	}
 
-		// Pass to modal for Escape handling
-		if handler := m.Modal.InputHandler(); handler != nil {
-			handler(event, setFocus)
-		}
-	})
+	m.Modal.HandleKey(ev)
+	return false
 }

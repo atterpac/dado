@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -27,7 +27,7 @@ type TextFieldDemo struct {
 }
 
 // Component returns the demo component.
-func (d *TextFieldDemo) Component() tview.Primitive {
+func (d *TextFieldDemo) Component() core.Widget {
 	d.label = "Username"
 	d.placeholder = "Enter your username"
 

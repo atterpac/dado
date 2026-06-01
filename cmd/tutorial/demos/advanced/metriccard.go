@@ -4,10 +4,10 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -24,13 +24,13 @@ func init() {
 // MetricCardDemo demonstrates the MetricCard component.
 type MetricCardDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	cards     []*components.MetricCard
 	compact   bool
 }
 
 // Component returns the demo component.
-func (d *MetricCardDemo) Component() tview.Primitive {
+func (d *MetricCardDemo) Component() core.Widget {
 	d.compact = false
 
 	// Generate sparkline data
@@ -73,7 +73,7 @@ func (d *MetricCardDemo) Component() tview.Primitive {
 	d.cards = []*components.MetricCard{cpuCard, memCard, reqCard, errCard}
 
 	// Layout
-	d.container = tview.NewFlex().SetDirection(tview.FlexColumn)
+	d.container = core.NewFlex().SetDirection(core.Row)
 	for _, card := range d.cards {
 		d.container.AddItem(card, 0, 1, false)
 	}
@@ -96,7 +96,6 @@ func (d *MetricCardDemo) Component() tview.Primitive {
 
 const metricCardCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create a metric card
 card := components.NewMetricCard().

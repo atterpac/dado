@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -25,7 +25,7 @@ type TextAreaDemo struct {
 }
 
 // Component returns the demo component.
-func (d *TextAreaDemo) Component() tview.Primitive {
+func (d *TextAreaDemo) Component() core.Widget {
 	d.textarea = components.NewTextArea("description")
 	d.textarea.SetLabel("Description")
 	d.textarea.SetPlaceholder("Enter a detailed description...")

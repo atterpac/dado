@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -26,21 +26,21 @@ type SpinnerDemo struct {
 }
 
 // Component returns the demo component.
-func (d *SpinnerDemo) Component() tview.Primitive {
+func (d *SpinnerDemo) Component() core.Widget {
 	d.spinner = components.NewSpinner().
 		SetLabel("Loading...").
 		SetStyle(components.SpinnerDots)
 	d.spinner.Start()
 
 	// Layout with multiple spinners showing different styles
-	layout := tview.NewFlex().SetDirection(tview.FlexRow)
+	layout := core.NewFlex()
 	layout.SetBackgroundColor(theme.Bg())
 
 	// Add spinner
 	layout.AddItem(d.spinner, 1, 0, false)
 
 	// Show different styles
-	styles := tview.NewTextView()
+	styles := core.NewTextView()
 	styles.SetDynamicColors(true)
 	styles.SetBackgroundColor(theme.Bg())
 	styles.SetText("\n[" + theme.TagFgDim() + "]Spinner Styles: Dots, Line, Circle, Bounce[-]")

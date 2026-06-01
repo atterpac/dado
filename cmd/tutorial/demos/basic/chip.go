@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -21,13 +21,13 @@ func init() {
 // ChipDemo demonstrates the Chip component.
 type ChipDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	chips     []*components.Chip
 	removable bool
 }
 
 // Component returns the demo component.
-func (d *ChipDemo) Component() tview.Primitive {
+func (d *ChipDemo) Component() core.Widget {
 	d.removable = true
 
 	d.chips = []*components.Chip{
@@ -37,9 +37,9 @@ func (d *ChipDemo) Component() tview.Primitive {
 		components.NewChip("TypeScript").SetRemovable(true),
 	}
 
-	d.container = tview.NewFlex().SetDirection(tview.FlexRow)
+	d.container = core.NewFlex()
 
-	row := tview.NewFlex().SetDirection(tview.FlexColumn)
+	row := core.NewFlex().SetDirection(core.Row)
 	for _, chip := range d.chips {
 		row.AddItem(chip, chip.Width()+2, 0, false)
 	}
@@ -66,7 +66,6 @@ func (d *ChipDemo) Component() tview.Primitive {
 
 const chipCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create a basic chip
 chip := components.NewChip("Go")

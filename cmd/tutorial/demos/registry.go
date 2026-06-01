@@ -1,7 +1,7 @@
 package demos
 
 import (
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 )
 
 // Category represents the complexity level of a demo
@@ -87,7 +87,7 @@ type Demo interface {
 	Category() Category
 
 	// Component returns the interactive demo component
-	Component() tview.Primitive
+	Component() core.Widget
 
 	// Properties returns editable properties for live editing
 	Properties() []Property

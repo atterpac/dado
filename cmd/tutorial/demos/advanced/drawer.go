@@ -1,10 +1,9 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
-
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -27,7 +26,7 @@ type DrawerDemo struct {
 }
 
 // Component returns the demo component.
-func (d *DrawerDemo) Component() tview.Primitive {
+func (d *DrawerDemo) Component() core.Widget {
 	d.position = "right"
 
 	d.drawer = components.NewDrawer(components.DrawerConfig{
@@ -38,10 +37,9 @@ func (d *DrawerDemo) Component() tview.Primitive {
 	})
 
 	// Drawer content
-	content := tview.NewTextView()
+	content := core.NewTextView()
 	content.SetText("Drawer Content\n\nDrawers slide in from screen edges.\nUseful for settings, details, or navigation.")
 	content.SetBackgroundColor(theme.Bg())
-	content.SetTextColor(theme.Fg())
 
 	d.drawer.SetContent(content)
 	d.drawer.SetHints([]components.KeyHint{
@@ -49,13 +47,11 @@ func (d *DrawerDemo) Component() tview.Primitive {
 	})
 
 	// Background
-	bg := tview.NewTextView()
+	bg := core.NewTextView()
 	bg.SetText("Drawer Demo\n\nThe drawer slides in from the right edge")
-	bg.SetTextAlign(tview.AlignCenter)
 	bg.SetBackgroundColor(theme.Bg())
-	bg.SetTextColor(theme.FgDim())
 
-	pages := tview.NewPages()
+	pages := core.NewPages()
 	pages.AddPage("bg", bg, true, true)
 	pages.AddPage("drawer", d.drawer, true, true)
 

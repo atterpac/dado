@@ -1,10 +1,10 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,7 +28,7 @@ type TreeDemo struct {
 }
 
 // Component returns the demo component.
-func (d *TreeDemo) Component() tview.Primitive {
+func (d *TreeDemo) Component() core.Widget {
 	d.showLines = true
 	d.showIcons = true
 

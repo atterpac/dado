@@ -1,10 +1,10 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +26,7 @@ type DiffViewerDemo struct {
 }
 
 // Component returns the demo component.
-func (d *DiffViewerDemo) Component() tview.Primitive {
+func (d *DiffViewerDemo) Component() core.Widget {
 	d.showLineNumbers = true
 
 	d.viewer = components.NewDiffViewer().

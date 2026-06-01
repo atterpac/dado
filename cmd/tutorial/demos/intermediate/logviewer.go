@@ -3,10 +3,10 @@ package intermediate
 import (
 	"time"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -29,7 +29,7 @@ type LogViewerDemo struct {
 }
 
 // Component returns the demo component.
-func (d *LogViewerDemo) Component() tview.Primitive {
+func (d *LogViewerDemo) Component() core.Widget {
 	d.follow = true
 	d.showLevel = true
 
@@ -87,7 +87,6 @@ func (d *LogViewerDemo) Component() tview.Primitive {
 
 const logViewerCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create a log viewer
 viewer := components.NewLogViewer().

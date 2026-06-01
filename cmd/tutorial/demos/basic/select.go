@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +26,7 @@ type SelectDemo struct {
 }
 
 // Component returns the demo component.
-func (d *SelectDemo) Component() tview.Primitive {
+func (d *SelectDemo) Component() core.Widget {
 	d.label = "Choose a color"
 
 	d.selectComp = components.NewSelect("color").

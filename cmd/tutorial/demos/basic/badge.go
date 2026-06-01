@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -21,13 +21,13 @@ func init() {
 // BadgeDemo demonstrates the Badge component.
 type BadgeDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	badges    []*components.Badge
 	pill      bool
 }
 
 // Component returns the demo component.
-func (d *BadgeDemo) Component() tview.Primitive {
+func (d *BadgeDemo) Component() core.Widget {
 	d.pill = true
 
 	d.badges = []*components.Badge{
@@ -39,9 +39,9 @@ func (d *BadgeDemo) Component() tview.Primitive {
 		components.NewBadge("99+").SetVariant(components.BadgeInfo).SetIcon("").SetPill(true),
 	}
 
-	d.container = tview.NewFlex().SetDirection(tview.FlexRow)
+	d.container = core.NewFlex()
 
-	row := tview.NewFlex().SetDirection(tview.FlexColumn)
+	row := core.NewFlex().SetDirection(core.Row)
 	for _, badge := range d.badges {
 		row.AddItem(badge, badge.Width()+2, 0, false)
 	}
@@ -68,7 +68,6 @@ func (d *BadgeDemo) Component() tview.Primitive {
 
 const badgeCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create badges with different variants
 defaultBadge := components.NewBadge("Default").

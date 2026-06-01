@@ -95,7 +95,7 @@ type ValueDoc struct {
 	Doc  string `json:"doc"`
 }
 
-// tview plumbing methods that are not part of the dado API.
+// Low-level rendering plumbing methods that are not part of the dado API.
 var excludedMethods = map[string]bool{
 	"Draw":           true,
 	"InputHandler":   true,
@@ -305,7 +305,7 @@ func main() {
 			continue
 		}
 
-		// Collect public API methods, skipping tview plumbing.
+		// Collect public API methods, skipping rendering plumbing.
 		var methods []MethodDoc
 		for _, m := range t.Methods {
 			if excludedMethods[m.Name] {

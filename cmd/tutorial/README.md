@@ -68,7 +68,7 @@ cmd/tutorial/
 package basic
 
 import (
-    "github.com/rivo/tview"
+    "github.com/atterpac/dado/core"
     "github.com/atterpac/dado/cmd/tutorial/demos"
     "github.com/atterpac/dado/components"
 )
@@ -85,7 +85,7 @@ func (d *MyDemo) Name() string        { return "MyComponent" }
 func (d *MyDemo) Description() string { return "Brief description" }
 func (d *MyDemo) Category() demos.Category { return demos.Basic }
 
-func (d *MyDemo) Component() tview.Primitive {
+func (d *MyDemo) Component() core.Widget {
     d.component = components.NewMyComponent()
     return d.component
 }

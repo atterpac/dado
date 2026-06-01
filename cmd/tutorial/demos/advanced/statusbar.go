@@ -1,10 +1,10 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -27,7 +27,7 @@ type StatusBarDemo struct {
 }
 
 // Component returns the demo component.
-func (d *StatusBarDemo) Component() tview.Primitive {
+func (d *StatusBarDemo) Component() core.Widget {
 	d.showBorder = true
 
 	d.statusbar = components.NewStatusBar().

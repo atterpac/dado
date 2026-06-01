@@ -4,10 +4,10 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -31,7 +31,7 @@ type LineGraphDemo struct {
 }
 
 // Component returns the demo component.
-func (d *LineGraphDemo) Component() tview.Primitive {
+func (d *LineGraphDemo) Component() core.Widget {
 	d.style = "solid"
 	d.showGrid = true
 

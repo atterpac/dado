@@ -1,10 +1,10 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,7 +28,7 @@ type SplitDemo struct {
 }
 
 // Component returns the demo component.
-func (d *SplitDemo) Component() tview.Primitive {
+func (d *SplitDemo) Component() core.Widget {
 	d.direction = "horizontal"
 	d.showDivider = true
 
@@ -75,11 +75,9 @@ func (d *SplitDemo) Component() tview.Primitive {
 }
 
 func (d *SplitDemo) createPane(title, content string) *components.Panel {
-	tv := tview.NewTextView()
+	tv := core.NewTextView()
 	tv.SetText(content)
-	tv.SetTextAlign(tview.AlignCenter)
 	tv.SetBackgroundColor(theme.Bg())
-	tv.SetTextColor(theme.Fg())
 
 	panel := components.NewPanel().
 		SetTitle(title).

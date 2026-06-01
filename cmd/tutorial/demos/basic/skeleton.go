@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -21,13 +21,13 @@ func init() {
 // SkeletonDemo demonstrates the Skeleton component.
 type SkeletonDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	skeletons []*components.Skeleton
 	animated  bool
 }
 
 // Component returns the demo component.
-func (d *SkeletonDemo) Component() tview.Primitive {
+func (d *SkeletonDemo) Component() core.Widget {
 	d.animated = true
 
 	textSkeleton := components.NewSkeleton().
@@ -43,10 +43,10 @@ func (d *SkeletonDemo) Component() tview.Primitive {
 
 	d.skeletons = []*components.Skeleton{textSkeleton, blockSkeleton}
 
-	d.container = tview.NewFlex().SetDirection(tview.FlexRow)
+	d.container = core.NewFlex()
 
-	textLabel := tview.NewTextView().SetText("Text skeleton (3 lines):")
-	blockLabel := tview.NewTextView().SetText("Block skeleton:")
+	textLabel := core.NewTextView().SetText("Text skeleton (3 lines):")
+	blockLabel := core.NewTextView().SetText("Block skeleton:")
 
 	d.container.AddItem(textLabel, 1, 0, false)
 	d.container.AddItem(textSkeleton, 3, 0, false)
@@ -77,7 +77,6 @@ func (d *SkeletonDemo) Component() tview.Primitive {
 
 const skeletonCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Text skeleton (loading text placeholder)
 textSkel := components.NewSkeleton().

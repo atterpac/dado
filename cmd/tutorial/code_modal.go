@@ -2,16 +2,16 @@ package main
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
 // CodeModal displays source code in a modal overlay.
 type CodeModal struct {
 	*components.Modal
-	codeView *tview.TextView
+	codeView *core.TextView
 	code     string
 	subs     components.Subscriptions
 }
@@ -21,12 +21,10 @@ func (m *CodeModal) Subs() *components.Subscriptions { return &m.subs }
 
 // NewCodeModal creates a new code modal.
 func NewCodeModal(title string, code string) *CodeModal {
-	codeView := tview.NewTextView()
+	codeView := core.NewTextView()
 	codeView.SetDynamicColors(true)
 	codeView.SetScrollable(true)
-	codeView.SetWrap(false)
-	codeView.SetBackgroundColor(theme.Bg())
-	codeView.SetTextColor(theme.Fg())
+	codeView.Box.SetBackgroundColor(theme.Bg())
 
 	// Format code with syntax highlighting (basic)
 	formattedCode := formatGoCode(code)
@@ -56,7 +54,7 @@ func NewCodeModal(title string, code string) *CodeModal {
 		code:     code,
 	}
 
-	m.subs.Add(theme.Register(codeView))
+	m.subs.Add(theme.RegisterFn(func(c tcell.Color) { codeView.Box.SetBackgroundColor(c) }))
 
 	return m
 }
@@ -81,50 +79,44 @@ func (m *CodeModal) Hints() []components.KeyHint {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (m *CodeModal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	// Use Box.WrapInputHandler directly instead of Modal.WrapInputHandler
-	// to avoid Modal's handleBaseInput which also handles Escape.
-	// Escape is handled by App's SetInputCapture via DismissModal.
-	return m.Box.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				row, _ := m.codeView.GetScrollOffset()
-				m.codeView.ScrollTo(row+1, 0)
-			case 'k':
-				row, _ := m.codeView.GetScrollOffset()
-				if row > 0 {
-					m.codeView.ScrollTo(row-1, 0)
-				}
-			case 'g':
-				m.codeView.ScrollToBeginning()
-			case 'G':
-				m.codeView.ScrollToEnd()
-			}
-		case tcell.KeyPgDn, tcell.KeyCtrlD:
+func (m *CodeModal) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
 			row, _ := m.codeView.GetScrollOffset()
-			_, _, _, height := m.codeView.GetInnerRect()
-			m.codeView.ScrollTo(row+height/2, 0)
-		case tcell.KeyPgUp, tcell.KeyCtrlU:
+			m.codeView.ScrollTo(row+1, 0)
+		case 'k':
 			row, _ := m.codeView.GetScrollOffset()
-			_, _, _, height := m.codeView.GetInnerRect()
-			newRow := row - height/2
-			if newRow < 0 {
-				newRow = 0
+			if row > 0 {
+				m.codeView.ScrollTo(row-1, 0)
 			}
-			m.codeView.ScrollTo(newRow, 0)
-		case tcell.KeyEscape:
-			// Let App's SetInputCapture handle this - do nothing here
-			return
+		case 'g':
+			m.codeView.ScrollTo(0, 0)
+		case 'G':
+			m.codeView.ScrollTo(9999, 0)
 		}
-	})
+	case tcell.KeyPgDn, tcell.KeyCtrlD:
+		row, _ := m.codeView.GetScrollOffset()
+		_, _, _, height := m.codeView.Box.GetInnerRect()
+		m.codeView.ScrollTo(row+height/2, 0)
+	case tcell.KeyPgUp, tcell.KeyCtrlU:
+		row, _ := m.codeView.GetScrollOffset()
+		_, _, _, height := m.codeView.Box.GetInnerRect()
+		newRow := row - height/2
+		if newRow < 0 {
+			newRow = 0
+		}
+		m.codeView.ScrollTo(newRow, 0)
+	case tcell.KeyEscape:
+		return false
+	}
+	return false
 }
 
 // Focus handles focus.
-func (m *CodeModal) Focus(delegate func(tview.Primitive)) {
-	delegate(m.codeView)
+func (m *CodeModal) Focus() {
+	m.codeView.Focus()
 }
 
 // HasFocus returns focus state.

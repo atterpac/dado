@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
 	"github.com/atterpac/dado/theme"
@@ -12,28 +11,18 @@ import (
 // ThemePicker is a modal for selecting themes.
 type ThemePicker struct {
 	*components.Modal
-	list     *tview.List
+	list     *components.List
 	onSelect func(t theme.Theme)
-	subs     components.Subscriptions
 }
-
-// Subs returns the picker's subscription set; release on dismissal.
-func (p *ThemePicker) Subs() *components.Subscriptions { return &p.subs }
 
 // NewThemePicker creates a new theme picker modal.
 func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
-	list := tview.NewList()
-	list.SetBackgroundColor(theme.Bg())
-	list.SetMainTextColor(theme.Fg())
-	list.SetSelectedBackgroundColor(theme.Accent())
-	list.SetSelectedTextColor(theme.Bg())
-	list.ShowSecondaryText(false)
+	list := components.NewList()
 	list.SetHighlightFullLine(true)
 
-	// Add all themes
 	themeNames := themes.Names()
 	for _, name := range themeNames {
-		list.AddItem(name, "", 0, nil)
+		list.AddItem(name)
 	}
 
 	modal := components.NewModal(components.ModalConfig{
@@ -48,7 +37,6 @@ func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
 	modal.SetDismissOnEsc(true)
 	modal.SetFocusOnShow(list)
 
-	// Set up hints
 	modal.SetHints([]components.KeyHint{
 		{Key: "j/k", Description: "Navigate"},
 		{Key: "Enter", Description: "Select"},
@@ -61,16 +49,13 @@ func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
 		onSelect: onSelect,
 	}
 
-	// Handle selection
-	list.SetSelectedFunc(func(index int, name string, _ string, _ rune) {
-		if t := themes.Get(name); t != nil {
+	list.SetOnSelect(func(_ int, item components.ListItem) {
+		if t := themes.Get(item.Text); t != nil {
 			if p.onSelect != nil {
 				p.onSelect(t)
 			}
 		}
 	})
-
-	p.subs.Add(theme.Register(list))
 
 	return p
 }
@@ -79,7 +64,7 @@ func NewThemePicker(onSelect func(t theme.Theme)) *ThemePicker {
 func (p *ThemePicker) Start() {}
 
 // Stop implements nav.Component.
-func (p *ThemePicker) Stop() { p.subs.Release() }
+func (p *ThemePicker) Stop() { p.list.Subs().Release() }
 
 // Hints implements nav.Component.
 func (p *ThemePicker) Hints() []components.KeyHint {
@@ -90,44 +75,40 @@ func (p *ThemePicker) Hints() []components.KeyHint {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (p *ThemePicker) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Handle navigation and Enter - Escape is handled by App's SetInputCapture
-		switch event.Key() {
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				p.list.SetCurrentItem(p.list.GetCurrentItem() + 1)
-				return
-			case 'k':
-				idx := p.list.GetCurrentItem() - 1
-				if idx < 0 {
-					idx = 0
-				}
-				p.list.SetCurrentItem(idx)
-				return
-			case 'g':
-				p.list.SetCurrentItem(0)
-				return
-			case 'G':
-				p.list.SetCurrentItem(p.list.GetItemCount() - 1)
-				return
-			}
-		case tcell.KeyEnter:
-			// Pass Enter to list for selection
-			if handler := p.list.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
-			return
+func (p *ThemePicker) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
+			p.list.MoveDown()
+			return true
+		case 'k':
+			p.list.MoveUp()
+			return true
+		case 'g':
+			p.list.MoveToTop()
+			return true
+		case 'G':
+			p.list.MoveToBottom()
+			return true
 		}
-		// Don't pass other events - let App handle Escape
-	})
+	case tcell.KeyEnter:
+		if idx, item, ok := p.list.GetSelected(); ok {
+			if t := themes.Get(item.Text); t != nil {
+				if p.onSelect != nil {
+					p.onSelect(t)
+				}
+			}
+			_ = idx
+		}
+		return true
+	}
+	return false
 }
 
 // Focus handles focus.
-func (p *ThemePicker) Focus(delegate func(tview.Primitive)) {
-	delegate(p.list)
+func (p *ThemePicker) Focus() {
+	p.list.Focus()
 }
 
 // HasFocus returns focus state.

@@ -3,10 +3,10 @@ package advanced
 import (
 	"time"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -28,7 +28,7 @@ type GitGraphDemo struct {
 }
 
 // Component returns the demo component.
-func (d *GitGraphDemo) Component() tview.Primitive {
+func (d *GitGraphDemo) Component() core.Widget {
 	d.showRefs = true
 
 	d.graph = components.NewGitGraph().

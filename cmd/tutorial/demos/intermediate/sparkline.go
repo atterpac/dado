@@ -1,10 +1,10 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -25,7 +25,7 @@ type SparklineDemo struct {
 }
 
 // Component returns the demo component.
-func (d *SparklineDemo) Component() tview.Primitive {
+func (d *SparklineDemo) Component() core.Widget {
 	d.sparkline = components.NewSparkline().
 		SetLabel("CPU History").
 		SetValues([]float64{20, 35, 45, 30, 55, 70, 65, 80, 75, 60, 45, 50, 65, 70, 85, 90, 75, 60}).

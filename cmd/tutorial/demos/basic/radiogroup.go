@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +26,7 @@ type RadioGroupDemo struct {
 }
 
 // Component returns the demo component.
-func (d *RadioGroupDemo) Component() tview.Primitive {
+func (d *RadioGroupDemo) Component() core.Widget {
 	d.label = "Select size"
 
 	d.radioGroup = components.NewRadioGroup("size").

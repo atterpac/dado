@@ -3,10 +3,10 @@ package advanced
 import (
 	"strings"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -28,7 +28,7 @@ type SearchBarDemo struct {
 }
 
 // Component returns the demo component.
-func (d *SearchBarDemo) Component() tview.Primitive {
+func (d *SearchBarDemo) Component() core.Widget {
 	// Sample items to search through
 	d.allItems = []components.SearchResult{
 		{Text: "main.go", Description: "src/", Icon: ""},
@@ -81,7 +81,6 @@ func (d *SearchBarDemo) Component() tview.Primitive {
 
 const searchBarCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create a search bar
 search := components.NewSearchBar().

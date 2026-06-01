@@ -3,10 +3,10 @@ package intermediate
 import (
 	"fmt"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -29,7 +29,7 @@ type VirtualListDemo struct {
 }
 
 // Component returns the demo component.
-func (d *VirtualListDemo) Component() tview.Primitive {
+func (d *VirtualListDemo) Component() core.Widget {
 	d.showScrollbar = true
 	d.showIndex = true
 

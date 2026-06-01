@@ -1,10 +1,9 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
-
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -22,14 +21,14 @@ func init() {
 // ContextMenuDemo demonstrates the ContextMenu component.
 type ContextMenuDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	menu      *components.ContextMenu
 }
 
 // Component returns the demo component.
-func (d *ContextMenuDemo) Component() tview.Primitive {
-	d.container = tview.NewFlex()
-	d.container.SetDirection(tview.FlexRow)
+func (d *ContextMenuDemo) Component() core.Widget {
+	d.container = core.NewFlex()
+	d.container.SetDirection(core.Column)
 
 	// Create sample menu
 	d.menu = components.NewContextMenu()
@@ -48,14 +47,12 @@ func (d *ContextMenuDemo) Component() tview.Primitive {
 	d.menu.ShowAt(5, 2)
 
 	// Background with instructions
-	bg := tview.NewTextView()
+	bg := core.NewTextView()
 	bg.SetText("Context Menu Demo\n\nUse j/k to navigate, Enter to select")
-	bg.SetTextAlign(tview.AlignCenter)
 	bg.SetBackgroundColor(theme.Bg())
-	bg.SetTextColor(theme.FgDim())
 
 	// Layer menu on top
-	pages := tview.NewPages()
+	pages := core.NewPages()
 	pages.AddPage("bg", bg, true, true)
 	pages.AddPage("menu", d.menu, true, true)
 

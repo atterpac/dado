@@ -1,10 +1,10 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 	"github.com/atterpac/dado/validators"
 )
@@ -27,7 +27,7 @@ type FormDemo struct {
 }
 
 // Component returns the demo component.
-func (d *FormDemo) Component() tview.Primitive {
+func (d *FormDemo) Component() core.Widget {
 	// Build a form using the FormBuilder
 	d.form = components.NewFormBuilder().
 		Text("username", "Username").

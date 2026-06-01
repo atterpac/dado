@@ -1,10 +1,9 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
-
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +25,7 @@ type TableDemo struct {
 }
 
 // Component returns the demo component.
-func (d *TableDemo) Component() tview.Primitive {
+func (d *TableDemo) Component() core.Widget {
 	d.multiSelect = false
 
 	d.table = components.NewTable()
@@ -81,7 +80,7 @@ table.AddColoredRow(
 )
 
 // Use key-based selection for stable selection during data updates
-table.SetRowKey(func(row, col int, cell *tview.TableCell) string {
+table.SetRowKey(func(row, col int, cell *core.TableCell) string {
     return fmt.Sprintf("row-%d", row)
 })
 `

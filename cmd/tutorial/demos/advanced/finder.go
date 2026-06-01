@@ -1,10 +1,10 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -27,7 +27,7 @@ type FinderDemo struct {
 }
 
 // Component returns the demo component.
-func (d *FinderDemo) Component() tview.Primitive {
+func (d *FinderDemo) Component() core.Widget {
 	d.showDescription = true
 
 	d.finder = components.NewFinder().
