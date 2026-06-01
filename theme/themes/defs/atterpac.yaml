@@ -1,0 +1,25 @@
+name: atterpac
+ident: Atterpac
+colors:
+  bg: "#1a1813"          # warm near-black page background
+  bg_light: "#221f18"    # cards / raised surfaces
+  bg_dark: "#110f0c"     # headers / recessed surfaces
+  fg: "#e8e3d2"          # warm cream text
+  fg_dim: "#b8b39f"      # secondary text
+  fg_muted: "#7a7665"    # labels, metadata
+  accent: "#c578b0"      # plum — primary accent (matches site)
+  accent_dim: "#a85f95"  # darker plum
+  highlight: "#2d1028"   # dark plum selection background
+  success: "#9ab87a"     # muted olive — healthy / running
+  warning: "#d9a441"     # amber — secondary accent
+  error: "#d4513a"       # warm red
+  info: "#b48ac4"        # soft plum — info
+  border: "#2e2a20"      # hairline dividers
+  border_focus: "#c578b0"
+  header: "#110f0c"
+  menu: "#1a1813"
+  table_header: "#c578b0"
+  key: "#d9a441"         # amber — keybind hints (secondary)
+  crumb: "#c578b0"
+  panel_border: "#2e2a20"
+  panel_title: "#c578b0"

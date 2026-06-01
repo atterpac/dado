@@ -4,6 +4,32 @@ package themes
 
 import "github.com/atterpac/dado/theme"
 
+// Atterpac is the "atterpac" theme.
+var Atterpac = theme.MustFromColors(theme.ThemeColors{
+	Bg:          theme.C("#1a1813"),
+	BgLight:     theme.C("#221f18"),
+	BgDark:      theme.C("#110f0c"),
+	Fg:          theme.C("#e8e3d2"),
+	FgDim:       theme.C("#b8b39f"),
+	FgMuted:     theme.C("#7a7665"),
+	Accent:      theme.C("#c578b0"),
+	AccentDim:   theme.C("#a85f95"),
+	Highlight:   theme.C("#2d1028"),
+	Success:     theme.C("#9ab87a"),
+	Warning:     theme.C("#d9a441"),
+	Error:       theme.C("#d4513a"),
+	Info:        theme.C("#b48ac4"),
+	Border:      theme.C("#2e2a20"),
+	BorderFocus: theme.C("#c578b0"),
+	Header:      theme.C("#110f0c"),
+	Menu:        theme.C("#1a1813"),
+	TableHeader: theme.C("#c578b0"),
+	Key:         theme.C("#d9a441"),
+	Crumb:       theme.C("#c578b0"),
+	PanelBorder: theme.C("#2e2a20"),
+	PanelTitle:  theme.C("#c578b0"),
+})
+
 // CatppuccinFrappe is the "catppuccin-frappe" theme.
 var CatppuccinFrappe = theme.MustFromColors(theme.ThemeColors{
 	Bg:          theme.C("#303446"),
@@ -686,6 +712,7 @@ const DefaultName = "tokyonight-night"
 // All returns all built-in themes keyed by name.
 func All() map[string]theme.Theme {
 	return map[string]theme.Theme{
+		"atterpac":             Atterpac,
 		"catppuccin-frappe":    CatppuccinFrappe,
 		"catppuccin-latte":     CatppuccinLatte,
 		"catppuccin-macchiato": CatppuccinMacchiato,
@@ -718,6 +745,7 @@ func All() map[string]theme.Theme {
 // Names returns a sorted list of all built-in theme names.
 func Names() []string {
 	return []string{
+		"atterpac",
 		"catppuccin-frappe",
 		"catppuccin-latte",
 		"catppuccin-macchiato",

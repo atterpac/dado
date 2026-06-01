@@ -2,13 +2,14 @@ package theme
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
 // ThemeSelectorModal displays a modal for selecting themes with live preview.
 type ThemeSelectorModal struct {
-	*tview.Box
-	table         *tview.Table
+	core.Box
+	table         *core.Table
 	themes        []string
 	originalTheme string
 	currentIdx    int
@@ -20,8 +21,7 @@ type ThemeSelectorModal struct {
 // NewThemeSelectorModal creates a new theme selector modal.
 func NewThemeSelectorModal(themes []string, currentTheme string) *ThemeSelectorModal {
 	tsm := &ThemeSelectorModal{
-		Box:           tview.NewBox(),
-		table:         tview.NewTable(),
+		table:         core.NewTable(),
 		themes:        themes,
 		originalTheme: currentTheme,
 	}
@@ -48,14 +48,11 @@ func (tsm *ThemeSelectorModal) SetOnPreview(fn func(name string)) *ThemeSelector
 }
 
 func (tsm *ThemeSelectorModal) setup() {
-	// Configure table
 	tsm.table.SetSelectable(true, false)
 	tsm.table.SetSelectedStyle(SelectionStyle())
 
-	// Populate table
 	tsm.rebuildTable()
 
-	// Find and select current theme row
 	for i, name := range tsm.themes {
 		if name == tsm.originalTheme {
 			tsm.currentIdx = i
@@ -64,7 +61,6 @@ func (tsm *ThemeSelectorModal) setup() {
 		}
 	}
 
-	// Preview theme on selection change
 	tsm.table.SetSelectionChangedFunc(func(row, col int) {
 		if row >= 0 && row < len(tsm.themes) {
 			tsm.currentIdx = row
@@ -74,7 +70,6 @@ func (tsm *ThemeSelectorModal) setup() {
 		}
 	})
 
-	// Handle final selection
 	tsm.table.SetSelectedFunc(func(row, col int) {
 		if tsm.onSelect != nil {
 			selected := tsm.GetSelectedTheme()
@@ -93,8 +88,7 @@ func (tsm *ThemeSelectorModal) rebuildTable() {
 		if name == tsm.originalTheme {
 			marker = "✓ "
 		}
-		cell := tview.NewTableCell(marker + name).
-			SetExpansion(1)
+		cell := core.NewTableCell(marker + name).SetExpansion(1)
 		tsm.table.SetCell(i, 0, cell)
 	}
 }
@@ -114,16 +108,11 @@ func (tsm *ThemeSelectorModal) GetOriginalTheme() string {
 
 // Draw renders the modal with border and centered content.
 func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
-	// Don't call Box.DrawForSubclass - that would fill the entire screen as backdrop
-	// Only draw the centered modal box
-
-	// Get theme colors
 	bg := Bg()
 	fg := Fg()
 	borderColor := PanelBorder()
 	titleColor := PanelTitle()
 
-	// Calculate modal dimensions
 	screenWidth, screenHeight := screen.Size()
 	modalWidth := 42
 	modalHeight := len(tsm.themes) + 4
@@ -134,11 +123,9 @@ func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
 		modalHeight = 22
 	}
 
-	// Center the modal
 	x := (screenWidth - modalWidth) / 2
 	y := (screenHeight - modalHeight) / 2
 
-	// Draw modal background only (no full-screen backdrop)
 	bgStyle := tcell.StyleDefault.Background(bg)
 	for row := y; row < y+modalHeight; row++ {
 		for col := x; col < x+modalWidth; col++ {
@@ -146,29 +133,23 @@ func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Draw border
 	borderStyle := tcell.StyleDefault.Background(bg).Foreground(borderColor)
 	titleStyle := tcell.StyleDefault.Background(bg).Foreground(titleColor)
 
-	// Corners
 	screen.SetContent(x, y, '╭', nil, borderStyle)
 	screen.SetContent(x+modalWidth-1, y, '╮', nil, borderStyle)
 	screen.SetContent(x, y+modalHeight-1, '╰', nil, borderStyle)
 	screen.SetContent(x+modalWidth-1, y+modalHeight-1, '╯', nil, borderStyle)
 
-	// Horizontal borders
 	for i := x + 1; i < x+modalWidth-1; i++ {
 		screen.SetContent(i, y, '─', nil, borderStyle)
 		screen.SetContent(i, y+modalHeight-1, '─', nil, borderStyle)
 	}
-
-	// Vertical borders
 	for i := y + 1; i < y+modalHeight-1; i++ {
 		screen.SetContent(x, i, '│', nil, borderStyle)
 		screen.SetContent(x+modalWidth-1, i, '│', nil, borderStyle)
 	}
 
-	// Title
 	title := " Select Theme "
 	titleRunes := []rune(title)
 	titleStart := x + (modalWidth-len(titleRunes))/2
@@ -176,7 +157,6 @@ func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
 		screen.SetContent(titleStart+i, y, r, nil, titleStyle)
 	}
 
-	// Hints at bottom (left-aligned)
 	hints := "j/k:Navigate  Enter:Select  Esc:Cancel"
 	hintsStyle := tcell.StyleDefault.Background(bg).Foreground(FgDim())
 	hintsStart := x + 2
@@ -186,18 +166,15 @@ func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Update table colors
 	tsm.table.SetBackgroundColor(bg)
 	tsm.table.SetSelectedStyle(SelectionStyle())
 
 	for row := 0; row < tsm.table.GetRowCount(); row++ {
-		if cell := tsm.table.GetCell(row, 0); cell != nil {
-			cell.SetTextColor(fg)
-			cell.SetBackgroundColor(bg)
-		}
+		cell := tsm.table.GetCell(row, 0)
+		cell.SetTextColor(fg)
+		cell.SetBackgroundColor(bg)
 	}
 
-	// Draw table inside the border
 	tableX := x + 2
 	tableY := y + 1
 	tableWidth := modalWidth - 4
@@ -207,80 +184,58 @@ func (tsm *ThemeSelectorModal) Draw(screen tcell.Screen) {
 	tsm.table.Draw(screen)
 }
 
-// Focus delegates focus to the table.
-func (tsm *ThemeSelectorModal) Focus(delegate func(p tview.Primitive)) {
-	delegate(tsm.table)
-}
-
-// HasFocus returns whether the table has focus.
+// HasFocus returns whether the modal has focus.
 func (tsm *ThemeSelectorModal) HasFocus() bool {
-	return tsm.table.HasFocus()
+	return tsm.Box.HasFocus()
 }
 
-// InputHandler handles keyboard input.
-func (tsm *ThemeSelectorModal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return tsm.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyEscape:
-			if tsm.onCancel != nil {
-				tsm.onCancel()
+func (tsm *ThemeSelectorModal) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyEscape:
+		if tsm.onCancel != nil {
+			tsm.onCancel()
+		}
+		return true
+	case tcell.KeyEnter:
+		if tsm.onSelect != nil {
+			selected := tsm.GetSelectedTheme()
+			if selected != "" {
+				tsm.onSelect(selected)
 			}
-			return
-		case tcell.KeyEnter:
-			if tsm.onSelect != nil {
-				selected := tsm.GetSelectedTheme()
-				if selected != "" {
-					tsm.onSelect(selected)
-				}
-			}
-			return
-		case tcell.KeyDown:
+		}
+		return true
+	case tcell.KeyDown:
+		if tsm.currentIdx < len(tsm.themes)-1 {
+			tsm.currentIdx++
+			tsm.table.Select(tsm.currentIdx, 0)
+		}
+		return true
+	case tcell.KeyUp:
+		if tsm.currentIdx > 0 {
+			tsm.currentIdx--
+			tsm.table.Select(tsm.currentIdx, 0)
+		}
+		return true
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
 			if tsm.currentIdx < len(tsm.themes)-1 {
 				tsm.currentIdx++
 				tsm.table.Select(tsm.currentIdx, 0)
 			}
-			return
-		case tcell.KeyUp:
+			return true
+		case 'k':
 			if tsm.currentIdx > 0 {
 				tsm.currentIdx--
 				tsm.table.Select(tsm.currentIdx, 0)
 			}
-			return
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				if tsm.currentIdx < len(tsm.themes)-1 {
-					tsm.currentIdx++
-					tsm.table.Select(tsm.currentIdx, 0)
-				}
-				return
-			case 'k':
-				if tsm.currentIdx > 0 {
-					tsm.currentIdx--
-					tsm.table.Select(tsm.currentIdx, 0)
-				}
-				return
-			case 'q':
-				if tsm.onCancel != nil {
-					tsm.onCancel()
-				}
-				return
+			return true
+		case 'q':
+			if tsm.onCancel != nil {
+				tsm.onCancel()
 			}
+			return true
 		}
-
-		// Delegate to table for other input
-		if handler := tsm.table.InputHandler(); handler != nil {
-			handler(event, setFocus)
-		}
-	})
-}
-
-// MouseHandler delegates mouse events.
-func (tsm *ThemeSelectorModal) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return tsm.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if handler := tsm.table.MouseHandler(); handler != nil {
-			return handler(action, event, setFocus)
-		}
-		return false, nil
-	})
+	}
+	return false
 }

@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/bus"
 )
@@ -46,11 +45,6 @@ type Theme interface {
 	PanelTitle() tcell.Color
 }
 
-// Primitive is any tview primitive that can have its background color set.
-type Primitive interface {
-	SetBackgroundColor(tcell.Color) *tview.Box
-}
-
 // Refreshable is an optional interface for components that need custom
 // refresh logic when the theme changes.
 type Refreshable interface {
@@ -76,7 +70,7 @@ type Provider struct {
 	active atomic.Value // *themeHolder, lock-free reads for Draw paths
 
 	primitivesMu sync.RWMutex
-	primitives   []Primitive
+	primitives   []func(tcell.Color)
 
 	refreshablesMu sync.RWMutex
 	refreshables   []Refreshable
@@ -104,21 +98,15 @@ func Default() *Provider { return defaultProvider }
 
 // --- Provider methods ---
 
-// SetTheme sets the active theme on this provider, applies global tview
-// styles (default provider only — see applyGlobalStyles), updates registered
+// SetTheme sets the active theme on this provider, updates registered
 // primitive backgrounds, calls Refreshable.RefreshTheme on registered
-// components, fires change callbacks, and (if auto-refresh is enabled and
-// an app is registered) queues a redraw.
+// components, and fires change callbacks.
 func (p *Provider) SetTheme(t Theme) {
 	var prev Theme
 	if h := p.active.Load(); h != nil {
 		prev = h.(*themeHolder).theme
 	}
 	p.active.Store(&themeHolder{theme: t})
-
-	if p == defaultProvider {
-		applyGlobalStyles(t)
-	}
 
 	p.notifyThemeChange()
 
@@ -135,7 +123,7 @@ func (p *Provider) SetTheme(t Theme) {
 	p.autoRefreshMu.RUnlock()
 
 	if auto {
-		// Off the caller goroutine so callers inside tview callbacks
+		// Off the caller goroutine so callers inside draw callbacks
 		// don't deadlock against QueueUpdateDraw.
 		go func() {
 			QueueUpdateDraw(func() {
@@ -163,23 +151,18 @@ func (p *Provider) SetAutoRefresh(enabled bool) {
 	p.autoRefreshMu.Unlock()
 }
 
-// Register adds a primitive for automatic background updates on theme change.
+// RegisterFn registers a background-setter func for automatic updates on theme change.
 // Returns an unregister function.
-func (p *Provider) Register(prim Primitive) func() {
+func (p *Provider) RegisterFn(fn func(tcell.Color)) func() {
 	p.primitivesMu.Lock()
-	p.primitives = append(p.primitives, prim)
+	idx := len(p.primitives)
+	p.primitives = append(p.primitives, fn)
 	p.primitivesMu.Unlock()
-	return func() { p.Unregister(prim) }
-}
-
-// Unregister removes a primitive from automatic updates.
-func (p *Provider) Unregister(prim Primitive) {
-	p.primitivesMu.Lock()
-	defer p.primitivesMu.Unlock()
-	for i, r := range p.primitives {
-		if r == prim {
-			p.primitives = append(p.primitives[:i], p.primitives[i+1:]...)
-			return
+	return func() {
+		p.primitivesMu.Lock()
+		defer p.primitivesMu.Unlock()
+		if idx < len(p.primitives) {
+			p.primitives[idx] = nil
 		}
 	}
 }
@@ -237,8 +220,10 @@ func (p *Provider) updatePrimitives(t Theme) {
 	p.primitivesMu.RLock()
 	defer p.primitivesMu.RUnlock()
 	bg := t.Bg()
-	for _, prim := range p.primitives {
-		prim.SetBackgroundColor(bg)
+	for _, fn := range p.primitives {
+		if fn != nil {
+			fn(bg)
+		}
 	}
 }
 
@@ -274,11 +259,8 @@ func SetAutoRefresh(enabled bool) { defaultProvider.SetAutoRefresh(enabled) }
 // Get returns the active theme on Default().
 func Get() Theme { return defaultProvider.Theme() }
 
-// Register forwards to Default().
-func Register(p Primitive) func() { return defaultProvider.Register(p) }
-
-// Unregister forwards to Default().
-func Unregister(p Primitive) { defaultProvider.Unregister(p) }
+// RegisterFn registers a background-setter func for automatic background updates on theme change.
+func RegisterFn(fn func(tcell.Color)) func() { return defaultProvider.RegisterFn(fn) }
 
 // RegisterRefreshable forwards to Default().
 func RegisterRefreshable(r Refreshable) func() { return defaultProvider.RegisterRefreshable(r) }
@@ -292,48 +274,42 @@ func OnThemeChange(fn func()) func() { return defaultProvider.OnThemeChange(fn) 
 // --- App registration (singleton, not provider-scoped) ---
 
 var (
-	appInstance *tview.Application
-	appMu       sync.RWMutex
+	queueFn func(func())
+	queueMu sync.RWMutex
 )
 
-// SetApp registers the tview application for queue operations.
-func SetApp(app *tview.Application) {
-	appMu.Lock()
-	defer appMu.Unlock()
-	appInstance = app
-}
-
-// GetApp returns the registered application.
-func GetApp() *tview.Application {
-	appMu.RLock()
-	defer appMu.RUnlock()
-	return appInstance
+// SetQueue registers a function used by QueueUpdate and QueueUpdateDraw.
+// Pass nil to clear and fall back to direct execution.
+func SetQueue(fn func(func())) {
+	queueMu.Lock()
+	queueFn = fn
+	queueMu.Unlock()
 }
 
 // QueueUpdate runs fn on the main UI thread. Falls back to immediate
-// execution when no app is registered (test mode).
+// execution when no queue is registered (test mode).
 func QueueUpdate(fn func()) {
-	appMu.RLock()
-	app := appInstance
-	appMu.RUnlock()
-	if app != nil {
-		app.QueueUpdate(fn)
-	} else {
-		fn()
+	queueMu.RLock()
+	q := queueFn
+	queueMu.RUnlock()
+	if q != nil {
+		q(fn)
+		return
 	}
+	fn()
 }
 
 // QueueUpdateDraw runs fn and triggers a redraw. Falls back to immediate
-// execution when no app is registered.
+// execution when no queue is registered.
 func QueueUpdateDraw(fn func()) {
-	appMu.RLock()
-	app := appInstance
-	appMu.RUnlock()
-	if app != nil {
-		app.QueueUpdateDraw(fn)
-	} else {
-		fn()
+	queueMu.RLock()
+	q := queueFn
+	queueMu.RUnlock()
+	if q != nil {
+		q(fn)
+		return
 	}
+	fn()
 }
 
 // --- Internal helpers ---
@@ -343,17 +319,4 @@ func themeName(t Theme) string {
 		return ""
 	}
 	return reflectTypeName(t)
-}
-
-func applyGlobalStyles(t Theme) {
-	if t == nil {
-		return
-	}
-	tview.Styles.PrimitiveBackgroundColor = t.Bg()
-	tview.Styles.ContrastBackgroundColor = t.BgLight()
-	tview.Styles.MoreContrastBackgroundColor = t.BgDark()
-	tview.Styles.BorderColor = t.Border()
-	tview.Styles.TitleColor = t.Accent()
-	tview.Styles.PrimaryTextColor = t.Fg()
-	tview.Styles.SecondaryTextColor = t.FgDim()
 }
