@@ -2,7 +2,7 @@
 name: dado-tui
 description: >-
   Guide for building terminal UIs with the dado Go TUI library (github.com/atterpac/dado,
-  built on rivo/tview + gdamore/tcell). Use when creating TUI apps, authoring or wiring
+  built on its own widget core over gdamore/tcell). Use when creating TUI apps, authoring or wiring
   dado components, working with its theme system, key bindings, navigation/page stack,
   data binding, or async/background work in a dado-based app. Covers the component
   catalog, the core architectural patterns, and the conventions that keep theming and
@@ -11,7 +11,7 @@ description: >-
 
 # Building TUIs with dado
 
-`dado` is a Go TUI component toolkit layered over [`rivo/tview`](https://github.com/rivo/tview) and `gdamore/tcell/v2`. It adds: a scoped theme system with live switching, ~50 components, a page-stack navigator, fluent key bindings, two-way data binding, and async helpers. Use this skill whenever you build or modify a dado-based TUI.
+`dado` is a Go TUI component toolkit built on its own widget `core` (in `github.com/atterpac/dado/core`) directly over [`gdamore/tcell/v2`](https://github.com/gdamore/tcell). It adds: a scoped theme system with live switching, ~50 components, a page-stack navigator, fluent key bindings, two-way data binding, and async helpers. Use this skill whenever you build or modify a dado-based TUI.
 
 > Module path: `github.com/atterpac/dado`. Requires Go 1.24+.
 
@@ -35,10 +35,8 @@ These are the conventions everything else depends on. Get them right and the res
 3. **Register cleanup into a `Subscriptions`, exposed via `Subs()`.**
    Every theme registration / subscription returns an unregister `func()`. Add it to the component's `Subscriptions`. `ComponentBase.Stop()` releases its own subs *and* the wrapped widget's subs automatically (LIFO, idempotent). This is how teardown stays leak-free.
 
-4. **Two input-handler conventions exist — pick by what you attach to.**
-   - tview-native primitives expect the **event** back (`nil` = consumed): use `KeyBindings.Build()`.
-   - dado `ComponentBase.SetInputHandler` expects a **bool** (`true` = consumed): use `KeyBindings.BuildBool()`.
-   This is the most common footgun. See `reference/input-nav-layout.md`.
+4. **Input handlers return a bool (`true` = consumed).**
+   `core.Widget.HandleKey` and `ComponentBase.SetInputHandler` both take `func(*tcell.EventKey) bool`. Build one from key bindings with `KeyBindings.BuildBool()`. See `reference/input-nav-layout.md`.
 
 5. **Pick the right base type for what you're building.**
    - Authoring a self-drawing leaf widget → embed `widgetBase`, call `initWidget`.
@@ -61,7 +59,7 @@ func main() {
     theme.Default().SetTheme(themes.Get("tokyonight-night"))
 
     app := layout.NewApp(layout.AppConfig{
-        TopBar:     myHeader(),   // any tview.Primitive (optional)
+        TopBar:     myHeader(),   // any core.Widget (optional)
         ShowCrumbs: true,
         BottomBar:  layout.NewMenu(), // hint bar; auto-updates from each view's Hints()
         Debug:      true,             // Ctrl+D event-inspector overlay
@@ -101,13 +99,13 @@ Read the one matching your task:
 
 - **`reference/architecture.md`** — `ComponentBase` / `widgetBase` / `StatefulComponentBase[T]`, the Draw prepare+paint split, `Subscriptions`, value/event/handler interfaces, and the canonical recipe for authoring a new component.
 - **`reference/theme.md`** — `Provider` / `Default()`, the full color-accessor palette, runtime switching & subscriptions, status colors, Nerd Font icons, the theme YAML schema, programmatic builder, and gradients.
-- **`reference/input-nav-layout.md`** — `KeyBindings` (Build vs BuildBool), vim helpers, `ActionRegistry`, `CommandBar`, the `nav` page stack / modals / breadcrumbs, the `layout` app shell / menu / statusbar, and the `binding` package (`Value[T]`, `FormBinding[T]`, `TableBinding[T]`).
+- **`reference/input-nav-layout.md`** — `KeyBindings` (`BuildBool`), vim helpers, `ActionRegistry`, `CommandBar`, the `nav` page stack / modals / breadcrumbs, the `layout` app shell / menu / statusbar, and the `binding` package (`Value[T]`, `FormBinding[T]`, `TableBinding[T]`).
 - **`reference/components.md`** — the full tiered component catalog (basic / intermediate / advanced).
 - **`reference/support.md`** — `async`, `effect`, `bus`, `style`, `help`, `validators`, `util`, `clipboard`, `recipes`, `testutil`, and the `dado` CLI.
 
 ## Quick gotchas
 
 - `components/README.md` documents stale `theme.HasStatus`/`theme.StatusColor` — those don't exist. Use typed `*Status` handles (`theme.DefineStatus`). See `reference/theme.md`.
-- `style.BorderSet` custom glyphs are largely a no-op through `Apply` — tview draws borders from its global rune set. Hand-draw borders in your own `Draw` if you need custom glyphs.
+- `style.BorderSet` custom glyphs are largely a no-op through `Apply` — `core.Box` draws borders from a global rune set. Hand-draw borders in your own `Draw` if you need custom glyphs.
 - The `dado` CLI does **not** scaffold projects (`dado new` does not exist). It only lists/previews themes and lists components. Bootstrap by hand.
 - There are two different `ListNavigator` interfaces (one in `input`, one in `nav`) — don't conflate them.
