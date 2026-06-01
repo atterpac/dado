@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 // EventCollector captures events for testing with thread-safe access.
@@ -261,16 +261,9 @@ func SimulateDelete() *tcell.EventKey {
 	return tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone)
 }
 
-// TypeString simulates typing a string by invoking the handler for each character.
-func TypeString(handler func(*tcell.EventKey, func(tview.Primitive)), s string) {
-	for _, r := range s {
-		handler(SimulateRune(r), nil)
-	}
-}
-
 // MockComponent implements nav.Component for testing.
 type MockComponent struct {
-	tview.Primitive
+	core.Box
 	name        string
 	StartCalled bool
 	StopCalled  bool
@@ -284,9 +277,8 @@ type MockComponent struct {
 // NewMockComponent creates a new MockComponent with the given name.
 func NewMockComponent(name string) *MockComponent {
 	return &MockComponent{
-		Primitive: tview.NewBox(),
-		name:      name,
-		hints:     make([]components.KeyHint, 0),
+		name:  name,
+		hints: make([]components.KeyHint, 0),
 	}
 }
 

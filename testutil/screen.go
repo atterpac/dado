@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 )
 
 // TestScreen wraps tcell.SimulationScreen with helper methods for testing.
@@ -99,16 +99,16 @@ func (ts *TestScreen) Clear() {
 	ts.SimulationScreen.Show()
 }
 
-// DrawPrimitive renders a tview.Primitive to the test screen.
-func (ts *TestScreen) DrawPrimitive(p tview.Primitive) {
+// DrawPrimitive renders a core.Widget to the test screen.
+func (ts *TestScreen) DrawPrimitive(p core.Widget) {
 	w, h := ts.Size()
 	p.SetRect(0, 0, w, h)
 	p.Draw(ts.SimulationScreen)
 	ts.SimulationScreen.Show()
 }
 
-// DrawPrimitiveAt renders a tview.Primitive at a specific position.
-func (ts *TestScreen) DrawPrimitiveAt(p tview.Primitive, x, y, width, height int) {
+// DrawPrimitiveAt renders a core.Widget at a specific position.
+func (ts *TestScreen) DrawPrimitiveAt(p core.Widget, x, y, width, height int) {
 	p.SetRect(x, y, width, height)
 	p.Draw(ts.SimulationScreen)
 	ts.SimulationScreen.Show()
