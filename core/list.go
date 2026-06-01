@@ -78,24 +78,20 @@ func (l *List) SetChangedFunc(fn func(cur, prev int, main, secondary string, sho
 // Draw renders visible items.
 func (l *List) Draw(screen tcell.Screen) {
 	l.Box.Draw(screen)
-	x, y, w, h := l.InnerRect()
-	if w <= 0 || h <= 0 {
+	vp := NewViewport(l.InnerRect())
+	if vp.Empty() {
 		return
 	}
+	w, _ := vp.Size()
 
-	// Ensure current item is visible (scroll offset adjustment)
-	if l.current < l.offset {
-		l.offset = l.current
-	}
-	if l.current >= l.offset+h {
-		l.offset = l.current - h + 1
-	}
+	// Ensure current item is visible (scroll offset adjustment).
+	vp.SetContentSize(0, len(l.items))
+	vp.SetOffset(0, l.offset)
+	vp.EnsureVisible(0, l.current)
+	_, l.offset = vp.Offset() // keep field in sync for HandleKey/paging
 
-	for row := 0; row < h; row++ {
-		idx := l.offset + row
-		if idx >= len(l.items) {
-			break
-		}
+	first, last := vp.VisibleRows()
+	for idx := first; idx < last; idx++ {
 		item := l.items[idx]
 		selected := idx == l.current
 		style := tcell.StyleDefault
@@ -106,13 +102,14 @@ func (l *List) Draw(screen tcell.Screen) {
 		// overlay applies reverse on top of each span's own style, so cached
 		// spans (parsed once in AddItem) need no per-frame re-parsing.
 		for col := 0; col < w; col++ {
-			screen.SetContent(x+col, y+row, ' ', nil, style)
+			vp.SetContent(screen, col, idx, ' ', style)
 		}
 		var overlay func(tcell.Style) tcell.Style
 		if selected {
 			overlay = func(s tcell.Style) tcell.Style { return s.Reverse(true) }
 		}
-		item.cached.DrawFunc(screen, x, y+row, w, overlay)
+		rx, ry := vp.ScreenXY(0, idx)
+		item.cached.DrawFunc(screen, rx, ry, w, overlay)
 	}
 }
 

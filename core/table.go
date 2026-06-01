@@ -227,10 +227,11 @@ func (t *Table) GetInnerRect() (x, y, width, height int) {
 // Draw renders visible rows and columns.
 func (t *Table) Draw(screen tcell.Screen) {
 	t.Box.Draw(screen)
-	x, y, w, h := t.InnerRect()
-	if w <= 0 || h <= 0 || t.rows == 0 {
+	vp := NewViewport(t.InnerRect())
+	if vp.Empty() || t.rows == 0 {
 		return
 	}
+	x, _, w, h := vp.Rect()
 
 	// Compute column widths (simple: divide equally)
 	colW := w
@@ -241,26 +242,20 @@ func (t *Table) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Auto-scroll to keep selection visible, centered when possible.
-	if t.selRows && h > 0 {
-		if t.selRow < t.rowOffset {
+	// Auto-scroll to keep selection visible, centered when possible. The
+	// viewport clamps the offset to the valid range when applied.
+	if t.selRows {
+		if t.selRow < t.rowOffset || t.selRow >= t.rowOffset+h {
 			t.rowOffset = t.selRow - h/2
-		} else if t.selRow >= t.rowOffset+h {
-			t.rowOffset = t.selRow - h/2
-		}
-		if t.rowOffset > t.rows-h {
-			t.rowOffset = t.rows - h
-		}
-		if t.rowOffset < 0 {
-			t.rowOffset = 0
 		}
 	}
+	vp.SetContentSize(w, t.rows)
+	vp.SetOffset(0, t.rowOffset)
+	_, t.rowOffset = vp.Offset() // keep field in sync for HandleKey/paging
 
-	for screenRow := 0; screenRow < h; screenRow++ {
-		row := t.rowOffset + screenRow
-		if row >= t.rows {
-			break
-		}
+	first, last := vp.VisibleRows()
+	for row := first; row < last; row++ {
+		_, sy := vp.ScreenXY(0, row)
 		colX := x
 		for col := 0; col < t.cols; col++ {
 			cell := t.GetCell(row, col)
@@ -288,10 +283,10 @@ func (t *Table) Draw(screen tcell.Screen) {
 			}
 			// Fill cell background first
 			for c := 0; c < cw; c++ {
-				screen.SetContent(colX+c, y+screenRow, ' ', nil, style)
+				screen.SetContent(colX+c, sy, ' ', nil, style)
 			}
 			// Render text with tag parsing (handles [#color], [-], etc.)
-			PrintTagged(screen, cell.Text, colX, y+screenRow, cw, style)
+			PrintTagged(screen, cell.Text, colX, sy, cw, style)
 			colX += colW
 		}
 	}
