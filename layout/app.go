@@ -34,11 +34,12 @@ type AppConfig struct {
 	// Useful for updating menu hints, crumbs, etc.
 	OnComponentChange func(nav.Component)
 
-	// Debug enables the bus debug overlay. When true, pressing DebugKey
-	// pushes a DebugOverlay onto the page stack.
+	// Debug enables the floating debug toolbar. When true, pressing DebugKey
+	// toggles a DebugToolbar drawn on top of the live app (event log, widget-tree
+	// inspector, cell probe). Tab cycles tools; Esc closes.
 	Debug bool
 
-	// DebugKey is the key that toggles the debug overlay. Defaults to
+	// DebugKey is the key that toggles the debug toolbar. Defaults to
 	// Ctrl+D when zero.
 	DebugKey tcell.Key
 
@@ -63,6 +64,7 @@ type App struct {
 	effects          *effect.Dispatcher
 	subs             components.Subscriptions
 	themeState       *themeState
+	debug            *components.DebugToolbar
 }
 
 // NewApp creates a new application with the given configuration.
@@ -98,6 +100,13 @@ func NewApp(config AppConfig) *App {
 
 	// Build layout
 	a.buildLayout()
+
+	// Debug toolbar: a float drawn on top of the app via the after-draw hook,
+	// summoned by DebugKey. Created before input capture so it can intercept keys.
+	if a.config.Debug {
+		a.debug = components.NewDebugToolbar(a.app)
+		a.app.SetAfterDrawFunc(a.debug.Draw)
+	}
 
 	// Set up automatic modal input handling
 	a.setupModalInputCapture()
@@ -272,16 +281,19 @@ func (a *App) SetInputCapture(capture func(*tcell.EventKey) *tcell.EventKey) *Ap
 // setupModalInputCapture configures automatic modal input handling.
 func (a *App) setupModalInputCapture() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// Debug overlay toggle, when enabled.
-		if a.config.Debug && event.Key() == a.config.DebugKey {
-			go func() {
-				a.app.QueueUpdateDraw(func() {
-					overlay := components.NewDebugOverlay(0)
-					overlay.SetOnClose(func() { a.pages.Pop() })
-					a.pages.Push(overlay)
-				})
-			}()
-			return nil
+		// Debug toolbar, when enabled. The toolbar is a float drawn over the
+		// live app (not a page), driven by keys routed here.
+		if a.debug != nil {
+			if event.Key() == a.config.DebugKey {
+				a.debug.Toggle()
+				return nil
+			}
+			if a.debug.Visible() {
+				if a.debug.HandleKey(event) {
+					return nil // consumed by toolbar / panel tool
+				}
+				return event // inline tool passthrough — app still receives it
+			}
 		}
 
 		// Theme selector toggle, when enabled via EnableThemes.
@@ -380,6 +392,6 @@ func (m *modalWrapper) OnDismiss() bool {
 }
 
 func (m *modalWrapper) Draw(screen tcell.Screen) { m.modal.Draw(screen) }
-func (m *modalWrapper) SetRect(x, y, w, h int)  { m.modal.SetRect(x, y, w, h) }
+func (m *modalWrapper) SetRect(x, y, w, h int)   { m.modal.SetRect(x, y, w, h) }
 func (m *modalWrapper) Blur()                    { m.modal.Blur() }
 func (m *modalWrapper) HasFocus() bool           { return m.modal.HasFocus() }

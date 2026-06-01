@@ -22,6 +22,9 @@ type App struct {
 	mu           sync.Mutex
 	mouseCapture Widget
 
+	mouseX, mouseY int
+	mouseObserver  func(action MouseAction, ev *tcell.EventMouse) bool
+
 	// dirty marks that a redraw is needed before the loop blocks again.
 	// Set on the event-loop goroutine only (by handled events and drained
 	// queue fns); coalesced into a single draw() per loop iteration.
@@ -117,6 +120,24 @@ func (a *App) SetOnResize(fn func(w, h int)) *App { a.onResize = fn; return a }
 // each frame, before the screen is shown. Use it to paint screen-wide overlays
 // (e.g. toasts) on top of all content.
 func (a *App) SetAfterDrawFunc(fn func(screen tcell.Screen)) *App { a.afterDraw = fn; return a }
+
+// Root returns the root widget set via SetRoot (nil if unset). Useful for
+// introspection tools (e.g. a widget-tree inspector) that walk the tree.
+func (a *App) Root() Widget { return a.root }
+
+// MousePosition returns the last observed mouse cell position. Zero until the
+// first mouse event. Read it from a draw/observer callback.
+func (a *App) MousePosition() (x, y int) { return a.mouseX, a.mouseY }
+
+// SetMouseObserver installs a function called for every mouse event (after the
+// position is recorded, before normal dispatch). It never consumes the event —
+// dispatch proceeds regardless — but returning true requests a redraw, so a HUD
+// that tracks the cursor (e.g. a cell probe) can repaint on motion without the
+// app otherwise redrawing on mouse moves. Pass nil to remove.
+func (a *App) SetMouseObserver(fn func(action MouseAction, ev *tcell.EventMouse) bool) *App {
+	a.mouseObserver = fn
+	return a
+}
 
 // Stop signals the event loop to exit cleanly.
 func (a *App) Stop() {
@@ -220,7 +241,9 @@ func (a *App) Run() error {
 				}
 				a.dirty = true
 			case *tcell.EventMouse:
-				a.dispatchMouse(ev)
+				if a.dispatchMouse(ev) {
+					a.dirty = true
+				}
 			case *tcell.EventPaste:
 				// tcell uses EventPaste as a start/end bracket marker.
 				_ = ev
@@ -264,12 +287,21 @@ func (a *App) dispatchKey(ev *tcell.EventKey) {
 	}
 }
 
-func (a *App) dispatchMouse(ev *tcell.EventMouse) {
+// dispatchMouse routes a mouse event and returns whether a redraw was requested
+// (by the mouse observer). It records the cursor position and notifies the
+// observer before normal capture/hit-test dispatch.
+func (a *App) dispatchMouse(ev *tcell.EventMouse) (redraw bool) {
+	a.mouseX, a.mouseY = ev.Position()
+
 	a.mu.Lock()
 	cap := a.mouseCapture
 	a.mu.Unlock()
 
 	action := tcellMouseAction(ev)
+
+	if a.mouseObserver != nil {
+		redraw = a.mouseObserver(action, ev)
+	}
 
 	if cap != nil {
 		if mh, ok := cap.(MouseHandler); ok {
@@ -302,6 +334,7 @@ func (a *App) dispatchMouse(ev *tcell.EventMouse) {
 			}
 		}
 	}
+	return
 }
 
 func (a *App) dispatchPaste(text string) {
