@@ -1,5 +1,6 @@
 name: atterpac
 ident: Atterpac
+hidden: true   # internal-only: usable via themes.Atterpac / Get("atterpac"), excluded from All()/Names() listings
 colors:
   bg: "#1a1813"          # warm near-black page background
   bg_light: "#221f18"    # cards / raised surfaces

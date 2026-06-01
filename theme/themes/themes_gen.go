@@ -709,10 +709,10 @@ var TokyoNightStorm = theme.MustFromColors(theme.ThemeColors{
 // DefaultName is the name of the default theme.
 const DefaultName = "tokyonight-night"
 
-// All returns all built-in themes keyed by name.
+// All returns all built-in themes keyed by name. Themes marked
+// `hidden: true` are excluded; resolve those by name with Get.
 func All() map[string]theme.Theme {
 	return map[string]theme.Theme{
-		"atterpac":             Atterpac,
 		"catppuccin-frappe":    CatppuccinFrappe,
 		"catppuccin-latte":     CatppuccinLatte,
 		"catppuccin-macchiato": CatppuccinMacchiato,
@@ -742,10 +742,17 @@ func All() map[string]theme.Theme {
 	}
 }
 
-// Names returns a sorted list of all built-in theme names.
+// all returns every built-in theme keyed by name, including hidden ones.
+func all() map[string]theme.Theme {
+	m := All()
+	m["atterpac"] = Atterpac
+	return m
+}
+
+// Names returns a sorted list of all built-in theme names, excluding
+// themes marked `hidden: true`.
 func Names() []string {
 	return []string{
-		"atterpac",
 		"catppuccin-frappe",
 		"catppuccin-latte",
 		"catppuccin-macchiato",
@@ -775,8 +782,9 @@ func Names() []string {
 	}
 }
 
-// Get returns a theme by name, or nil if not found.
-func Get(name string) theme.Theme { return All()[name] }
+// Get returns a theme by name, or nil if not found. Hidden themes are
+// resolvable here even though they are absent from All and Names.
+func Get(name string) theme.Theme { return all()[name] }
 
 // Default returns the default theme.
 func Default() theme.Theme { return Get(DefaultName) }
