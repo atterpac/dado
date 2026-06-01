@@ -1,0 +1,57 @@
+---
+title: ToastManager
+description: Global notification overlay. Requires a core.App reference and must be added to the root layout to render.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/toast-manager.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Setup
+
+ToastManager must be overlaid on top of your main layout using a `core.Pages` or similar. It draws itself at a configurable screen corner and requires a `*core.App` for `QueueUpdateDraw`:
+
+```go
+toasts := components.NewToastManager(app.TviewApp())
+// Add to your root pages so it renders above all content
+root.AddPage("toasts", toasts, true, true)
+```
+
+## Showing toasts
+
+```go
+// Auto-dismiss after default duration (3s)
+toasts.Show("Saved successfully", components.ToastSuccess)
+
+// Custom duration
+toasts.ShowWithDuration("Rate limited", components.ToastWarning, 10*time.Second)
+
+// Persistent (must be dismissed manually)
+toasts.ShowWithDuration("Connection lost", components.ToastError, 0)
+```
+
+## Levels
+
+| Constant | Color | Icon |
+|----------|-------|------|
+| `ToastInfo` | Blue | ℹ |
+| `ToastSuccess` | Green | ✓ |
+| `ToastWarning` | Yellow | ⚠ |
+| `ToastError` | Red | ✗ |
+
+## Positions
+
+Six positions: `ToastTopRight` (default), `ToastTopLeft`, `ToastBottomRight`, `ToastBottomLeft`, `ToastTopCenter`, `ToastBottomCenter`.
+
+## Defaults
+
+| Setting | Default |
+|---------|---------|
+| Position | `ToastTopRight` |
+| Max visible | 5 |
+| Max width | 40 chars |
+| Default duration | 3 seconds |
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

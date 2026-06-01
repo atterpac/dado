@@ -1,0 +1,21 @@
+---
+title: Button
+description: Clickable button. Enter or Space triggers it; disabled state prevents all input.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/button.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Click button |
+| `Space` | Click button |
+
+When `SetDisabled(true)`, all input is silently ignored.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

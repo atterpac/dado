@@ -1,0 +1,12 @@
+---
+title: KeyHintBar
+description: Horizontal pill row showing available key bindings. Used at the bottom of views and modals.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/key-hint-bar.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -1,0 +1,53 @@
+---
+title: ERDGraph
+description: 2D entity-relationship diagram. Tab cycles focused table; arrow keys pan; h/j/k/l jump to nearest neighbor.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/e-r-d-graph.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` | Pan viewport up |
+| `↓` | Pan viewport down |
+| `←` | Pan viewport left |
+| `→` | Pan viewport right |
+| `h` | Jump focus to nearest table left |
+| `j` | Jump focus to nearest table below |
+| `k` | Jump focus to nearest table above |
+| `l` | Jump focus to nearest table right |
+| `Tab` | Cycle focus to next table |
+| `Shift+Tab` | Cycle focus to previous table |
+| `c` | Center viewport on the focused table |
+| `Enter` | Select focused table (fires `onSelect`) |
+
+Arrow keys pan the viewport; `h/j/k/l` jump the focused table to a spatial neighbor.
+
+## Data model
+
+```go
+erd := components.NewERDGraph()
+erd.SetData(&components.ERDData{
+    Tables: []components.ERDTable{
+        {
+            Name: "users",
+            Columns: []components.ERDColumn{
+                {Name: "id",    Type: "bigint", PrimaryKey: true},
+                {Name: "email", Type: "varchar"},
+            },
+        },
+    },
+    Relations: []components.ERDRelation{
+        {From: "orders.user_id", To: "users.id"},
+    },
+})
+```
+
+Foreign key lines are drawn automatically between related columns.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

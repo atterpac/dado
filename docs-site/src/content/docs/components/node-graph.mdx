@@ -1,0 +1,29 @@
+---
+title: NodeGraph
+description: 2D node-and-edge graph viewer with vim-style pan and click-to-select.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/node-graph.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Pan up |
+| `↓` / `j` | Pan down |
+| `←` / `h` | Pan left |
+| `→` / `l` | Pan right |
+| `Enter` | Select the focused node (fires `onSelect`) |
+| `c` | Center viewport on the focused node |
+
+The focused node is `NodeGraphData.FocusID`. Set it before calling `SetData` to control which node the viewport centers on initially.
+
+## Layout and centering
+
+`SetData` computes the layout immediately and sets a `needsCenter` flag — the viewport centers on the first draw when terminal dimensions are available. Use `SetFit(true)` to center on the bounding box of all nodes instead of the focused node.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

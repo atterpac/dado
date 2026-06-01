@@ -1,0 +1,38 @@
+---
+title: Tabs
+description: Tabbed container. Tab/Shift+Tab cycle tabs; number keys jump directly; H/L move left/right; x closes.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/tabs.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Next tab |
+| `Shift+Tab` | Previous tab |
+| `H` | Previous tab |
+| `L` | Next tab |
+| `1`–`9` | Jump directly to tab by position |
+| `x` | Close current tab (requires `SetClosable(true)`) |
+
+## Adding tabs
+
+```go
+tabs := components.NewTabs()
+tabs.AddTab("Overview", overviewView)
+tabs.AddTab("Logs", logView)
+tabs.AddTab("Settings", settingsView)
+```
+
+`SetActive(index)` switches programmatically. `OnChange` fires whenever the active tab changes.
+
+## Closable tabs
+
+`SetClosable(true)` enables the `x` key to close the active tab and fires `OnClose` with the tab index. The component does not remove the tab automatically — remove it in the `OnClose` handler so you control cleanup.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

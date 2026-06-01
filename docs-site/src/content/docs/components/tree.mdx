@@ -1,0 +1,40 @@
+---
+title: Tree
+description: Collapsible tree view with vim navigation, multi-select, and expand/collapse helpers.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/tree.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move up |
+| `↓` / `j` | Move down |
+| `→` / `l` | Expand node or move into first child |
+| `←` / `h` | Collapse node or move to parent |
+| `Home` / `g` | Jump to first node |
+| `End` / `G` | Jump to last node |
+| `PgDn` | Page down |
+| `PgUp` | Page up |
+| `Ctrl+D` | Half-page down |
+| `Ctrl+U` | Half-page up |
+| `Enter` | Select node (fires `onSelect`) |
+| `Space` | Toggle selection (multi-select) or toggle expand (single) |
+| `o` | Toggle expand/collapse |
+| `O` | Expand all nodes |
+| `C` | Collapse all nodes |
+
+## Multi-select
+
+Enable with `SetMultiSelect(true)`. In multi-select mode, `Space` toggles the focused node's selection and `o` toggles expand/collapse (both are available simultaneously). Retrieve all selected nodes with `GetSelectedNodes()`.
+
+## Highlight vs select
+
+`onHighlight` fires on every cursor move; `onSelect` fires only on `Enter`. Use `onHighlight` to drive a detail panel in a master-detail layout.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -1,0 +1,48 @@
+---
+title: ContextMenu
+description: Popup menu with optional submenus. Show at a cursor position or centered on screen.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/context-menu.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move selection up |
+| `↓` / `j` | Move selection down |
+| `→` / `l` | Open submenu |
+| `←` / `h` | Close submenu (return to parent) |
+| `Home` | Jump to first item |
+| `End` | Jump to last item |
+| `Enter` | Activate selected item |
+| `Esc` | Close menu |
+
+## Showing the menu
+
+```go
+menu := components.NewContextMenu()
+menu.SetItems([]components.MenuItem{
+    {Label: "Edit",   Action: func() { ... }},
+    {Label: "Delete", Action: func() { ... }},
+    {Label: "More",   Submenu: []components.MenuItem{
+        {Label: "Export CSV", Action: func() { ... }},
+    }},
+})
+
+// At a specific terminal coordinate
+menu.ShowAt(x, y)
+
+// Centered within the screen
+menu.ShowCentered(screenW, screenH)
+```
+
+## Separator items
+
+Add `MenuItem{Separator: true}` to insert a visual divider line. Separators are skipped by keyboard navigation.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

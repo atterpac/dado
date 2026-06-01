@@ -1,0 +1,16 @@
+---
+title: MetricCard
+description: Dashboard tile showing a primary value, label, trend indicator, and optional sparkline.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/metric-card.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Embedded sparkline
+
+The optional sparkline fills the lower portion of the card. Omit `SetSparklineData` (or pass nil) to show a plain metric with no chart.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

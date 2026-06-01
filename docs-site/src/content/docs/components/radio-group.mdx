@@ -1,0 +1,26 @@
+---
+title: RadioGroup
+description: Single-choice option group. Space selects the focused option; j/k or arrows navigate.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/radio-group.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move focus up |
+| `↓` / `j` | Move focus down |
+| `Space` | Select focused option |
+
+`Enter` is reserved for form submission.
+
+## Form integration
+
+RadioGroup implements `FormField`. The bound value type is `string` (the selected option's value). `SetFieldValue` accepts a `string` matched against option values.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

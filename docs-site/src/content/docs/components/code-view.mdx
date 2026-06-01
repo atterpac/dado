@@ -1,0 +1,34 @@
+---
+title: CodeView
+description: Scrollable syntax-highlighted code viewer with vim navigation and horizontal scrolling.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/code-view.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Scroll up one line |
+| `↓` / `j` | Scroll down one line |
+| `←` / `h` | Scroll left |
+| `→` / `l` | Scroll right |
+| `Home` / `g` | Jump to top |
+| `End` / `G` | Jump to bottom |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+
+## Setting content
+
+```go
+cv := components.NewCodeView()
+cv.SetContent(sourceCode, "go") // language hint for highlighting
+```
+
+The language hint drives syntax highlighting. Use standard language identifiers (`"go"`, `"json"`, `"python"`, etc.).
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

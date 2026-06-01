@@ -1,0 +1,31 @@
+---
+title: Modal
+description: Centered overlay dialog. Implements nav.ModalComponent — push onto nav.Pages and it handles focus, backdrop, and Esc dismissal automatically.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/modal.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Fire `onSubmit` |
+| `Esc` | Fire `onCancel` if set, otherwise close |
+
+## Sizing
+
+Modals auto-size between `MinWidth`/`MinHeight` and `MaxWidth`/`MaxHeight`. Set both `Width` and `Height` for a fixed-size modal. The centering math runs on every `Draw` so the modal stays centered when the terminal is resized.
+
+## Backdrop
+
+Set `Backdrop: true` in `ModalConfig` to draw a dark semi-transparent overlay behind the modal. The default modal behavior (`DefaultModalBehavior`) enables the backdrop by default.
+
+## nav.ModalComponent
+
+Modal implements `nav.ModalComponent`. When pushed via `nav.Pages.PushModal`, the navigator automatically: captures all input, restores focus on dismiss, and pops on `Esc`. Custom sub-dialogs can embed `Modal` and call `WrapInputHandler` to handle additional keys before the base handler runs.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

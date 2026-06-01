@@ -1,0 +1,43 @@
+---
+title: Form
+description: Field container with Tab-driven focus cycling, Ctrl+S submission, and typed value extraction.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/form.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Focus next field |
+| `Shift+Tab` | Focus previous field |
+| `Enter` | Submit form (unless focused field is a TextArea) |
+| `Ctrl+S` | Submit form (always) |
+| `Esc` | Cancel (fires `onCancel`) |
+
+`Enter` passes through to `TextArea` fields for newlines; use `Ctrl+S` to submit when a TextArea is focused.
+
+## Compatible field types
+
+Any component implementing the `FormField` interface works with Form: `TextField`, `TextArea`, `Checkbox`, `Select`, `MultiSelect`, `RadioGroup`. All fire change events and expose `FieldValue()` / `SetFieldValue()`.
+
+## Getting values
+
+```go
+form.SetOnSubmit(func(values map[string]any) {
+    name := values["name"].(string)
+    active := values["active"].(bool)
+})
+```
+
+Keys are the names passed when adding fields (`AddField("name", textField)`).
+
+## FormBuilder
+
+For programmatic form construction, see `FormBuilder` — it provides a fluent `AddTextField`, `AddSelect`, etc. API that registers each field and builds the `Form` in one chain.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

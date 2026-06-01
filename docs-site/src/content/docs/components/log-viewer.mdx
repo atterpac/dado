@@ -1,0 +1,40 @@
+---
+title: LogViewer
+description: Streaming log display with follow mode, regex filtering, and vim navigation.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/log-viewer.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Scroll up one line |
+| `↓` / `j` | Scroll down one line |
+| `Home` / `g` | Jump to top |
+| `End` / `G` | Jump to bottom and enable follow |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `f` | Toggle follow mode |
+| `c` | Clear all log entries |
+| `Enter` | Select the highlighted line (fires `onSelect`) |
+
+Scrolling up automatically disables follow mode. `End` / `G` re-enables it.
+
+## Follow mode
+
+When follow mode is active, new log entries scroll the view to the bottom automatically. It disables on any manual scroll. Call `SetFollow(true)` to enable programmatically.
+
+## Filtering
+
+`SetFilter(pattern string)` applies a regex to the log stream — only matching lines are shown. An empty pattern clears the filter and shows all entries.
+
+## Streaming
+
+Append entries from a goroutine using `Append` — it is safe to call from any goroutine. LogViewer calls `QueueUpdateDraw` internally.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

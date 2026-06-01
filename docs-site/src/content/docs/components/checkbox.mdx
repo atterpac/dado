@@ -1,0 +1,24 @@
+---
+title: Checkbox
+description: Boolean toggle rendered as [✓] / [ ]. Space toggles; implements FormField.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/checkbox.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle checked state |
+
+`Enter` is reserved for form submission.
+
+## Form integration
+
+Checkbox implements `FormField`. The bound value type is `bool`. `SetFieldValue` accepts `bool` or `string` (`"true"`/`"false"`).
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

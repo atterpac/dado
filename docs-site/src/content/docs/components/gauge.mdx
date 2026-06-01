@@ -1,0 +1,12 @@
+---
+title: Gauge
+description: Arc/circular progress indicator for displaying a single 0–100% value.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/gauge.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

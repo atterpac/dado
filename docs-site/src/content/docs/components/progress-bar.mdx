@@ -1,0 +1,12 @@
+---
+title: ProgressBar
+description: Horizontal progress bar for 0–100% display. Typically used inside ProgressModal or a custom status row.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/progress-bar.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

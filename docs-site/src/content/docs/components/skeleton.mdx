@@ -1,0 +1,12 @@
+---
+title: Skeleton
+description: Animated loading placeholder. Shows a pulsing block in place of content while data loads.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/skeleton.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

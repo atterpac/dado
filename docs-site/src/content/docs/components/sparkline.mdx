@@ -1,0 +1,16 @@
+---
+title: Sparkline
+description: Compact inline line chart for dashboard tiles and metric rows. No axes, no labels — just the trend shape.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/sparkline.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Sizing
+
+Sparkline fills whatever space it is given. Use a `core.Flex` fixed-width cell to constrain it — e.g., a 20-cell-wide column inside a `MetricCard`.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

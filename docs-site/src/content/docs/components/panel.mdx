@@ -1,0 +1,12 @@
+---
+title: Panel
+description: Container with rounded borders, optional title, and theme-aware colors. The building block for Drawer, BottomSheet, Modal, and MasterDetailView.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/panel.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

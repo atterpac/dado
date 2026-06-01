@@ -1,0 +1,12 @@
+---
+title: Label
+description: Styled single-line text display. Wraps text and applies theme colors without a border.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/label.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

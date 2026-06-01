@@ -1,0 +1,25 @@
+---
+title: List
+description: Simple scrollable list with keyboard navigation and optional selection highlighting.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/list.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+List uses the underlying core.List bindings:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Move selection |
+| `Home` / `End` | First / last item |
+| `PgUp` / `PgDn` | Page scroll |
+| `Enter` | Activate item |
+
+For large datasets (thousands of items) or when item height varies, use `VirtualList` instead — it virtualizes rendering so only visible rows are drawn.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

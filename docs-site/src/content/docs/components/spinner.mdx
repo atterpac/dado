@@ -1,0 +1,20 @@
+---
+title: Spinner
+description: Animated inline loading indicator. For a full-screen blocking spinner with a message, use ProgressModal.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/spinner.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Choice guide
+
+| Component | Use when |
+|-----------|----------|
+| `Spinner` | Inline, non-blocking — e.g., next to a status label |
+| `ProgressModal` | Blocking overlay with optional cancel and progress |
+| `Skeleton` | Placeholder that mirrors the shape of loading content |
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

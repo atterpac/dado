@@ -1,0 +1,16 @@
+---
+title: SearchBar
+description: Search input with optional results dropdown. Typing filters; Enter submits; Esc clears.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/search-bar.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key behavior
+
+`Enter` fires `onSubmit` with the current text. If the dropdown is open, `Enter` selects the highlighted result instead. `Esc` closes the dropdown; a second `Esc` clears the input.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

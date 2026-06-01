@@ -1,0 +1,26 @@
+---
+title: MultiSelect
+description: Multi-value checkbox list. Space toggles the focused option; j/k or arrows navigate.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/multi-select.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move focus up |
+| `↓` / `j` | Move focus down |
+| `Space` | Toggle focused option on/off |
+
+`Enter` is reserved for form submission. Toggle selections with `Space`.
+
+## Form integration
+
+MultiSelect implements `FormField`. The bound value type is `[]string` (option values). `SetFieldValue` accepts either `[]string` (matched by `Value`) or `[]int` (matched by index).
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

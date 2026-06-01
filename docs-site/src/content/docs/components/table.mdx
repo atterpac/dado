@@ -1,0 +1,23 @@
+---
+title: Table
+description: core.Table wrapper with typed header rows, row selection, and theme-aware styling.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/table.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+Table inherits core.Table's built-in navigation when `SetSelectable(true, false)` is active:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Move row selection |
+| `Home` / `End` | First / last row |
+| `PgUp` / `PgDn` | Page up / down |
+| `Enter` | Fire selection handler |
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

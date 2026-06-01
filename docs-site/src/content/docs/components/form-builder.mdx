@@ -1,0 +1,20 @@
+---
+title: FormBuilder
+description: Fluent builder API for constructing Form instances without manual field wiring.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/form-builder.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Pre-populating values
+
+Call `SetValues(map[string]any)` on the built form to set initial field values programmatically — useful when editing an existing record.
+
+## Relationship to Form
+
+`FormBuilder` is a convenience layer over `Form`. All key bindings, submission, and cancellation behavior are the same — see the [Form](/components/form) docs for the full reference.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

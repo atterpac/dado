@@ -1,0 +1,20 @@
+---
+title: BarChart
+description: Horizontal or vertical bar chart. Read-only display; update data via SetData.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/bar-chart.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Direction
+
+`BarChartHorizontal` (default) draws bars left-to-right with labels on the left. `BarChartVertical` draws bars bottom-to-top with labels along the bottom. Choose based on label length — horizontal works better for long labels.
+
+## Color
+
+By default bars use the theme accent color. Override per-bar by setting `BarChartData.Color` to a `tcell.Color`.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -1,0 +1,46 @@
+---
+title: Timeline
+description: Horizontal Gantt-style timeline. Up/down selects lanes; left/right scrolls time; +/- zooms.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/timeline.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move selection up one lane |
+| `↓` / `j` | Move selection down one lane |
+| `←` / `h` | Scroll timeline left |
+| `→` / `l` | Scroll timeline right |
+| `Home` / `g` | Jump to first lane, scroll to start |
+| `End` / `G` | Jump to last lane |
+| `Ctrl+D` | Half-page down (lanes) |
+| `Ctrl+U` | Half-page up (lanes) |
+| `+` / `=` | Zoom in (1.2×) |
+| `-` | Zoom out (0.8×) |
+| `0` | Reset zoom and scroll to default |
+| `Enter` | Select lane (fires `onSelect`) |
+
+## Data model
+
+Each `TimelineLane` has a name and a list of `TimelineItem` entries with start/end times. The timeline renders all items for each lane in a single row:
+
+```go
+tl := components.NewTimeline()
+tl.SetLanes([]components.TimelineLane{
+    {
+        Name: "Build",
+        Items: []components.TimelineItem{
+            {Label: "compile", Start: t0, End: t1},
+            {Label: "test",    Start: t1, End: t2},
+        },
+    },
+})
+```
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />
