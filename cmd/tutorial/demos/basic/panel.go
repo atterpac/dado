@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,15 +28,13 @@ type PanelDemo struct {
 }
 
 // Component returns the demo component.
-func (d *PanelDemo) Component() tview.Primitive {
+func (d *PanelDemo) Component() core.Widget {
 	d.title = "Panel Title"
 	d.titleAlign = "center"
 
-	content := tview.NewTextView()
+	content := core.NewTextView()
 	content.SetText("This is the panel content.\nPanels provide a bordered container with an optional title.")
-	content.SetTextAlign(tview.AlignCenter)
 	content.SetBackgroundColor(theme.Bg())
-	content.SetTextColor(theme.Fg())
 
 	d.panel = components.NewPanel().
 		SetTitle(d.title).

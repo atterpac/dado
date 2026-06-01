@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
@@ -125,22 +124,12 @@ func (s *Sidebar) Draw(screen tcell.Screen) {
 	s.Panel.Draw(screen)
 }
 
-// InputHandler returns the input handler for the sidebar.
-func (s *Sidebar) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return s.tree.InputHandler()
-}
-
 // Focus handles focus for the sidebar.
-func (s *Sidebar) Focus(delegate func(tview.Primitive)) {
-	delegate(s.tree)
+func (s *Sidebar) Focus() {
+	s.tree.Focus()
 }
 
 // HasFocus returns whether the sidebar has focus.
 func (s *Sidebar) HasFocus() bool {
 	return s.tree.HasFocus()
-}
-
-// MouseHandler returns the mouse handler for the sidebar.
-func (s *Sidebar) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return s.tree.MouseHandler()
 }

@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -57,7 +57,7 @@ func NewTimeline() *Timeline {
 		showLegend:   true,
 	}
 
-	t.initWidget(tview.NewBox())
+	t.initWidget()
 
 	return t
 }
@@ -184,7 +184,7 @@ func (t *Timeline) Draw(screen tcell.Screen) {
 	bgColor := th.Bg()
 	t.SetBackgroundColor(bgColor)
 
-	t.Box.DrawForSubclass(screen, t)
+	t.Box.DrawForSubclass(screen)
 
 	x, y, width, height := t.GetInnerRect()
 	if width < t.labelWidth+10 || height < 3 {
@@ -241,7 +241,7 @@ func (t *Timeline) drawHeader(screen tcell.Screen, x, y, width int) {
 
 	// Draw label column header
 	labelStyle := tcell.StyleDefault.Foreground(th.PanelTitle()).Background(th.Bg())
-	tview.Print(screen, "Event", x, y, t.labelWidth, tview.AlignLeft, th.PanelTitle())
+	core.PrintClipped(screen, "Event", x, y, t.labelWidth, tcell.StyleDefault.Foreground(th.PanelTitle()))
 
 	// Draw time markers
 	markerCount := 5
@@ -272,7 +272,7 @@ func (t *Timeline) drawHeader(screen tcell.Screen, x, y, width int) {
 		}
 
 		// Draw marker
-		tview.Print(screen, marker, pos, y, 12, tview.AlignLeft, th.FgDim())
+		core.PrintClipped(screen, marker, pos, y, 12, tcell.StyleDefault.Foreground(th.FgDim()))
 
 		// Draw tick mark
 		screen.SetContent(pos, y+1, '│', nil, labelStyle)
@@ -436,61 +436,60 @@ func (t *Timeline) statusColor(status *theme.Status) tcell.Color {
 	return t.th().FgDim()
 }
 
-// InputHandler handles keyboard input.
-func (t *Timeline) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyUp:
+// HandleKey handles keyboard input.
+func (t *Timeline) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyUp:
+		t.moveSelection(-1)
+	case tcell.KeyDown:
+		t.moveSelection(1)
+	case tcell.KeyLeft:
+		t.scroll(-5)
+	case tcell.KeyRight:
+		t.scroll(5)
+	case tcell.KeyHome:
+		t.selectedLane = 0
+		t.scrollY = 0
+	case tcell.KeyEnd:
+		if len(t.lanes) > 0 {
+			t.selectedLane = len(t.lanes) - 1
+		}
+	case tcell.KeyEnter:
+		if t.onSelect != nil && t.selectedLane >= 0 && t.selectedLane < len(t.lanes) {
+			t.onSelect(&t.lanes[t.selectedLane])
+		}
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'k':
 			t.moveSelection(-1)
-		case tcell.KeyDown:
+		case 'j':
 			t.moveSelection(1)
-		case tcell.KeyLeft:
+		case 'h':
 			t.scroll(-5)
-		case tcell.KeyRight:
+		case 'l':
 			t.scroll(5)
-		case tcell.KeyHome:
+		case '+', '=':
+			t.zoom(1.2)
+		case '-':
+			t.zoom(0.8)
+		case '0':
+			t.resetView()
+		case 'g':
 			t.selectedLane = 0
 			t.scrollY = 0
-		case tcell.KeyEnd:
+		case 'G':
 			if len(t.lanes) > 0 {
 				t.selectedLane = len(t.lanes) - 1
 			}
-		case tcell.KeyEnter:
-			if t.onSelect != nil && t.selectedLane >= 0 && t.selectedLane < len(t.lanes) {
-				t.onSelect(&t.lanes[t.selectedLane])
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'k':
-				t.moveSelection(-1)
-			case 'j':
-				t.moveSelection(1)
-			case 'h':
-				t.scroll(-5)
-			case 'l':
-				t.scroll(5)
-			case '+', '=':
-				t.zoom(1.2)
-			case '-':
-				t.zoom(0.8)
-			case '0':
-				t.resetView()
-			case 'g':
-				t.selectedLane = 0
-				t.scrollY = 0
-			case 'G':
-				if len(t.lanes) > 0 {
-					t.selectedLane = len(t.lanes) - 1
-				}
-			}
-		case tcell.KeyCtrlD:
-			_, _, _, height := t.GetInnerRect()
-			t.moveSelection(height / 2)
-		case tcell.KeyCtrlU:
-			_, _, _, height := t.GetInnerRect()
-			t.moveSelection(-height / 2)
 		}
-	})
+	case tcell.KeyCtrlD:
+		_, _, _, height := t.GetInnerRect()
+		t.moveSelection(height / 2)
+	case tcell.KeyCtrlU:
+		_, _, _, height := t.GetInnerRect()
+		t.moveSelection(-height / 2)
+	}
+	return false
 }
 
 // moveSelection moves the lane selection up or down.
@@ -565,65 +564,6 @@ func (t *Timeline) SetZoom(level float64) *Timeline {
 	return t
 }
 
-// Focus implements tview.Primitive.
-func (t *Timeline) Focus(delegate func(p tview.Primitive)) {
-	t.Box.Focus(delegate)
-}
-
-// HasFocus implements tview.Primitive.
 func (t *Timeline) HasFocus() bool {
 	return t.Box.HasFocus()
-}
-
-// MouseHandler handles mouse input.
-func (t *Timeline) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return t.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		x, y, _, _ := t.GetInnerRect()
-		mx, my := event.Position()
-
-		if !t.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(t)
-			// Calculate which lane was clicked
-			clickedLane := t.scrollY + (my - y - 2) // -2 for header rows
-			if clickedLane >= 0 && clickedLane < len(t.lanes) {
-				t.selectedLane = clickedLane
-				return true, t
-			}
-
-		case tview.MouseLeftDoubleClick:
-			clickedLane := t.scrollY + (my - y - 2)
-			if clickedLane >= 0 && clickedLane < len(t.lanes) {
-				t.selectedLane = clickedLane
-				if t.onSelect != nil {
-					t.onSelect(&t.lanes[t.selectedLane])
-				}
-				return true, t
-			}
-
-		case tview.MouseScrollUp:
-			if mx > x+t.labelWidth {
-				// Horizontal scroll in bar area
-				t.scroll(-3)
-			} else {
-				// Vertical scroll in label area
-				t.moveSelection(-1)
-			}
-			return true, t
-
-		case tview.MouseScrollDown:
-			if mx > x+t.labelWidth {
-				t.scroll(3)
-			} else {
-				t.moveSelection(1)
-			}
-			return true, t
-		}
-
-		return false, nil
-	})
 }

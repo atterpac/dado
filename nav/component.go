@@ -1,15 +1,24 @@
 package nav
 
 import (
-	"github.com/rivo/tview"
+	"github.com/gdamore/tcell/v2"
 
 	"github.com/atterpac/dado/components"
 )
 
 // Component represents a navigable view/page.
 // All views pushed to Pages must implement this interface.
+//
+// The rendering surface (Draw + SetRect + Blur + HasFocus) is a subset of
+// core.Widget that all dado widgets and composite
+// components can satisfy. Focus() is intentionally omitted: Pages routes
+// key events via HandleKey type-assertions; focus ownership is managed by
+// the FocusManager in layout.App.
 type Component interface {
-	tview.Primitive
+	Draw(screen tcell.Screen)
+	SetRect(x, y, w, h int)
+	Blur()
+	HasFocus() bool
 
 	// Name returns the display name for this component (used in breadcrumbs).
 	Name() string

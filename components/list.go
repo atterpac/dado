@@ -2,8 +2,8 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -15,9 +15,9 @@ type ListItem struct {
 }
 
 // List is a simple list component with selection support.
-// It wraps tview.List with themed defaults and a cleaner API.
+// It wraps core.List with themed defaults and a cleaner API.
 type List struct {
-	*tview.List
+	*core.List
 
 	items    []ListItem
 	onSelect func(index int, item ListItem)
@@ -32,7 +32,7 @@ func (l *List) Subs() *Subscriptions { return &l.subs }
 
 // NewList creates a new List.
 func NewList() *List {
-	list := tview.NewList()
+	list := core.NewList()
 	list.SetBackgroundColor(theme.Bg())
 	list.SetMainTextColor(theme.Fg())
 	list.SetSecondaryTextColor(theme.FgDim())
@@ -53,14 +53,13 @@ func NewList() *List {
 		}
 	})
 
-	list.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
-		if l.onChange != nil && index >= 0 && index < len(l.items) {
-			l.onChange(index, l.items[index])
+	list.SetChangedFunc(func(cur, prev int, mainText, secondaryText string, shortcut rune) {
+		if l.onChange != nil && cur >= 0 && cur < len(l.items) {
+			l.onChange(cur, l.items[cur])
 		}
 	})
 
-	// Register for automatic theme updates
-	l.subs.Add(theme.Register(list))
+	l.subs.Add(theme.RegisterFn(func(c tcell.Color) { list.SetBackgroundColor(c) }))
 
 	return l
 }
@@ -212,33 +211,25 @@ func (l *List) MoveToBottom() {
 	}
 }
 
-// Primitive returns the underlying tview.List for advanced usage.
-func (l *List) Primitive() *tview.List {
-	return l.List
-}
-
-// InputHandler wraps the default handler with vim-style navigation.
-func (l *List) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return l.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Vim-style navigation
-		switch event.Rune() {
+// HandleKey processes a key event for the List, supporting vim-style navigation.
+func (l *List) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyRune:
+		switch ev.Rune() {
 		case 'j':
 			l.MoveDown()
-			return
+			return true
 		case 'k':
 			l.MoveUp()
-			return
+			return true
 		case 'g':
 			l.MoveToTop()
-			return
+			return true
 		case 'G':
 			l.MoveToBottom()
-			return
+			return true
 		}
-
-		// Default handler for other keys
-		if handler := l.List.InputHandler(); handler != nil {
-			handler(event, setFocus)
-		}
-	})
+	}
+	// Delegate everything else to core.List's built-in handler (Enter, arrows, etc.)
+	return l.List.HandleKey(ev)
 }

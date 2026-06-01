@@ -1,10 +1,10 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,7 +28,7 @@ type BarChartDemo struct {
 }
 
 // Component returns the demo component.
-func (d *BarChartDemo) Component() tview.Primitive {
+func (d *BarChartDemo) Component() core.Widget {
 	d.orientation = "horizontal"
 	d.showValues = true
 

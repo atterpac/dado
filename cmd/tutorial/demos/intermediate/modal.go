@@ -1,10 +1,9 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
-
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -22,25 +21,23 @@ func init() {
 // ModalDemo demonstrates the Modal component.
 type ModalDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	modal     *components.Modal
 	backdrop  bool
 }
 
 // Component returns the demo component.
-func (d *ModalDemo) Component() tview.Primitive {
+func (d *ModalDemo) Component() core.Widget {
 	d.backdrop = false // Disabled for demo so background shows
 
 	// Create a container to show the modal on
-	d.container = tview.NewFlex()
-	d.container.SetDirection(tview.FlexRow)
+	d.container = core.NewFlex()
+	d.container.SetDirection(core.Column)
 
 	// Background content
-	bg := tview.NewTextView()
+	bg := core.NewTextView()
 	bg.SetText("Background content behind the modal.\nThis simulates content that would be dimmed.")
-	bg.SetTextAlign(tview.AlignCenter)
 	bg.SetBackgroundColor(theme.Bg())
-	bg.SetTextColor(theme.FgDim())
 
 	// Create modal
 	d.modal = components.NewModal(components.ModalConfig{
@@ -50,11 +47,9 @@ func (d *ModalDemo) Component() tview.Primitive {
 		Backdrop: d.backdrop,
 	})
 
-	content := tview.NewTextView()
+	content := core.NewTextView()
 	content.SetText("This is modal content.\n\nModals are centered overlays\nfor dialogs and prompts.")
-	content.SetTextAlign(tview.AlignCenter)
 	content.SetBackgroundColor(theme.Bg())
-	content.SetTextColor(theme.Fg())
 
 	d.modal.SetContent(content)
 	d.modal.SetHints([]components.KeyHint{
@@ -63,7 +58,7 @@ func (d *ModalDemo) Component() tview.Primitive {
 	})
 
 	// Layer modal on top
-	pages := tview.NewPages()
+	pages := core.NewPages()
 	pages.AddPage("bg", bg, true, true)
 	pages.AddPage("modal", d.modal, true, true)
 

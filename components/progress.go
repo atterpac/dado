@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/theme"
 )
@@ -32,7 +31,7 @@ func NewProgressBar() *ProgressBar {
 		filledChar:     '█',
 		emptyChar:      '░',
 	}
-	p.initWidget(tview.NewBox())
+	p.initWidget()
 	return p
 }
 
@@ -82,7 +81,7 @@ func (p *ProgressBar) SetChars(filled, empty rune) *ProgressBar {
 
 // Draw renders the progress bar.
 func (p *ProgressBar) Draw(screen tcell.Screen) {
-	p.Box.DrawForSubclass(screen, p)
+	p.Box.DrawForSubclass(screen)
 	x, y, width, height := p.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -152,7 +151,9 @@ func (p *ProgressBar) GetFieldHeight() int {
 	return 1
 }
 
-// SpinnerStyle defines the spinner animation style.
+// SpinnerStyle selects the character sequence used for the spin animation:
+// Dots/Braille use Unicode block characters; Line uses ASCII; Circle and Arrow
+// use geometric symbols.
 type SpinnerStyle int
 
 const (
@@ -171,7 +172,9 @@ var spinnerFrames = map[SpinnerStyle][]string{
 	SpinnerArrow:   {"←", "↖", "↑", "↗", "→", "↘", "↓", "↙"},
 }
 
-// Spinner is an animated loading indicator.
+// Spinner renders a single-cell animated indicator. Call Start to begin
+// animation and Stop when the operation completes. The animation ticks on a
+// configurable interval (default 100ms) via the draw loop.
 type Spinner struct {
 	widgetBase
 
@@ -190,7 +193,7 @@ func NewSpinner() *Spinner {
 		style:    SpinnerDots,
 		interval: 100 * time.Millisecond,
 	}
-	s.initWidget(tview.NewBox())
+	s.initWidget()
 	return s
 }
 
@@ -270,7 +273,7 @@ func (s *Spinner) IsRunning() bool {
 
 // Draw renders the spinner.
 func (s *Spinner) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen)
 	x, y, width, height := s.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -312,7 +315,8 @@ func (s *Spinner) GetFieldHeight() int {
 	return 1
 }
 
-// Gauge is a circular/arc style progress indicator.
+// Gauge renders an arc-style progress indicator for a single 0–100% value.
+// For a simpler horizontal bar use ProgressBar; for unknown-duration tasks use Spinner.
 type Gauge struct {
 	widgetBase
 
@@ -327,7 +331,7 @@ func NewGauge() *Gauge {
 	g := &Gauge{
 		maxValue: 100,
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
@@ -363,7 +367,7 @@ func (g *Gauge) SetMaxValue(max float64) *Gauge {
 
 // Draw renders the gauge.
 func (g *Gauge) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -476,7 +480,8 @@ func (g *Gauge) GetFieldHeight() int {
 	return 5
 }
 
-// Sparkline is a minimal line chart for metrics.
+// Sparkline renders a compact trend line with no axes or labels. It fills
+// its allocated space; constrain it with a fixed-width flex cell.
 type Sparkline struct {
 	widgetBase
 
@@ -488,7 +493,7 @@ type Sparkline struct {
 // NewSparkline creates a new Sparkline.
 func NewSparkline() *Sparkline {
 	s := &Sparkline{}
-	s.initWidget(tview.NewBox())
+	s.initWidget()
 	return s
 }
 
@@ -523,7 +528,7 @@ func (s *Sparkline) SetLabel(label string) *Sparkline {
 
 // Draw renders the sparkline.
 func (s *Sparkline) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen)
 	x, y, width, height := s.GetInnerRect()
 
 	if width <= 0 || height <= 0 || len(s.values) == 0 {

@@ -1,0 +1,29 @@
+---
+title: TextArea
+description: Multi-line text input. Enter inserts newlines; Ctrl+S submits the form when inside a Form container.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/text-area.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+TextArea provides these key bindings:
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Insert newline |
+| Any printable key | Insert character |
+| `Backspace` | Delete character |
+| Arrow keys | Move cursor |
+
+When inside a `Form`, `Enter` passes through to insert newlines. Use `Ctrl+S` to submit the form.
+
+## Form integration
+
+TextArea implements `FormField`. The bound value type is `string` (the full multi-line content).
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

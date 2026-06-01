@@ -2,18 +2,19 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
 // MasterDetailConfig provides configuration for NewMasterDetailViewConfig.
 type MasterDetailConfig struct {
 	MasterTitle     string
 	DetailTitle     string
-	MasterContent   tview.Primitive
-	DetailContent   tview.Primitive // nil shows empty state
-	Ratio           float64         // 0.0-1.0, default 0.6
-	DetailCollapsed bool            // Start with detail hidden
-	Resizable       bool            // Allow keyboard resize (default: true)
+	MasterContent   core.Widget
+	DetailContent   core.Widget // nil shows empty state
+	Ratio           float64     // 0.0-1.0, default 0.6
+	DetailCollapsed bool        // Start with detail hidden
+	Resizable       bool        // Allow keyboard resize (default: true)
 	EmptyIcon       string
 	EmptyTitle      string
 	EmptyMessage    string
@@ -39,10 +40,10 @@ type MasterDetailView struct {
 	detailPanel *Panel
 
 	// Content
-	masterContent     tview.Primitive
-	detailContent     tview.Primitive
-	detailPlaceholder tview.Primitive // Custom placeholder (overrides empty state)
-	detailEmpty       *EmptyState     // Default empty state
+	masterContent     core.Widget
+	detailContent     core.Widget
+	detailPlaceholder core.Widget // Custom placeholder (overrides empty state)
+	detailEmpty       *EmptyState // Default empty state
 
 	// Configuration
 	masterTitle  string
@@ -105,7 +106,7 @@ func NewMasterDetailView() *MasterDetailView {
 	// Set initial panel content
 	m.updatePanels()
 
-	m.initWidget(tview.NewBox())
+	m.initWidget()
 
 	return m
 }
@@ -165,7 +166,7 @@ func (m *MasterDetailView) updatePanels() {
 
 // updateDetailContent sets the appropriate content in the detail panel.
 func (m *MasterDetailView) updateDetailContent() {
-	var content tview.Primitive
+	var content core.Widget
 
 	if m.detailContent != nil {
 		content = m.detailContent
@@ -203,7 +204,7 @@ func (m *MasterDetailView) SetDetailTitle(title string) *MasterDetailView {
 }
 
 // SetMasterContent sets the master panel's content.
-func (m *MasterDetailView) SetMasterContent(content tview.Primitive) *MasterDetailView {
+func (m *MasterDetailView) SetMasterContent(content core.Widget) *MasterDetailView {
 	m.masterContent = content
 	m.masterPanel.SetContent(content)
 	return m
@@ -211,7 +212,7 @@ func (m *MasterDetailView) SetMasterContent(content tview.Primitive) *MasterDeta
 
 // SetDetailContent sets the detail panel's content.
 // Pass nil to show the empty state or placeholder.
-func (m *MasterDetailView) SetDetailContent(content tview.Primitive) *MasterDetailView {
+func (m *MasterDetailView) SetDetailContent(content core.Widget) *MasterDetailView {
 	m.detailContent = content
 	m.updateDetailContent()
 	return m
@@ -219,19 +220,19 @@ func (m *MasterDetailView) SetDetailContent(content tview.Primitive) *MasterDeta
 
 // SetDetailPlaceholder sets a custom placeholder to show when detail content is nil.
 // This overrides the default EmptyState component.
-func (m *MasterDetailView) SetDetailPlaceholder(content tview.Primitive) *MasterDetailView {
+func (m *MasterDetailView) SetDetailPlaceholder(content core.Widget) *MasterDetailView {
 	m.detailPlaceholder = content
 	m.updateDetailContent()
 	return m
 }
 
 // GetMasterContent returns the master panel's content.
-func (m *MasterDetailView) GetMasterContent() tview.Primitive {
+func (m *MasterDetailView) GetMasterContent() core.Widget {
 	return m.masterContent
 }
 
 // GetDetailContent returns the detail panel's content (may be nil).
-func (m *MasterDetailView) GetDetailContent() tview.Primitive {
+func (m *MasterDetailView) GetDetailContent() core.Widget {
 	return m.detailContent
 }
 
@@ -588,13 +589,13 @@ func (m *MasterDetailView) Hints() []KeyHint {
 	return hints
 }
 
-// --- tview.Primitive Implementation ---
+// --- core.Widget Implementation ---
 
 // Draw renders the master-detail view.
 func (m *MasterDetailView) Draw(screen tcell.Screen) {
 	// Update background color from theme
 	m.Box.SetBackgroundColor(m.th().Bg())
-	m.Box.DrawForSubclass(screen, m)
+	m.Box.DrawForSubclass(screen)
 
 	x, y, width, height := m.GetInnerRect()
 	if width <= 0 || height <= 0 {
@@ -612,45 +613,24 @@ func (m *MasterDetailView) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (m *MasterDetailView) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if m.showDetail {
-			// Delegate to split (handles Tab, Ctrl+arrows, etc.)
-			if handler := m.split.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
-		} else {
-			// Only master panel visible
-			if handler := m.masterPanel.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
-		}
-	})
-}
-
-// MouseHandler handles mouse input.
-func (m *MasterDetailView) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return m.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if m.showDetail {
-			if handler := m.split.MouseHandler(); handler != nil {
-				return handler(action, event, setFocus)
-			}
-		} else {
-			if handler := m.masterPanel.MouseHandler(); handler != nil {
-				return handler(action, event, setFocus)
-			}
-		}
-		return false, nil
-	})
+// HandleKey processes a key event for the MasterDetailView.
+func (m *MasterDetailView) HandleKey(ev *tcell.EventKey) bool {
+	if m.showDetail {
+		// Delegate to split (handles Tab, Ctrl+arrows, etc.)
+		m.split.HandleKey(ev)
+	} else {
+		// Only master panel visible
+		m.masterPanel.HandleKey(ev)
+	}
+	return false
 }
 
 // Focus handles focus.
-func (m *MasterDetailView) Focus(delegate func(tview.Primitive)) {
+func (m *MasterDetailView) Focus() {
 	if m.showDetail {
-		delegate(m.split)
+		m.split.Focus()
 	} else {
-		delegate(m.masterPanel)
+		m.masterPanel.Focus()
 	}
 }
 

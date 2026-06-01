@@ -4,7 +4,6 @@ import (
 	"maps"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/bus"
 )
@@ -165,36 +164,10 @@ func (kb *KeyBindings) dispatch(event *tcell.EventKey) bool {
 	return false
 }
 
-// Build creates a tview-compatible input handler function.
-// The returned function can be passed to SetInputHandler on tview primitives.
-func (kb *KeyBindings) Build() func(*tcell.EventKey, func(tview.Primitive)) *tcell.EventKey {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) *tcell.EventKey {
-		if kb.Handle(event) {
-			return nil
-		}
-		return event
-	}
-}
-
-// BuildBool creates an input handler with the bool-return convention used by
-// components.ComponentBase.SetInputHandler. Returns true when an event was consumed.
-func (kb *KeyBindings) BuildBool() func(*tcell.EventKey, func(tview.Primitive)) bool {
-	return func(event *tcell.EventKey, _ func(tview.Primitive)) bool {
+// BuildBool creates an input handler. Returns true when an event was consumed.
+func (kb *KeyBindings) BuildBool() func(*tcell.EventKey) bool {
+	return func(event *tcell.EventKey) bool {
 		return kb.Handle(event)
-	}
-}
-
-// BuildWithFocus creates a handler that provides access to the setFocus function.
-// Use this when your handlers need to change focus to other primitives.
-func (kb *KeyBindings) BuildWithFocus(focusHandler func(setFocus func(tview.Primitive))) func(*tcell.EventKey, func(tview.Primitive)) *tcell.EventKey {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) *tcell.EventKey {
-		if focusHandler != nil {
-			focusHandler(setFocus)
-		}
-		if kb.Handle(event) {
-			return nil
-		}
-		return event
 	}
 }
 

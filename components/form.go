@@ -5,7 +5,8 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
 // =============================================================================
@@ -44,7 +45,7 @@ func (e SetValuesError) Error() string {
 // FieldValue / ClearField trio so the Form container does not need to know
 // the concrete field type.
 type FormField interface {
-	tview.Primitive
+	core.Widget
 	GetName() string
 	GetFieldHeight() int
 
@@ -74,7 +75,7 @@ type Form struct {
 // NewForm creates a new Form container.
 func NewForm() *Form {
 	f := &Form{}
-	f.initWidget(tview.NewBox())
+	f.initWidget()
 	return f
 }
 
@@ -333,7 +334,7 @@ func (f *Form) FocusIndex(index int) *Form {
 
 // Draw renders the form.
 func (f *Form) Draw(screen tcell.Screen) {
-	f.Box.DrawForSubclass(screen, f)
+	f.Box.DrawForSubclass(screen)
 	x, y, width, height := f.GetInnerRect()
 
 	if width <= 0 || height <= 0 || len(f.fields) == 0 {
@@ -387,53 +388,53 @@ func (f *Form) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (f *Form) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return f.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if len(f.fields) == 0 {
-			return
-		}
+// HandleKey processes a key event for the Form.
+func (f *Form) HandleKey(ev *tcell.EventKey) bool {
+	if len(f.fields) == 0 {
+		return false
+	}
 
-		// Check for form-level keys
-		switch event.Key() {
-		case tcell.KeyTab:
-			f.focusNext()
-			return
-		case tcell.KeyBacktab:
-			f.focusPrev()
-			return
-		case tcell.KeyEscape:
-			if f.onCancel != nil {
-				f.onCancel()
-			}
-			return
-		case tcell.KeyCtrlS:
-			if f.onSubmit != nil {
-				f.onSubmit(f.GetValues())
-			}
-			return
-		case tcell.KeyEnter:
-			// If focused field is a TextArea, pass Enter through for newlines
-			if f.focusedIndex >= 0 && f.focusedIndex < len(f.fields) {
-				if _, isTextArea := f.fields[f.focusedIndex].(*TextArea); isTextArea {
-					break // Fall through to field handler
-				}
-			}
-			if f.onSubmit != nil {
-				f.onSubmit(f.GetValues())
-			}
-			return
+	// Check for form-level keys
+	switch ev.Key() {
+	case tcell.KeyTab:
+		f.focusNext()
+		return true
+	case tcell.KeyBacktab:
+		f.focusPrev()
+		return true
+	case tcell.KeyEscape:
+		if f.onCancel != nil {
+			f.onCancel()
 		}
-
-		// Pass to focused field
+		return true
+	case tcell.KeyCtrlS:
+		if f.onSubmit != nil {
+			f.onSubmit(f.GetValues())
+		}
+		return true
+	case tcell.KeyEnter:
+		// If focused field is a TextArea, pass Enter through for newlines
 		if f.focusedIndex >= 0 && f.focusedIndex < len(f.fields) {
-			field := f.fields[f.focusedIndex]
-			if handler := field.InputHandler(); handler != nil {
-				handler(event, setFocus)
+			if _, isTextArea := f.fields[f.focusedIndex].(*TextArea); isTextArea {
+				break // Fall through to field handler
 			}
 		}
-	})
+		if f.onSubmit != nil {
+			f.onSubmit(f.GetValues())
+		}
+		return true
+	}
+
+	// Pass to focused field
+	if f.focusedIndex >= 0 && f.focusedIndex < len(f.fields) {
+		field := f.fields[f.focusedIndex]
+		if kh, ok := field.(core.KeyHandler); ok {
+			kh.HandleKey(ev)
+		}
+	}
+	return false
 }
+
 
 func (f *Form) focusNext() {
 	if len(f.fields) == 0 {
@@ -450,8 +451,8 @@ func (f *Form) focusNext() {
 		f.focusedIndex = 0
 	}
 
-	// Visually focus the new field (no-op delegate so tview focus stays on Form)
-	f.fields[f.focusedIndex].Focus(func(tview.Primitive) {})
+	// Visually focus the new field
+	f.fields[f.focusedIndex].Focus()
 }
 
 func (f *Form) focusPrev() {
@@ -469,21 +470,17 @@ func (f *Form) focusPrev() {
 		f.focusedIndex = len(f.fields) - 1
 	}
 
-	// Visually focus the new field (no-op delegate so tview focus stays on Form)
-	f.fields[f.focusedIndex].Focus(func(tview.Primitive) {})
+	// Visually focus the new field
+	f.fields[f.focusedIndex].Focus()
 }
 
 // Focus handles focus.
 // The Form keeps focus itself so it can intercept Tab/BackTab for field navigation.
-// Individual fields receive input via the Form's InputHandler delegation.
-// Note: We do NOT call delegate - this keeps tview focus on the Form.
-func (f *Form) Focus(delegate func(tview.Primitive)) {
-	// Don't call delegate(f) - that would cause infinite recursion
-	// tview will keep focus on the Form since we don't delegate elsewhere
-
-	// Visually focus the current field (no-op delegate for visual state only)
+// Individual fields receive input via the Form's HandleKey delegation.
+func (f *Form) Focus() {
+	// Visually focus the current field
 	if len(f.fields) > 0 && f.focusedIndex >= 0 && f.focusedIndex < len(f.fields) {
-		f.fields[f.focusedIndex].Focus(func(tview.Primitive) {})
+		f.fields[f.focusedIndex].Focus()
 	}
 }
 
@@ -505,31 +502,3 @@ func (f *Form) HasFocus() bool {
 	return false
 }
 
-// MouseHandler handles mouse input.
-func (f *Form) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return f.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if !f.InRect(event.Position()) {
-			return false, nil
-		}
-
-		// Find which field was clicked
-		_, my := event.Position()
-		x, y, width, _ := f.GetInnerRect()
-
-		currentY := y - f.offset
-		for i, field := range f.fields {
-			fieldHeight := field.GetFieldHeight()
-			if my >= currentY && my < currentY+fieldHeight {
-				f.focusedIndex = i
-				field.SetRect(x, currentY, width, fieldHeight)
-				if handler := field.MouseHandler(); handler != nil {
-					return handler(action, event, setFocus)
-				}
-				return true, field
-			}
-			currentY += fieldHeight + 1
-		}
-
-		return false, nil
-	})
-}

@@ -1,0 +1,27 @@
+---
+title: EmptyState
+description: Centered placeholder for empty, loading, or error states. Shows an icon, title, and message.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/empty-state.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## States
+
+A common pattern is to swap between EmptyState variants based on async load status:
+
+```go
+// Loading
+empty.SetIcon("").SetTitle("Loading...").SetMessage("")
+
+// Loaded but empty
+empty.SetIcon(" ").SetTitle("No results").SetMessage("Try a different filter")
+
+// Error
+empty.SetIcon(" ").SetTitle("Failed to load").SetMessage(err.Error())
+```
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

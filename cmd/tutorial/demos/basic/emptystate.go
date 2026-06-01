@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,7 +28,7 @@ type EmptyStateDemo struct {
 }
 
 // Component returns the demo component.
-func (d *EmptyStateDemo) Component() tview.Primitive {
+func (d *EmptyStateDemo) Component() core.Widget {
 	d.title = "No Items Found"
 	d.message = "Try adjusting your search or filters"
 

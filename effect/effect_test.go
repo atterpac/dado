@@ -9,7 +9,7 @@ import (
 )
 
 // theme.QueueUpdateDraw with no registered app falls back to immediate
-// execution, so tests run synchronously without a tview.Application.
+// execution, so tests run synchronously without a core.App.
 
 func waitFor(t *testing.T, cond func() bool, timeout time.Duration) {
 	t.Helper()

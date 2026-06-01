@@ -1,0 +1,98 @@
+---
+title: dado
+description: Terminal UI components for Go — build beautiful, themeable TUIs in minutes.
+template: splash
+hero:
+  tagline: Beautiful terminal UIs for Go. Themeable, composable, and built on tcell.
+  image:
+    html: '<img src="/images/dashboard.png" alt="A dado dashboard rendered in the terminal" />'
+  actions:
+    - text: Get Started
+      link: /guides/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/atterpac/dado
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Why dado?
+
+<CardGrid>
+  <Card title="54 Components" icon="puzzle">
+    Data grids, charts, modals, forms, git graphs, node graphs, and more — all
+    ready to drop into your TUI app.
+  </Card>
+  <Card title="26 Built-in Themes" icon="seti:css">
+    Nord, Dracula, Catppuccin, Tokyo Night, Gruvbox, Rosé Pine, and many more.
+    Switch themes at runtime with a single call.
+  </Card>
+  <Card title="Built on tcell" icon="rocket">
+    dado renders directly on [gdamore/tcell](https://github.com/gdamore/tcell)
+    through its own widget `core`, adding a composable component model, theming,
+    and a typed event system on top of a rock-solid foundation.
+  </Card>
+  <Card title="Typed Event System" icon="approve-check">
+    Focus, key, change, submit, and activate events flow through a consistent
+    typed interface across every component.
+  </Card>
+</CardGrid>
+
+## Quick look
+
+```go
+package main
+
+import (
+    "log"
+
+    "github.com/atterpac/dado/components"
+    "github.com/atterpac/dado/layout"
+    "github.com/atterpac/dado/theme"
+    "github.com/atterpac/dado/theme/themes"
+    "github.com/atterpac/dado/core"
+)
+
+// HomeView is a page in the app. Embedding *components.ComponentBase
+// supplies the nav.Component lifecycle (Name/Start/Stop/Hints) for free and
+// delegates rendering to the wrapped core.Widget — here a *core.Flex.
+// No lifecycle boilerplate required.
+type HomeView struct {
+    *components.ComponentBase
+}
+
+func NewHomeView() *HomeView {
+    flex := core.NewFlex().SetDirection(core.Row)
+
+    // Drop components straight into the layout.
+    flex.AddItem(components.NewBadge("Ready").SetVariant(components.BadgeSuccess), 0, 1, false)
+    flex.AddItem(components.NewBadge("3").SetVariant(components.BadgeError).SetPill(true), 0, 1, false)
+
+    return &HomeView{
+        ComponentBase: components.NewComponentBase(flex).SetName("Home"),
+    }
+}
+
+func main() {
+    theme.SetProvider(themes.Nord) // one of 26 built-in themes
+
+    app := layout.NewApp(layout.AppConfig{})
+    app.Pages().Push(NewHomeView())
+
+    if err := app.Run(); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+## Explore
+
+<CardGrid>
+  <LinkCard title="Introduction" href="/guides/introduction/" description="What dado is and how it fits into your project." />
+  <LinkCard title="Installation" href="/guides/installation/" description="Add dado to a Go module in one command." />
+  <LinkCard title="Quick Start" href="/guides/quick-start/" description="Build your first TUI app in under 50 lines." />
+  <LinkCard title="Components" href="/components/badge/" description="Browse the full component catalog with live theme previews." />
+</CardGrid>

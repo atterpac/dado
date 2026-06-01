@@ -2,18 +2,17 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
-	// TODO: Update import path when extracted to separate repo
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
 // EmptyState displays a centered empty/loading/error state.
 type EmptyState struct {
-	*tview.Flex
-	iconView    *tview.TextView
-	titleView   *tview.TextView
-	messageView *tview.TextView
+	*core.Flex
+	iconView    *core.TextView
+	titleView   *core.TextView
+	messageView *core.TextView
 	icon        string
 	title       string
 	message     string
@@ -23,16 +22,16 @@ type EmptyState struct {
 // NewEmptyState creates a new empty state display.
 func NewEmptyState() *EmptyState {
 	e := &EmptyState{
-		Flex:        tview.NewFlex(),
-		iconView:    tview.NewTextView(),
-		titleView:   tview.NewTextView(),
-		messageView: tview.NewTextView(),
+		Flex:        core.NewFlex(),
+		iconView:    core.NewTextView(),
+		titleView:   core.NewTextView(),
+		messageView: core.NewTextView(),
 	}
 
 	// Configure text views
-	e.iconView.SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
-	e.titleView.SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
-	e.messageView.SetTextAlign(tview.AlignCenter).SetDynamicColors(true)
+	e.iconView.SetDynamicColors(true)
+	e.titleView.SetDynamicColors(true)
+	e.messageView.SetDynamicColors(true)
 
 	e.setupLayout()
 	return e
@@ -41,22 +40,22 @@ func NewEmptyState() *EmptyState {
 // setupLayout builds the centered layout structure.
 func (e *EmptyState) setupLayout() {
 	// Content column
-	content := tview.NewFlex().SetDirection(tview.FlexRow)
+	content := core.NewFlex()
 	content.AddItem(e.iconView, 2, 0, false)
 	content.AddItem(e.titleView, 1, 0, false)
 	content.AddItem(e.messageView, 1, 0, false)
 
 	// Center horizontally — use proportional sizing so long messages aren't truncated
-	hCenter := tview.NewFlex().SetDirection(tview.FlexColumn)
-	hCenter.AddItem(nil, 0, 1, false)
+	hCenter := core.NewFlex().SetDirection(core.Row)
+	hCenter.AddItem(new(core.Box), 0, 1, false)
 	hCenter.AddItem(content, 0, 2, false)
-	hCenter.AddItem(nil, 0, 1, false)
+	hCenter.AddItem(new(core.Box), 0, 1, false)
 
 	// Center vertically
-	e.Flex.SetDirection(tview.FlexRow)
-	e.Flex.AddItem(nil, 0, 1, false)
+	e.Flex.SetDirection(core.Column)
+	e.Flex.AddItem(new(core.Box), 0, 1, false)
 	e.Flex.AddItem(hCenter, 5, 0, false)
-	e.Flex.AddItem(nil, 0, 1, false)
+	e.Flex.AddItem(new(core.Box), 0, 1, false)
 }
 
 // SetIcon sets the icon (Nerd Font glyph).
@@ -107,7 +106,7 @@ func (e *EmptyState) Draw(screen tcell.Screen) {
 }
 
 // Focus is called when the empty state receives focus.
-func (e *EmptyState) Focus(delegate func(p tview.Primitive)) {
+func (e *EmptyState) Focus() {
 	e.hasFocus = true
 	// Don't delegate to children - EmptyState handles focus itself
 }

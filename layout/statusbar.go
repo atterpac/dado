@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -23,22 +23,23 @@ type StatusSection struct {
 // StatusBar is a configurable status bar with multiple sections.
 type StatusBar struct {
 	*components.Panel
-	content       *tview.TextView
+	content       *core.TextView
 	sections      []StatusSection // Left-aligned sections
 	rightSections []StatusSection // Right-aligned sections
 	title         string
 	contentAlign  components.Align
 
 	// Command mode
-	commandMode  bool
-	commandInput *tview.InputField
-	onSubmit     func(text string)
-	onCancel     func()
+	commandMode   bool
+	commandInput  *components.TextField
+	commandPrompt string // stored label for drawSuggestion
+	onSubmit      func(text string)
+	onCancel      func()
+	onChange      func(text string)
 
 	// Completion support
 	completions      []string // Current completion suggestions
 	completionIndex  int      // Currently selected completion (-1 = none)
-	completionList   *tview.List
 	showCompletions  bool
 	onComplete       func(input string) []string // Callback to get completions
 	onCompletionDone func()                      // Called when completion popup closes
@@ -60,151 +61,30 @@ func (s *StatusBar) Subs() *components.Subscriptions { return &s.subs }
 func NewStatusBar() *StatusBar {
 	s := &StatusBar{
 		Panel:           components.NewPanel(),
-		content:         tview.NewTextView(),
+		content:         core.NewTextView(),
 		sections:        make([]StatusSection, 0),
 		contentAlign:    components.AlignCenter, // Default to center
 		completionIndex: -1,
+		commandPrompt:   ": ",
 	}
 
 	s.content.SetDynamicColors(true)
-	s.content.SetTextAlign(tview.AlignLeft)
+	s.content.SetTextAlign(core.AlignLeft)
 	s.content.SetBackgroundColor(theme.Bg())
 	s.Panel.SetContent(s.content)
 
 	// Setup command input
-	s.commandInput = tview.NewInputField()
-	s.commandInput.SetBackgroundColor(theme.Bg())
-	s.commandInput.SetFieldBackgroundColor(theme.Bg())
-	s.commandInput.SetFieldTextColor(theme.Fg())
-	s.commandInput.SetLabelColor(theme.Accent())
-	s.commandInput.SetLabel(": ")
-	s.commandInput.SetPlaceholder("command...")
-	s.commandInput.SetPlaceholderTextColor(theme.FgMuted())
-
-	// Setup completion list
-	s.completionList = tview.NewList()
-	s.completionList.SetBackgroundColor(theme.BgLight())
-	s.completionList.SetMainTextColor(theme.Fg())
-	s.completionList.SetSelectedBackgroundColor(theme.Accent())
-	s.completionList.SetSelectedTextColor(theme.Bg())
-	s.completionList.ShowSecondaryText(false)
-	s.completionList.SetHighlightFullLine(true)
-
-	// Handle input events with custom capture for Tab/arrows
-	s.commandInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyTab:
-			// First, try to accept inline suggestion
-			if s.acceptSuggestion() {
-				return nil
-			}
-			// Otherwise trigger completion popup
-			if s.onComplete != nil {
-				input := s.commandInput.GetText()
-				s.completions = s.onComplete(input)
-				if len(s.completions) > 0 {
-					s.showCompletions = true
-					s.completionIndex = 0
-					s.updateCompletionList()
-				}
-			}
-			return nil
-
-		case tcell.KeyRight:
-			// Accept inline suggestion if cursor is at end
-			currentText := s.commandInput.GetText()
-			// tview InputField doesn't expose cursor position, so we check if suggestion is valid
-			if s.suggestion != "" && strings.HasPrefix(strings.ToLower(s.suggestion), strings.ToLower(currentText)) {
-				if s.acceptSuggestion() {
-					return nil
-				}
-			}
-			return event
-
-		case tcell.KeyBacktab:
-			// Navigate completions backwards
-			if s.showCompletions && len(s.completions) > 0 {
-				s.completionIndex--
-				if s.completionIndex < 0 {
-					s.completionIndex = len(s.completions) - 1
-				}
-				s.updateCompletionList()
-			}
-			return nil
-
-		case tcell.KeyUp:
-			if s.showCompletions && len(s.completions) > 0 {
-				// Navigate completions up
-				s.completionIndex--
-				if s.completionIndex < 0 {
-					s.completionIndex = len(s.completions) - 1
-				}
-				s.updateCompletionList()
-				return nil
-			}
-			// History previous
-			if s.onHistoryPrev != nil {
-				current := s.commandInput.GetText()
-				prev := s.onHistoryPrev(current)
-				s.commandInput.SetText(prev)
-			}
-			return nil
-
-		case tcell.KeyDown:
-			if s.showCompletions && len(s.completions) > 0 {
-				// Navigate completions down
-				s.completionIndex++
-				if s.completionIndex >= len(s.completions) {
-					s.completionIndex = 0
-				}
-				s.updateCompletionList()
-				return nil
-			}
-			// History next
-			if s.onHistoryNext != nil {
-				current := s.commandInput.GetText()
-				next := s.onHistoryNext(current)
-				s.commandInput.SetText(next)
-			}
-			return nil
-
-		case tcell.KeyEnter:
-			if s.showCompletions && s.completionIndex >= 0 && s.completionIndex < len(s.completions) {
-				// Accept completion
-				s.acceptCompletion()
-				return nil
-			}
-			// Submit command
-			if s.onSubmit != nil {
-				s.onSubmit(s.commandInput.GetText())
-			}
-			return nil
-
-		case tcell.KeyEscape:
-			if s.showCompletions {
-				// Close completions
-				s.hideCompletions()
-				return nil
-			}
-			// Cancel command mode
-			if s.onCancel != nil {
-				s.onCancel()
-			}
-			return nil
+	s.commandInput = components.NewTextField("command").
+		SetLabel(": ").
+		SetPlaceholder("command...")
+	s.commandInput.SetOnChange(func(ev *components.ChangeEvent[string]) {
+		if s.onChange != nil {
+			s.onChange(ev.NewValue)
 		}
-
-		// Close completions on any other key that modifies input
-		if s.showCompletions && event.Key() != tcell.KeyRune {
-			s.hideCompletions()
-		}
-
-		return event
 	})
 
-	// Register content for automatic theme updates (Panel registers itself)
-	s.subs.Add(theme.Register(s.content))
-	s.subs.Add(theme.Register(s.commandInput))
-	s.subs.Add(theme.Register(s.completionList))
+	s.subs.Add(theme.RegisterFn(func(c tcell.Color) { s.content.SetBackgroundColor(c) }))
+	s.subs.Add(theme.RegisterFn(func(c tcell.Color) { s.commandInput.SetBackgroundColor(c) }))
 
 	return s
 }
@@ -288,6 +168,14 @@ func (s *StatusBar) SectionCount() int {
 
 // Draw renders the status bar with current theme colors.
 func (s *StatusBar) Draw(screen tcell.Screen) {
+	// In command mode the bar "transforms" into a command line: the same
+	// content area is reused to show prompt + input text inline (no nested
+	// input box), so only the content swaps, not the frame.
+	if s.commandMode {
+		s.drawCommandMode(screen)
+		return
+	}
+
 	separator := "  [" + theme.TagFgMuted() + "]•[-]  "
 
 	// Helper to build section text
@@ -347,25 +235,52 @@ func (s *StatusBar) Draw(screen tcell.Screen) {
 	}
 
 	s.content.SetText(finalText)
-	s.content.SetTextAlign(tview.AlignLeft)
+	s.content.SetTextAlign(core.AlignLeft)
+	s.content.SetBackgroundColor(theme.Bg())
+
+	s.Panel.Draw(screen)
+}
+
+// drawCommandMode renders the command line inline within the existing content
+// area: prompt + input text + a block cursor, reusing the same TextView slot so
+// the bar visually transforms rather than nesting a bordered input box.
+func (s *StatusBar) drawCommandMode(screen tcell.Screen) {
+	value := s.commandInput.GetValue()
+
+	s.content.SetText(s.commandPrompt + value)
+	s.content.SetTextAlign(core.AlignLeft)
 	s.content.SetBackgroundColor(theme.Bg())
 
 	s.Panel.Draw(screen)
 
-	// Draw inline suggestion (ghost text) if in command mode
-	if s.commandMode && s.suggestion != "" {
-		s.drawSuggestion(screen)
+	// Draw the text cursor as a reverse-video cell over the content row.
+	cx, cy, cw, _ := s.content.GetRect()
+	promptLen := len([]rune(s.commandPrompt))
+	cursorPos := s.commandInput.CursorPos()
+	cursorX := cx + promptLen + cursorPos
+
+	if cursorX >= cx && cursorX < cx+cw {
+		runes := []rune(value)
+		cursorCh := ' '
+		if cursorPos >= 0 && cursorPos < len(runes) {
+			cursorCh = runes[cursorPos]
+		}
+		cursorStyle := tcell.StyleDefault.Background(theme.Fg()).Foreground(theme.Bg())
+		screen.SetContent(cursorX, cy, cursorCh, nil, cursorStyle)
 	}
 
-	// Draw completion popup if showing
-	if s.showCompletions && len(s.completions) > 0 && s.commandMode {
+	// Ghost-text suggestion and completion popup.
+	if s.suggestion != "" {
+		s.drawSuggestion(screen)
+	}
+	if s.showCompletions && len(s.completions) > 0 {
 		s.drawCompletionPopup(screen)
 	}
 }
 
 // drawSuggestion draws the inline ghost text after the current input.
 func (s *StatusBar) drawSuggestion(screen tcell.Screen) {
-	currentText := s.commandInput.GetText()
+	currentText := s.commandInput.GetValue()
 	if currentText == "" {
 		return
 	}
@@ -381,21 +296,21 @@ func (s *StatusBar) drawSuggestion(screen tcell.Screen) {
 		return
 	}
 
-	// Get the input field's actual position on screen
-	inputX, inputY, _, _ := s.commandInput.GetRect()
-
-	// Calculate x position: input field x + label length + input text length
-	label := s.commandInput.GetLabel()
-	labelLen := len([]rune(label))
+	// Position relative to the inline content row: content x + prompt + typed.
+	cx, cy, cw, _ := s.content.GetRect()
+	promptLen := len([]rune(s.commandPrompt))
 	inputLen := len([]rune(currentText))
-	startX := inputX + labelLen + inputLen
+	startX := cx + promptLen + inputLen
 
-	// Draw the ghost text in muted color
+	// Draw the ghost text in muted color, clipped to the content width.
 	ghostStyle := tcell.StyleDefault.Background(theme.Bg()).Foreground(theme.FgMuted())
 
 	col := startX
 	for _, r := range suffix {
-		screen.SetContent(col, inputY, r, nil, ghostStyle)
+		if col >= cx+cw {
+			break
+		}
+		screen.SetContent(col, cy, r, nil, ghostStyle)
 		col++
 	}
 }
@@ -533,19 +448,19 @@ func (s *StatusBar) SetConnectionStatus(connected bool, name string) *StatusBar 
 // Command Mode
 // -----------------------------------------------------------------------------
 
-// EnterCommandMode switches the status bar to show a command input.
+// EnterCommandMode switches the status bar to show a command input. The command
+// line is rendered inline in the existing content area (see drawCommandMode);
+// the Panel content stays s.content so only the text swaps, not the frame.
 func (s *StatusBar) EnterCommandMode() *StatusBar {
 	s.commandMode = true
-	s.commandInput.SetText("")
-	s.Panel.SetContent(s.commandInput)
+	s.commandInput.SetValue("")
 	return s
 }
 
 // ExitCommandMode switches back to showing status sections.
 func (s *StatusBar) ExitCommandMode() *StatusBar {
 	s.commandMode = false
-	s.commandInput.SetText("")
-	s.Panel.SetContent(s.content)
+	s.commandInput.SetValue("")
 	return s
 }
 
@@ -556,6 +471,7 @@ func (s *StatusBar) IsCommandMode() bool {
 
 // SetCommandPrompt sets the prompt shown before the input (default ": ").
 func (s *StatusBar) SetCommandPrompt(prompt string) *StatusBar {
+	s.commandPrompt = prompt
 	s.commandInput.SetLabel(prompt)
 	return s
 }
@@ -578,9 +494,23 @@ func (s *StatusBar) SetOnCommandCancel(fn func()) *StatusBar {
 	return s
 }
 
-// GetCommandInput returns the input field for focusing.
-func (s *StatusBar) GetCommandInput() *tview.InputField {
-	return s.commandInput
+// SetOnCommandChange sets the callback invoked whenever the command input text
+// changes (live). Pass nil to clear it.
+func (s *StatusBar) SetOnCommandChange(fn func(text string)) *StatusBar {
+	s.onChange = fn
+	return s
+}
+
+// SetCommandText sets the current command input text and moves the cursor to
+// the end. Useful for seeding a search box with an existing query.
+func (s *StatusBar) SetCommandText(text string) *StatusBar {
+	s.commandInput.SetValue(text)
+	return s
+}
+
+// CommandText returns the current command input text.
+func (s *StatusBar) CommandText() string {
+	return s.commandInput.GetValue()
 }
 
 // SetOnComplete sets the callback to get completions for current input.
@@ -628,7 +558,7 @@ func (s *StatusBar) acceptSuggestion() bool {
 		return false
 	}
 
-	currentText := s.commandInput.GetText()
+	currentText := s.commandInput.GetValue()
 	if currentText == "" {
 		return false
 	}
@@ -639,14 +569,9 @@ func (s *StatusBar) acceptSuggestion() bool {
 	}
 
 	// Accept the suggestion
-	s.commandInput.SetText(s.suggestion)
+	s.commandInput.SetValue(s.suggestion)
 	s.suggestion = ""
 	return true
-}
-
-// GetCompletionList returns the completion list for rendering.
-func (s *StatusBar) GetCompletionList() *tview.List {
-	return s.completionList
 }
 
 // IsShowingCompletions returns whether completions are currently displayed.
@@ -664,15 +589,110 @@ func (s *StatusBar) GetCompletionIndex() int {
 	return s.completionIndex
 }
 
-// updateCompletionList updates the list widget with current completions.
-func (s *StatusBar) updateCompletionList() {
-	s.completionList.Clear()
-	for _, c := range s.completions {
-		s.completionList.AddItem(c, "", 0, nil)
+// HandleKey handles keyboard input for command mode.
+func (s *StatusBar) HandleKey(ev *tcell.EventKey) bool {
+	if !s.commandMode {
+		return false
 	}
-	if s.completionIndex >= 0 && s.completionIndex < len(s.completions) {
-		s.completionList.SetCurrentItem(s.completionIndex)
+
+	switch ev.Key() {
+	case tcell.KeyTab:
+		// First, try to accept inline suggestion
+		if s.acceptSuggestion() {
+			return true
+		}
+		// Otherwise trigger completion popup
+		if s.onComplete != nil {
+			input := s.commandInput.GetValue()
+			s.completions = s.onComplete(input)
+			if len(s.completions) > 0 {
+				s.showCompletions = true
+				s.completionIndex = 0
+			}
+		}
+		return true
+
+	case tcell.KeyRight:
+		// Accept inline suggestion if one is pending
+		currentText := s.commandInput.GetValue()
+		if s.suggestion != "" && strings.HasPrefix(strings.ToLower(s.suggestion), strings.ToLower(currentText)) {
+			if s.acceptSuggestion() {
+				return true
+			}
+		}
+		return s.commandInput.HandleKey(ev)
+
+	case tcell.KeyBacktab:
+		// Navigate completions backwards
+		if s.showCompletions && len(s.completions) > 0 {
+			s.completionIndex--
+			if s.completionIndex < 0 {
+				s.completionIndex = len(s.completions) - 1
+			}
+		}
+		return true
+
+	case tcell.KeyUp:
+		if s.showCompletions && len(s.completions) > 0 {
+			s.completionIndex--
+			if s.completionIndex < 0 {
+				s.completionIndex = len(s.completions) - 1
+			}
+			return true
+		}
+		// History previous
+		if s.onHistoryPrev != nil {
+			current := s.commandInput.GetValue()
+			prev := s.onHistoryPrev(current)
+			s.commandInput.SetValue(prev)
+		}
+		return true
+
+	case tcell.KeyDown:
+		if s.showCompletions && len(s.completions) > 0 {
+			s.completionIndex++
+			if s.completionIndex >= len(s.completions) {
+				s.completionIndex = 0
+			}
+			return true
+		}
+		// History next
+		if s.onHistoryNext != nil {
+			current := s.commandInput.GetValue()
+			next := s.onHistoryNext(current)
+			s.commandInput.SetValue(next)
+		}
+		return true
+
+	case tcell.KeyEnter:
+		if s.showCompletions && s.completionIndex >= 0 && s.completionIndex < len(s.completions) {
+			s.acceptCompletion()
+			return true
+		}
+		// Submit command
+		if s.onSubmit != nil {
+			s.onSubmit(s.commandInput.GetValue())
+		}
+		return true
+
+	case tcell.KeyEscape:
+		if s.showCompletions {
+			s.hideCompletions()
+			return true
+		}
+		// Cancel command mode
+		if s.onCancel != nil {
+			s.onCancel()
+		}
+		return true
 	}
+
+	// Close completions on any non-rune key that modifies input
+	if s.showCompletions && ev.Key() != tcell.KeyRune {
+		s.hideCompletions()
+	}
+
+	return s.commandInput.HandleKey(ev)
 }
 
 // acceptCompletion inserts the selected completion into the input.
@@ -682,16 +702,16 @@ func (s *StatusBar) acceptCompletion() {
 	}
 
 	completion := s.completions[s.completionIndex]
-	currentText := s.commandInput.GetText()
+	currentText := s.commandInput.GetValue()
 
 	// Find the last word to replace
 	parts := strings.Fields(currentText)
 	if len(parts) == 0 {
-		s.commandInput.SetText(completion + " ")
+		s.commandInput.SetValue(completion + " ")
 	} else {
 		// Replace last partial word with completion
 		parts[len(parts)-1] = completion
-		s.commandInput.SetText(strings.Join(parts, " ") + " ")
+		s.commandInput.SetValue(strings.Join(parts, " ") + " ")
 	}
 
 	s.hideCompletions()
@@ -702,13 +722,12 @@ func (s *StatusBar) hideCompletions() {
 	s.showCompletions = false
 	s.completionIndex = -1
 	s.completions = nil
-	s.completionList.Clear()
 	if s.onCompletionDone != nil {
 		s.onCompletionDone()
 	}
 }
 
-// visibleLength calculates the visible length of a string with tview color tags.
+// visibleLength calculates the visible length of a string with color tags.
 // It strips [color]text[-] style tags to get the actual display length.
 func visibleLength(s string) int {
 	length := 0

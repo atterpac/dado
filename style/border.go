@@ -1,6 +1,7 @@
 package style
 
-import "github.com/rivo/tview"
+import "github.com/atterpac/dado/core"
+
 
 // BorderSet describes the runes used to draw a border. Layout is unaffected;
 // only the glyphs change.
@@ -42,8 +43,8 @@ var (
 	}
 )
 
-// applyBorderRunes is currently a no-op: tview.Box draws borders using the
-// global tview.Borders rune set, which is not per-Box customizable. BorderSet
+// applyBorderRunes is currently a no-op: Box draws borders using the
+// global Borders rune set, which is not per-Box customizable. BorderSet
 // values remain exposed so custom Draw() implementations can render their
 // own borders with the chosen runes.
-func applyBorderRunes(_ *tview.Box, _ BorderSet) {}
+func applyBorderRunes(_ *core.Box, _ BorderSet) {}

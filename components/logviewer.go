@@ -6,10 +6,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
-// LogLevel represents log severity
+// LogLevel represents log severity in ascending order (Debug < Info < Warn < Error < Fatal).
 type LogLevel int
 
 const (
@@ -56,7 +55,8 @@ func (l LogLevel) Short() string {
 	}
 }
 
-// LogEntry represents a single log line
+// LogEntry is a single log record. Fields holds structured key-value pairs
+// (e.g., from a JSON log line); they are displayed alongside the message.
 type LogEntry struct {
 	Timestamp time.Time
 	Level     LogLevel
@@ -65,7 +65,9 @@ type LogEntry struct {
 	Fields    map[string]string // Optional structured fields
 }
 
-// LogFilter defines filtering criteria
+// LogFilter defines filtering criteria applied to the log stream. Search and
+// SearchRegex are mutually exclusive — SearchRegex takes precedence when set.
+// Zero-value time fields disable time-range filtering.
 type LogFilter struct {
 	MinLevel    LogLevel
 	MaxLevel    LogLevel
@@ -76,7 +78,9 @@ type LogFilter struct {
 	TimeTo      time.Time
 }
 
-// LogViewer displays streaming logs with filtering
+// LogViewer displays streaming log entries with level-based coloring, regex
+// filtering, and follow mode. Append entries from any goroutine via Append;
+// the viewer calls QueueUpdateDraw internally.
 type LogViewer struct {
 	widgetBase
 
@@ -128,7 +132,7 @@ func NewLogViewer() *LogViewer {
 		},
 		filteredIdx: make([]int, 0),
 	}
-	v.initWidget(tview.NewBox())
+	v.initWidget()
 	return v
 }
 
@@ -467,7 +471,7 @@ func (v *LogViewer) getLevelColor(level LogLevel) tcell.Color {
 
 // Draw renders the log viewer
 func (v *LogViewer) Draw(screen tcell.Screen) {
-	v.Box.DrawForSubclass(screen, v)
+	v.Box.DrawForSubclass(screen)
 	x, y, width, height := v.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -614,86 +618,97 @@ func (v *LogViewer) drawScrollbar(screen tcell.Screen, x, y, height int) {
 	}
 }
 
-// InputHandler handles keyboard input
-func (v *LogViewer) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return v.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		v.mu.Lock()
-		defer v.mu.Unlock()
+func (v *LogViewer) HandleKey(ev *tcell.EventKey) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 
-		_, _, _, height := v.GetInnerRect()
+	_, _, _, height := v.GetInnerRect()
 
-		switch event.Key() {
-		case tcell.KeyDown:
+	switch ev.Key() {
+	case tcell.KeyDown:
+		if v.offsetY < len(v.filteredIdx)-1 {
+			v.offsetY++
+			v.follow = false
+		}
+		return true
+	case tcell.KeyUp:
+		if v.offsetY > 0 {
+			v.offsetY--
+			v.follow = false
+		}
+		return true
+	case tcell.KeyPgDn:
+		v.offsetY += height
+		if v.offsetY > len(v.filteredIdx)-height {
+			v.offsetY = len(v.filteredIdx) - height
+		}
+		if v.offsetY < 0 {
+			v.offsetY = 0
+		}
+		v.follow = false
+		return true
+	case tcell.KeyPgUp:
+		v.offsetY -= height
+		if v.offsetY < 0 {
+			v.offsetY = 0
+		}
+		v.follow = false
+		return true
+	case tcell.KeyHome:
+		v.offsetY = 0
+		v.follow = false
+		return true
+	case tcell.KeyEnd:
+		v.offsetY = len(v.filteredIdx) - height
+		if v.offsetY < 0 {
+			v.offsetY = 0
+		}
+		v.follow = true
+		return true
+	case tcell.KeyEnter:
+		if v.selectedLine >= 0 && v.selectedLine < len(v.filteredIdx) {
+			entry := v.entries[v.filteredIdx[v.selectedLine]]
+			if v.onSelect != nil {
+				v.onSelect(entry)
+			}
+		}
+		return true
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
 			if v.offsetY < len(v.filteredIdx)-1 {
 				v.offsetY++
 				v.follow = false
 			}
-		case tcell.KeyUp:
+			return true
+		case 'k':
 			if v.offsetY > 0 {
 				v.offsetY--
 				v.follow = false
 			}
-		case tcell.KeyPgDn:
-			v.offsetY += height
-			if v.offsetY > len(v.filteredIdx)-height {
-				v.offsetY = len(v.filteredIdx) - height
-			}
-			if v.offsetY < 0 {
-				v.offsetY = 0
-			}
-			v.follow = false
-		case tcell.KeyPgUp:
-			v.offsetY -= height
-			if v.offsetY < 0 {
-				v.offsetY = 0
-			}
-			v.follow = false
-		case tcell.KeyHome:
+			return true
+		case 'g':
 			v.offsetY = 0
 			v.follow = false
-		case tcell.KeyEnd:
+			return true
+		case 'G':
 			v.offsetY = len(v.filteredIdx) - height
 			if v.offsetY < 0 {
 				v.offsetY = 0
 			}
 			v.follow = true
-		case tcell.KeyEnter:
-			if v.selectedLine >= 0 && v.selectedLine < len(v.filteredIdx) {
-				entry := v.entries[v.filteredIdx[v.selectedLine]]
-				if v.onSelect != nil {
-					v.onSelect(entry)
-				}
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				if v.offsetY < len(v.filteredIdx)-1 {
-					v.offsetY++
-					v.follow = false
-				}
-			case 'k':
-				if v.offsetY > 0 {
-					v.offsetY--
-					v.follow = false
-				}
-			case 'g':
-				v.offsetY = 0
-				v.follow = false
-			case 'G':
-				v.offsetY = len(v.filteredIdx) - height
-				if v.offsetY < 0 {
-					v.offsetY = 0
-				}
-				v.follow = true
-			case 'f':
-				v.follow = !v.follow
-			case 'c':
-				v.entries = nil
-				v.filteredIdx = nil
-				v.offsetY = 0
-			}
+			return true
+		case 'f':
+			v.follow = !v.follow
+			return true
+		case 'c':
+			v.entries = nil
+			v.filteredIdx = nil
+			v.offsetY = 0
+			return true
 		}
-	})
+	}
+	return false
 }
 
 // GetFieldHeight returns preferred height

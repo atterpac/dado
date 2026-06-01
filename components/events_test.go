@@ -125,12 +125,10 @@ func TestTextField_TypedChangeHandler(t *testing.T) {
 	})
 
 	// Simulate typing by calling the input handler
-	handler := field.InputHandler()
-	require.NotNil(t, handler)
 
 	// Type 'x' - this should trigger change event
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
-	handler(event, nil)
+	field.HandleKey(event)
 
 	require.NotNil(t, received)
 	assert.Equal(t, EventChange, received.Type())
@@ -148,9 +146,8 @@ func TestTextField_SubmitHandler(t *testing.T) {
 		received = e
 	})
 
-	handler := field.InputHandler()
 	enterEvent := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
-	handler(enterEvent, nil)
+	field.HandleKey(enterEvent)
 
 	require.NotNil(t, received)
 	assert.Equal(t, EventSubmit, received.Type())
@@ -185,14 +182,12 @@ func TestSelect_TypedChangeHandler(t *testing.T) {
 		received = e
 	})
 
-	handler := sel.InputHandler()
-
 	// Expand the dropdown (space opens it)
-	handler(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), nil)
+	sel.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 	// Navigate down to second option
-	handler(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), nil)
+	sel.HandleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
 	// Close dropdown with space (this commits selection and emits change)
-	handler(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), nil)
+	sel.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 
 	require.NotNil(t, received, "change event should be emitted when dropdown closes")
 	assert.Equal(t, 1, received.Index)
@@ -209,9 +204,8 @@ func TestBaseEventEmitter_OnEvent(t *testing.T) {
 	})
 
 	// Type and submit
-	handler := field.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone), nil)
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone))
+	field.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
 	require.Len(t, events, 2)
 	assert.Equal(t, EventChange, events[0].Type())
@@ -327,10 +321,8 @@ func TestTextField_BackspaceEmitsChange(t *testing.T) {
 		events = append(events, e)
 	})
 
-	handler := field.InputHandler()
-
 	// Backspace
-	handler(tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone))
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "hello", events[0].OldValue)
@@ -347,11 +339,10 @@ func TestTextField_DeleteEmitsChange(t *testing.T) {
 	})
 
 	// Move cursor to beginning first
-	handler := field.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone))
 
 	// Delete
-	handler(tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone))
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "hello", events[0].OldValue)
@@ -367,8 +358,7 @@ func TestTextField_CtrlU_EmitsChange(t *testing.T) {
 		events = append(events, e)
 	})
 
-	handler := field.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone))
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "hello world", events[0].OldValue)
@@ -385,12 +375,11 @@ func TestTextField_CtrlK_EmitsChange(t *testing.T) {
 	})
 
 	// Move to middle
-	handler := field.InputHandler()
 	for i := 0; i < 5; i++ {
-		handler(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), nil)
+		field.HandleKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
 	}
 
-	handler(tcell.NewEventKey(tcell.KeyCtrlK, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyCtrlK, 0, tcell.ModNone))
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "hello world", events[0].OldValue)
@@ -406,10 +395,8 @@ func TestRadioGroup_ChangeOnSelect(t *testing.T) {
 		events = append(events, e)
 	})
 
-	handler := rg.InputHandler()
-
 	// Press space to select first option
-	handler(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), nil)
+	rg.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "", events[0].OldValue)
@@ -426,10 +413,8 @@ func TestMultiSelect_ChangeOnToggle(t *testing.T) {
 		events = append(events, e)
 	})
 
-	handler := ms.InputHandler()
-
 	// Toggle first option
-	handler(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), nil)
+	ms.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 
 	require.Len(t, events, 1)
 	assert.Len(t, events[0].OldValue, 0)
@@ -446,13 +431,11 @@ func TestEventOrdering(t *testing.T) {
 		order = append(order, e.Type())
 	})
 
-	handler := field.InputHandler()
-
 	// Type multiple characters then submit
-	handler(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone), nil)
-	handler(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone), nil)
-	handler(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone), nil)
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), nil)
+	field.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone))
+	field.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone))
+	field.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
+	field.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
 	expected := []EventType{EventChange, EventChange, EventChange, EventSubmit}
 	assert.Equal(t, expected, order)
@@ -468,8 +451,7 @@ func TestEventTiming(t *testing.T) {
 	})
 
 	go func() {
-		handler := field.InputHandler()
-		handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), nil)
+		field.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 	}()
 
 	select {

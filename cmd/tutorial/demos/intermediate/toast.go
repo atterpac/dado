@@ -2,9 +2,9 @@ package intermediate
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -22,17 +22,17 @@ func init() {
 // ToastDemo demonstrates the Toast component.
 type ToastDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	level     string
 }
 
 // Component returns the demo component.
-func (d *ToastDemo) Component() tview.Primitive {
+func (d *ToastDemo) Component() core.Widget {
 	d.level = "info"
 
 	// Create a visual representation of toasts
-	d.container = tview.NewFlex()
-	d.container.SetDirection(tview.FlexRow)
+	d.container = core.NewFlex()
+	d.container.SetDirection(core.Column)
 
 	// Show sample toasts
 	levels := []struct {
@@ -51,11 +51,9 @@ func (d *ToastDemo) Component() tview.Primitive {
 		d.container.AddItem(toast, 3, 0, false)
 	}
 
-	note := tview.NewTextView()
+	note := core.NewTextView()
 	note.SetText("\nToasts require a ToastManager connected to the app.\nSee code example for usage.")
-	note.SetTextAlign(tview.AlignCenter)
 	note.SetBackgroundColor(theme.Bg())
-	note.SetTextColor(theme.FgDim())
 	d.container.AddItem(note, 0, 1, false)
 
 	d.Props = []demos.PropertyDescriptor{
@@ -70,21 +68,19 @@ func (d *ToastDemo) Component() tview.Primitive {
 	return d.container
 }
 
-func (d *ToastDemo) createToastPreview(icon, level, message string) *tview.Flex {
-	row := tview.NewFlex()
-	row.SetDirection(tview.FlexColumn)
+func (d *ToastDemo) createToastPreview(icon, level, message string) *core.Flex {
+	row := core.NewFlex()
+	row.SetDirection(core.Row)
 
 	// Icon
-	iconView := tview.NewTextView()
+	iconView := core.NewTextView()
 	iconView.SetText(" " + icon + " ")
 	iconView.SetBackgroundColor(theme.Bg())
-	iconView.SetTextColor(d.getLevelColor(level))
 
 	// Message
-	msgView := tview.NewTextView()
+	msgView := core.NewTextView()
 	msgView.SetText(message)
 	msgView.SetBackgroundColor(theme.Bg())
-	msgView.SetTextColor(theme.Fg())
 
 	row.AddItem(iconView, 4, 0, false)
 	row.AddItem(msgView, 0, 1, false)
@@ -110,6 +106,7 @@ const toastCode = `package main
 import (
     "time"
     "github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 // Create toast manager (usually done once in app setup)

@@ -7,8 +7,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 	"github.com/atterpac/dado/theme/themes"
 )
@@ -16,10 +16,11 @@ import (
 // Splash displays a centered splash screen with optional gradient logo,
 // status text, and configurable dismissal behavior.
 type Splash struct {
-	*tview.Flex
+	*core.Flex
+	widgetBase
 	logo          string
 	status        string
-	content       tview.Primitive // Custom content (overrides logo/status when set)
+	content       core.Widget // Custom content (overrides logo/status when set)
 	gradientType  theme.GradientType
 	colors        []string
 	onClose       func()
@@ -27,13 +28,13 @@ type Splash struct {
 	dismissKeys   []DismissKey
 	devMode       bool
 	themeIndex    int
-	logoText      *tview.TextView
-	statusText    *tview.TextView
-	logoContainer *tview.Flex
-	topSpacer     *tview.Box
-	bottomSpacer  *tview.Box
-	leftSpacer    *tview.Box
-	rightSpacer   *tview.Box
+	logoText      *core.TextView
+	statusText    *core.TextView
+	logoContainer *core.Flex
+	topSpacer     *core.Box
+	bottomSpacer  *core.Box
+	leftSpacer    *core.Box
+	rightSpacer   *core.Box
 	logoWidth     int
 	logoHeight    int
 	statusHeight  int
@@ -63,7 +64,7 @@ func DefaultDismissKeys() []DismissKey {
 // NewSplash creates a new splash screen component.
 func NewSplash() *Splash {
 	s := &Splash{
-		Flex:         tview.NewFlex().SetDirection(tview.FlexRow),
+		Flex:         core.NewFlex(),
 		gradientType: theme.GradientDiagonal,
 		colors:       nil, // Will use theme defaults
 		dismissKeys:  DefaultDismissKeys(),
@@ -89,9 +90,9 @@ func (s *Splash) SetStatus(status string) *Splash {
 	return s
 }
 
-// SetContent sets a custom primitive to display instead of logo/status.
+// SetContent sets a custom widget to display instead of logo/status.
 // This overrides SetLogo and SetStatus.
-func (s *Splash) SetContent(content tview.Primitive) *Splash {
+func (s *Splash) SetContent(content core.Widget) *Splash {
 	s.content = content
 	return s
 }
@@ -192,49 +193,67 @@ func (s *Splash) Build() *Splash {
 }
 
 func (s *Splash) buildCustomContentLayout() {
-	topSpacer := tview.NewBox().SetBackgroundColor(theme.Bg())
-	bottomSpacer := tview.NewBox().SetBackgroundColor(theme.Bg())
-	leftSpacer := tview.NewBox().SetBackgroundColor(theme.Bg())
-	rightSpacer := tview.NewBox().SetBackgroundColor(theme.Bg())
+	topSpacer := new(core.Box)
+	topSpacer.SetBackgroundColor(theme.Bg())
+	bottomSpacer := new(core.Box)
+	bottomSpacer.SetBackgroundColor(theme.Bg())
+	leftSpacer := new(core.Box)
+	leftSpacer.SetBackgroundColor(theme.Bg())
+	rightSpacer := new(core.Box)
+	rightSpacer.SetBackgroundColor(theme.Bg())
 
-	centerRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+	centerRow := core.NewFlex().SetDirection(core.Row).
 		AddItem(leftSpacer, 0, 1, false).
 		AddItem(s.content, 0, 0, true).
 		AddItem(rightSpacer, 0, 1, false)
-	centerRow.SetBackgroundColor(theme.Bg())
+	centerRow.Box.SetBackgroundColor(theme.Bg())
 
 	s.AddItem(topSpacer, 0, 1, false)
 	s.AddItem(centerRow, 0, 1, true)
 	s.AddItem(bottomSpacer, 0, 1, false)
-	s.SetBackgroundColor(theme.Bg())
+	s.Flex.Box.SetBackgroundColor(theme.Bg())
 }
 
 func (s *Splash) buildLogoLayout() {
-	s.logoText = tview.NewTextView()
+	s.logoText = core.NewTextView()
 	s.logoText.SetDynamicColors(true)
-	s.logoText.SetTextAlign(tview.AlignLeft)
 	s.logoText.SetBackgroundColor(theme.Bg())
 
-	s.statusText = tview.NewTextView()
+	s.statusText = core.NewTextView()
 	s.statusText.SetDynamicColors(true)
-	s.statusText.SetTextAlign(tview.AlignCenter)
+	s.statusText.SetTextAlign(core.AlignCenter)
 	s.statusText.SetBackgroundColor(theme.Bg())
 
 	s.updateLogo()
 	s.updateStatus()
 
 	// Create spacer boxes
-	s.topSpacer = tview.NewBox().SetBackgroundColor(theme.Bg())
-	s.bottomSpacer = tview.NewBox().SetBackgroundColor(theme.Bg())
-	s.leftSpacer = tview.NewBox().SetBackgroundColor(theme.Bg())
-	s.rightSpacer = tview.NewBox().SetBackgroundColor(theme.Bg())
+	s.topSpacer = new(core.Box)
+	s.topSpacer.SetBackgroundColor(theme.Bg())
+	s.bottomSpacer = new(core.Box)
+	s.bottomSpacer.SetBackgroundColor(theme.Bg())
+	s.leftSpacer = new(core.Box)
+	s.leftSpacer.SetBackgroundColor(theme.Bg())
+	s.rightSpacer = new(core.Box)
+	s.rightSpacer.SetBackgroundColor(theme.Bg())
 
 	// Logo container centered horizontally
-	s.logoContainer = tview.NewFlex().SetDirection(tview.FlexColumn).
+	s.logoContainer = core.NewFlex().SetDirection(core.Row).
 		AddItem(s.leftSpacer, 0, 1, false).
 		AddItem(s.logoText, s.logoWidth, 0, false).
 		AddItem(s.rightSpacer, 0, 1, false)
-	s.logoContainer.SetBackgroundColor(theme.Bg())
+	s.logoContainer.Box.SetBackgroundColor(theme.Bg())
+
+	// Status container centered horizontally (same width as logo)
+	statusLeftSpacer := new(core.Box)
+	statusLeftSpacer.SetBackgroundColor(theme.Bg())
+	statusRightSpacer := new(core.Box)
+	statusRightSpacer.SetBackgroundColor(theme.Bg())
+	statusContainer := core.NewFlex().SetDirection(core.Row).
+		AddItem(statusLeftSpacer, 0, 1, false).
+		AddItem(s.statusText, s.logoWidth, 0, false).
+		AddItem(statusRightSpacer, 0, 1, false)
+	statusContainer.Box.SetBackgroundColor(theme.Bg())
 
 	// Build vertical layout
 	statusHeight := s.statusHeight
@@ -244,9 +263,9 @@ func (s *Splash) buildLogoLayout() {
 
 	s.AddItem(s.topSpacer, 0, 1, false)
 	s.AddItem(s.logoContainer, s.logoHeight, 0, false)
-	s.AddItem(s.statusText, statusHeight, 0, false)
+	s.AddItem(statusContainer, statusHeight, 0, false)
 	s.AddItem(s.bottomSpacer, 0, 1, false)
-	s.SetBackgroundColor(theme.Bg())
+	s.Flex.Box.SetBackgroundColor(theme.Bg())
 }
 
 func (s *Splash) updateLogo() {
@@ -327,7 +346,7 @@ func (s *Splash) refreshColors() {
 		s.statusText.SetBackgroundColor(bg)
 	}
 	if s.logoContainer != nil {
-		s.logoContainer.SetBackgroundColor(bg)
+		s.logoContainer.Box.SetBackgroundColor(bg)
 	}
 	if s.topSpacer != nil {
 		s.topSpacer.SetBackgroundColor(bg)
@@ -341,7 +360,7 @@ func (s *Splash) refreshColors() {
 	if s.rightSpacer != nil {
 		s.rightSpacer.SetBackgroundColor(bg)
 	}
-	s.SetBackgroundColor(bg)
+	s.Flex.Box.SetBackgroundColor(bg)
 }
 
 func (s *Splash) startTimer() {
@@ -374,36 +393,6 @@ func (s *Splash) Draw(screen tcell.Screen) {
 	s.Flex.Draw(screen)
 }
 
-// InputHandler handles keyboard input.
-func (s *Splash) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return s.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		// Dev mode controls
-		if s.devMode {
-			switch event.Rune() {
-			case 'T':
-				s.cycleTheme()
-				return
-			case 'G', 'g':
-				s.cycleGradient()
-				return
-			}
-		}
-
-		// Check dismiss keys
-		if s.shouldDismiss(event) {
-			s.Close()
-			return
-		}
-
-		// Delegate to content if present
-		if s.content != nil {
-			if handler := s.content.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
-		}
-	})
-}
-
 func (s *Splash) shouldDismiss(event *tcell.EventKey) bool {
 	for _, dk := range s.dismissKeys {
 		// Special case: DismissAnyKey matches any key press
@@ -424,12 +413,27 @@ func (s *Splash) shouldDismiss(event *tcell.EventKey) bool {
 	return false
 }
 
+// Blur handles blur.
+func (s *Splash) Blur() {
+	s.Flex.Box.Blur()
+}
+
+// Rect implements core.Widget.
+func (s *Splash) Rect() (x, y, w, h int) {
+	return s.Flex.Box.Rect()
+}
+
+// SetRect implements core.Widget.
+func (s *Splash) SetRect(x, y, w, h int) {
+	s.Flex.Box.SetRect(x, y, w, h)
+}
+
 // Focus handles focus.
-func (s *Splash) Focus(delegate func(p tview.Primitive)) {
+func (s *Splash) Focus() {
 	if s.content != nil {
-		delegate(s.content)
+		s.content.Focus()
 	} else {
-		s.Flex.Focus(delegate)
+		s.Flex.Box.Focus()
 	}
 }
 
@@ -438,7 +442,7 @@ func (s *Splash) HasFocus() bool {
 	if s.content != nil {
 		return s.content.HasFocus()
 	}
-	return s.Flex.HasFocus()
+	return s.Flex.Box.HasFocus()
 }
 
 // GetGradientType returns the current gradient type.

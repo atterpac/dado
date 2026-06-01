@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +40,7 @@ func TestComponentBase_Lifecycle(t *testing.T) {
 func TestComponentBase_LifecycleOrder(t *testing.T) {
 	var order []string
 
-	base := NewComponentBase(tview.NewBox()).
+	base := NewComponentBase(new(core.Box)).
 		SetOnStart(func() { order = append(order, "start") }).
 		SetOnStop(func() { order = append(order, "stop") })
 
@@ -54,7 +54,7 @@ func TestComponentBase_LifecycleOrder(t *testing.T) {
 
 // TestComponentBase_NilCallbacks tests that nil callbacks don't panic.
 func TestComponentBase_NilCallbacks(t *testing.T) {
-	base := NewComponentBase(tview.NewBox())
+	base := NewComponentBase(new(core.Box))
 
 	// Should not panic
 	base.Start()
@@ -63,7 +63,7 @@ func TestComponentBase_NilCallbacks(t *testing.T) {
 
 // TestComponentBase_Name tests component name accessor.
 func TestComponentBase_Name(t *testing.T) {
-	base := NewComponentBase(tview.NewBox()).SetName("my-component")
+	base := NewComponentBase(new(core.Box)).SetName("my-component")
 	assert.Equal(t, "my-component", base.Name())
 }
 
@@ -71,7 +71,7 @@ func TestComponentBase_Name(t *testing.T) {
 func TestComponentBase_ID(t *testing.T) {
 	ids := make(map[uint64]bool)
 	for i := 0; i < 100; i++ {
-		base := NewComponentBase(tview.NewBox())
+		base := NewComponentBase(new(core.Box))
 		if ids[base.ID()] {
 			t.Fatalf("duplicate component ID: %d", base.ID())
 		}
@@ -81,7 +81,7 @@ func TestComponentBase_ID(t *testing.T) {
 
 // TestComponentBase_Hints tests key hint management.
 func TestComponentBase_Hints(t *testing.T) {
-	base := NewComponentBase(tview.NewBox()).
+	base := NewComponentBase(new(core.Box)).
 		AddHint("Enter", "Select").
 		AddHint("q", "Quit")
 
@@ -95,7 +95,7 @@ func TestComponentBase_Hints(t *testing.T) {
 
 // TestComponentBase_HintsCopy tests that Hints returns a copy.
 func TestComponentBase_HintsCopy(t *testing.T) {
-	base := NewComponentBase(tview.NewBox()).
+	base := NewComponentBase(new(core.Box)).
 		AddHint("Enter", "Select")
 
 	hints := base.Hints()
@@ -107,7 +107,7 @@ func TestComponentBase_HintsCopy(t *testing.T) {
 
 // TestComponentBase_SetHints tests bulk hint setting.
 func TestComponentBase_SetHints(t *testing.T) {
-	base := NewComponentBase(tview.NewBox()).
+	base := NewComponentBase(new(core.Box)).
 		SetHints([]KeyHint{
 			{Key: "a", Description: "Action A"},
 			{Key: "b", Description: "Action B"},
@@ -129,7 +129,7 @@ func TestComponentBase_Primitive(t *testing.T) {
 
 // TestComponentBase_ThreadSafety tests concurrent access to ComponentBase.
 func TestComponentBase_ThreadSafety(t *testing.T) {
-	base := NewComponentBase(tview.NewBox())
+	base := NewComponentBase(new(core.Box))
 
 	var wg sync.WaitGroup
 	const goroutines = 50
@@ -236,7 +236,7 @@ func TestStatefulComponentBase_LoadStates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			base := NewStatefulComponentBase[string](tview.NewBox())
+			base := NewStatefulComponentBase[string](new(core.Box))
 			tt.transition(base)
 
 			assert.Equal(t, tt.wantState, base.LoadState())
@@ -249,7 +249,7 @@ func TestStatefulComponentBase_LoadStates(t *testing.T) {
 
 // TestStatefulComponentBase_Data tests data storage and retrieval.
 func TestStatefulComponentBase_Data(t *testing.T) {
-	base := NewStatefulComponentBase[[]int](tview.NewBox())
+	base := NewStatefulComponentBase[[]int](new(core.Box))
 
 	// Initial data should be zero value
 	assert.Nil(t, base.Data())
@@ -266,7 +266,7 @@ func TestStatefulComponentBase_Data(t *testing.T) {
 
 // TestStatefulComponentBase_Error tests error handling.
 func TestStatefulComponentBase_Error(t *testing.T) {
-	base := NewStatefulComponentBase[string](tview.NewBox())
+	base := NewStatefulComponentBase[string](new(core.Box))
 
 	// Initially no error
 	assert.Nil(t, base.Error())
@@ -287,7 +287,7 @@ func TestStatefulComponentBase_Error(t *testing.T) {
 
 // TestStatefulComponentBase_OnStateChange tests state change callback.
 func TestStatefulComponentBase_OnStateChange(t *testing.T) {
-	base := NewStatefulComponentBase[string](tview.NewBox())
+	base := NewStatefulComponentBase[string](new(core.Box))
 
 	var stateChanges []LoadState
 	var dataValues []string
@@ -313,7 +313,7 @@ func TestStatefulComponentBase_OnStateChange(t *testing.T) {
 
 // TestStatefulComponentBase_OnDataChange tests data change callback.
 func TestStatefulComponentBase_OnDataChange(t *testing.T) {
-	base := NewStatefulComponentBase[int](tview.NewBox())
+	base := NewStatefulComponentBase[int](new(core.Box))
 
 	var dataChanges []int
 	base.SetOnDataChange(func(data int) {
@@ -329,7 +329,7 @@ func TestStatefulComponentBase_OnDataChange(t *testing.T) {
 
 // TestStatefulComponentBase_UpdateData tests atomic data updates.
 func TestStatefulComponentBase_UpdateData(t *testing.T) {
-	base := NewStatefulComponentBase[int](tview.NewBox())
+	base := NewStatefulComponentBase[int](new(core.Box))
 	base.SetData(10)
 
 	base.UpdateData(func(current int) int {
@@ -341,7 +341,7 @@ func TestStatefulComponentBase_UpdateData(t *testing.T) {
 
 // TestStatefulComponentBase_UpdateDataCallback tests that UpdateData triggers callbacks.
 func TestStatefulComponentBase_UpdateDataCallback(t *testing.T) {
-	base := NewStatefulComponentBase[int](tview.NewBox())
+	base := NewStatefulComponentBase[int](new(core.Box))
 	base.SetData(5) // Sets to Success state
 
 	var dataChanges []int
@@ -359,7 +359,7 @@ func TestStatefulComponentBase_UpdateDataCallback(t *testing.T) {
 
 // TestStatefulComponentBase_ThreadSafety tests concurrent access.
 func TestStatefulComponentBase_ThreadSafety(t *testing.T) {
-	base := NewStatefulComponentBase[int](tview.NewBox())
+	base := NewStatefulComponentBase[int](new(core.Box))
 
 	var ops int64
 	done := make(chan struct{})
@@ -409,7 +409,7 @@ func TestStatefulComponentBase_ThreadSafety(t *testing.T) {
 
 // TestStatefulComponentBase_FluentAPI tests fluent method chaining.
 func TestStatefulComponentBase_FluentAPI(t *testing.T) {
-	base := NewStatefulComponentBase[string](tview.NewBox()).
+	base := NewStatefulComponentBase[string](new(core.Box)).
 		SetName("stateful-view").
 		AddHint("r", "Refresh").
 		SetOnStart(func() {}).
@@ -426,7 +426,7 @@ func TestStatefulComponentBase_FluentAPI(t *testing.T) {
 func TestStatefulComponentBase_InheritsComponentBase(t *testing.T) {
 	var startCalled, stopCalled bool
 
-	base := NewStatefulComponentBase[string](tview.NewBox()).
+	base := NewStatefulComponentBase[string](new(core.Box)).
 		SetName("inherited").
 		SetOnStart(func() { startCalled = true }).
 		SetOnStop(func() { stopCalled = true })
@@ -444,7 +444,7 @@ func TestStatefulComponentBase_InheritsComponentBase(t *testing.T) {
 
 // TestStatefulComponentBase_SetLoadStateClearsError tests that non-error states clear error.
 func TestStatefulComponentBase_SetLoadStateClearsError(t *testing.T) {
-	base := NewStatefulComponentBase[string](tview.NewBox())
+	base := NewStatefulComponentBase[string](new(core.Box))
 
 	// Set error
 	base.SetError(errors.New("error"))
@@ -459,7 +459,7 @@ func TestStatefulComponentBase_SetLoadStateClearsError(t *testing.T) {
 func TestStatefulComponentBase_Reset(t *testing.T) {
 	var stateChanges []LoadState
 
-	base := NewStatefulComponentBase[string](tview.NewBox()).
+	base := NewStatefulComponentBase[string](new(core.Box)).
 		SetOnStateChange(func(state LoadState, data string, err error) {
 			stateChanges = append(stateChanges, state)
 		})

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .bg { fill: #efece3; }
+    .fg { fill: #a01e7a; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1a1813; }
+      .fg { fill: #c578b0; }
+    }
+  </style>
+  <rect class="bg" width="32" height="32" rx="4"/>
+  <text class="fg" x="16" y="24" font-family="ui-monospace, monospace" font-size="22" font-weight="700" text-anchor="middle">//</text>
+</svg>

@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,7 +28,7 @@ type TabsDemo struct {
 }
 
 // Component returns the demo component.
-func (d *TabsDemo) Component() tview.Primitive {
+func (d *TabsDemo) Component() core.Widget {
 	d.showIcons = true
 	d.closable = false
 
@@ -64,12 +64,10 @@ func (d *TabsDemo) Component() tview.Primitive {
 	return d.tabs
 }
 
-func (d *TabsDemo) createContent(text string) *tview.TextView {
-	tv := tview.NewTextView()
+func (d *TabsDemo) createContent(text string) *core.TextView {
+	tv := core.NewTextView()
 	tv.SetText(text)
-	tv.SetTextAlign(tview.AlignCenter)
 	tv.SetBackgroundColor(theme.Bg())
-	tv.SetTextColor(theme.Fg())
 	return tv
 }
 

@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 )
 
 func TestSubscriptions_ReleaseInvokesAllLIFO(t *testing.T) {
@@ -48,7 +48,7 @@ func TestSubscriptions_NilIgnored(t *testing.T) {
 }
 
 func TestComponentBase_StopReleasesSubs(t *testing.T) {
-	cb := NewComponentBase(tview.NewBox())
+	cb := NewComponentBase(new(core.Box))
 	released := false
 	cb.Subs().Add(func() { released = true })
 
@@ -63,7 +63,7 @@ func TestComponentBase_StopReleasesSubs(t *testing.T) {
 }
 
 func TestComponentBase_StopRunsOnStopBeforeRelease(t *testing.T) {
-	cb := NewComponentBase(tview.NewBox())
+	cb := NewComponentBase(new(core.Box))
 	var order []string
 	cb.SetOnStop(func() { order = append(order, "onStop") })
 	cb.Subs().Add(func() { order = append(order, "unsub") })

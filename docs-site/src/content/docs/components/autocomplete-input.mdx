@@ -1,0 +1,55 @@
+---
+title: AutocompleteInput
+description: Single-line input with an inline suggestion dropdown, history navigation, and pluggable provider helpers.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/autocomplete-input.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Accept the highlighted suggestion |
+| `Enter` | Accept suggestion (if dropdown open), otherwise submit |
+| `Esc` | Close dropdown; if already closed, fire `onCancel` |
+| `↑` / `↓` | Navigate suggestions (or history when dropdown is closed) |
+| `←` / `→` | Move cursor |
+| `Home` / `Ctrl+A` | Jump to start of input |
+| `End` / `Ctrl+E` | Jump to end of input |
+| `Ctrl+U` | Clear the entire line |
+| `Ctrl+W` | Delete word backward |
+| `Backspace` / `Delete` | Delete character |
+
+## Suggestion providers
+
+Three built-in provider constructors cover the common cases. All accept a fixed `[]Suggestion` slice and return a `SuggestionProvider` func.
+
+```go
+// Filter by prefix of the current token
+provider := components.PrefixMatcher(suggestions)
+
+// Filter by fuzzy substring match
+provider := components.FuzzyMatcher(suggestions)
+
+// Always return the full list (useful for short static lists)
+provider := components.StaticSuggestions(suggestions)
+
+// Combine multiple providers
+provider := components.ChainedProvider(fields, operators, values)
+```
+
+The `SuggestionProvider` signature is `func(text string, cursorPos int) []Suggestion`, so you can supply a dynamic one (e.g., querying a DB) directly.
+
+## Suggestion token insertion
+
+When a suggestion is accepted, `InsertText` replaces the current token — the word ending at the cursor, split on spaces, `(`, and `)`. Set `InsertText` when the display text differs from what should be typed (e.g., a human-readable label vs. a field name).
+
+## GetPreferredHeight
+
+Use `GetPreferredHeight()` when laying out the widget inside a `core.Flex` — it returns the exact row count needed for the input box plus the current dropdown height so the surrounding layout does not clip suggestions.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

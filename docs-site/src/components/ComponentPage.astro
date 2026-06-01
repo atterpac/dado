@@ -1,0 +1,388 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { Code } from 'astro-expressive-code/components';
+import { IMAGE_BASE } from '../lib/themes';
+
+interface Props {
+	data: CollectionEntry<'api'>['data'];
+	themes: string[];
+	defaultTheme: string;
+}
+
+const { data, themes, defaultTheme } = Astro.props;
+const { name, doc, constructor: ctor, methods, types, examples } = data;
+const imageBase = IMAGE_BASE;
+---
+
+<div class="cp">
+
+	<!-- Right column: sticky preview + theme picker -->
+	<div class="cp__preview">
+		<div class="cp__picker">
+			<select id="theme-select">
+				{themes.map(t => (
+					<option value={t} selected={t === defaultTheme}>{t}</option>
+				))}
+			</select>
+		</div>
+		<div class="cp__frame">
+			<img
+				id="component-preview"
+				src={`${imageBase}/${defaultTheme}/${data.slug}.png`}
+				alt={`${name} preview`}
+				width="480"
+				height="320"
+			/>
+		</div>
+	</div>
+
+	<!-- Meta: hoisted by JS into the title row -->
+	{(doc || ctor) && (
+		<div class="cp__meta">
+			{doc && <p class="cp__doc">{doc}</p>}
+			{ctor && (
+				<div class="cp__ctor">
+					<span class="cp__tag">Constructor</span>
+					<code class="cp__ctor-sig">{ctor.signature}</code>
+				</div>
+			)}
+		</div>
+	)}
+
+	<!-- API content -->
+	<div class="cp__main">
+
+		{examples && examples.length > 0 && (
+			<section class="cp__section">
+				<h2 class="cp__heading">Usage</h2>
+				{examples.map(ex => (
+					<div class="cp__example">
+						{ex.name && <h3 class="cp__example-title">{ex.name.replace(/_/g, ' ')}</h3>}
+						{ex.doc && <p class="cp__example-doc">{ex.doc}</p>}
+						<Code code={ex.code} lang="go" />
+					</div>
+				))}
+			</section>
+		)}
+
+		{methods && methods.length > 0 && (
+			<section class="cp__section">
+				<h2 class="cp__heading">Methods</h2>
+				<table class="cp__table">
+					<thead>
+						<tr>
+							<th>Method</th>
+							<th>Signature</th>
+							<th>Description</th>
+						</tr>
+					</thead>
+					<tbody>
+						{methods.map(m => (
+							<tr>
+								<td><code class="cp__mname">{m.name}</code></td>
+								<td><code class="cp__msig">{m.signature}</code></td>
+								<td class="cp__mdoc">{m.doc}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</section>
+		)}
+
+		{types && types.length > 0 && (
+			<section class="cp__section">
+				<h2 class="cp__heading">Types</h2>
+				{types.map(t => (
+					<div class="cp__type">
+						<div class="cp__type-header">
+							<code class="cp__type-sig">
+								{t.kind === 'struct' ? `type ${t.name} struct` : `type ${t.name}`}
+							</code>
+							{t.doc && <span class="cp__type-doc">{t.doc}</span>}
+						</div>
+						{t.fields && t.fields.length > 0 && (
+							<table class="cp__table">
+								<thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+								<tbody>
+									{t.fields.map(f => (
+										<tr>
+											<td><code class="cp__mname">{f.name}</code></td>
+											<td><code class="cp__ftype">{f.type}</code></td>
+											<td class="cp__mdoc">{f.doc}</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						)}
+						{t.values && t.values.length > 0 && (
+							<table class="cp__table">
+								<thead><tr><th>Constant</th><th>Description</th></tr></thead>
+								<tbody>
+									{t.values.map(v => (
+										<tr>
+											<td><code class="cp__mname">{v.name}</code></td>
+											<td class="cp__mdoc">{v.doc}</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						)}
+					</div>
+				))}
+			</section>
+		)}
+
+	</div>
+</div>
+
+<script define:vars={{ slug: data.slug, imageBase }}>
+	const STORAGE_KEY = 'dado-theme';
+	const sel = document.getElementById('theme-select');
+	const img = document.getElementById('component-preview');
+
+	// Restore saved theme
+	const saved = localStorage.getItem(STORAGE_KEY);
+	if (saved && sel) {
+		const opt = [...sel.options].find(o => o.value === saved);
+		if (opt) {
+			sel.value = saved;
+			if (img) img.src = `${imageBase}/${saved}/${slug}.png`;
+		}
+	}
+
+	sel?.addEventListener('change', () => {
+		if (img) img.src = `${imageBase}/${sel.value}/${slug}.png`;
+		localStorage.setItem(STORAGE_KEY, sel.value);
+	});
+
+	// Move preview + meta to sit beside the page h1
+	const preview = document.querySelector('.cp__preview');
+	const meta = document.querySelector('.cp__meta');
+	const h1 = document.querySelector('.content-panel h1, main h1, article h1, h1');
+	if (preview && h1 && h1.parentNode) {
+		const left = document.createElement('div');
+		left.className = 'cp__title-left';
+		const wrapper = document.createElement('div');
+		wrapper.className = 'cp__title-row';
+		h1.parentNode.insertBefore(wrapper, h1);
+		left.appendChild(h1);
+		if (meta) left.appendChild(meta);
+		wrapper.appendChild(left);
+		wrapper.appendChild(preview);
+	}
+</script>
+
+<style>
+/* ── Title row injected by JS ────────────────────────────────────────── */
+:global(.cp__title-row) {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 2rem;
+	margin-bottom: 1.5rem;
+}
+
+:global(.cp__title-left) {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+:global(.cp__title-left h1) {
+	margin: 0 !important;
+}
+
+.cp {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 0;
+	align-items: start;
+}
+
+.cp__preview {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	width: 340px;
+	flex-shrink: 0;
+}
+
+@media (max-width: 860px) {
+	:global(.cp__title-row) { flex-direction: column; }
+	.cp__preview { width: 100%; }
+}
+
+/* ── Preview ─────────────────────────────────────────────────────────── */
+.cp__picker select {
+	width: 100%;
+	font-size: 12px;
+	font-family: var(--sl-font-mono, monospace);
+	padding: 4px 8px;
+	border: 1px solid var(--sl-color-gray-4);
+	background: var(--sl-color-bg);
+	color: var(--sl-color-text);
+	border-radius: 0;
+}
+
+.cp__frame {
+	border: 1px solid var(--sl-color-gray-4);
+	line-height: 0;
+	overflow: hidden;
+}
+
+.cp__frame img { display: block; width: 100%; height: auto; }
+
+/* ── Description + constructor ───────────────────────────────────────── */
+.cp__meta { display: contents; }
+
+.cp__doc {
+	font-size: 0.95rem;
+	line-height: 1.65;
+	color: var(--sl-color-gray-2);
+	margin-bottom: 1.25rem;
+}
+
+.cp__ctor {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.cp__tag {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--sl-color-accent);
+	font-weight: 500;
+}
+
+.cp__ctor-sig {
+	display: block;
+	font-family: var(--sl-font-mono, monospace);
+	font-size: 0.8rem;
+	background: var(--sl-color-gray-6, #efece3);
+	color: var(--sl-color-text);
+	border: 1px solid var(--sl-color-gray-4);
+	border-left: 2px solid var(--sl-color-accent);
+	padding: 0.5rem 0.75rem;
+	white-space: nowrap;
+	overflow-x: auto;
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+.cp__section { margin-bottom: 2.5rem; }
+
+.cp__heading {
+	font-family: 'IBM Plex Serif', serif !important;
+	font-size: 1.1rem !important;
+	font-weight: 400 !important;
+	letter-spacing: -0.01em !important;
+	color: var(--sl-color-text) !important;
+	margin-bottom: 0.75rem !important;
+	margin-top: 2rem !important;
+	padding-bottom: 0.4rem !important;
+	border-bottom: 1px solid var(--sl-color-gray-5) !important;
+}
+
+.cp__heading::before {
+	content: '' !important;
+	display: inline-block !important;
+	width: 3px !important;
+	height: 0.8em !important;
+	background: var(--sl-color-accent) !important;
+	margin-right: 0.5rem !important;
+	vertical-align: middle !important;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────── */
+.cp__table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.82rem;
+	border: 1px solid var(--sl-color-gray-4);
+}
+
+.cp__table th {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 500;
+	color: var(--sl-color-gray-3);
+	padding: 7px 12px;
+	text-align: left;
+	border-bottom: 1px solid var(--sl-color-gray-4);
+	background: var(--sl-color-gray-6, #efece3);
+}
+
+.cp__table td {
+	padding: 7px 12px;
+	border-bottom: 1px solid var(--sl-color-gray-5);
+	vertical-align: baseline;
+}
+
+/* Method name + signature columns shrink to content */
+.cp__table td:first-child,
+.cp__table td:nth-child(2) {
+	width: 1%;
+	white-space: nowrap;
+}
+
+/* Description column wraps */
+.cp__table td:last-child {
+	min-width: 12rem;
+}
+
+.cp__table tr:last-child td { border-bottom: none; }
+
+.cp__mname {
+	font-family: var(--sl-font-mono, monospace);
+	font-size: 0.8rem;
+	color: var(--sl-color-text);
+	white-space: nowrap;
+}
+
+.cp__msig {
+	font-family: var(--sl-font-mono, monospace);
+	font-size: 0.75rem;
+	color: var(--sl-color-text);
+	background: none;
+	white-space: nowrap;
+	overflow-x: auto;
+	display: block;
+}
+
+.cp__ftype {
+	font-family: var(--sl-font-mono, monospace);
+	font-size: 0.8rem;
+	white-space: nowrap;
+}
+
+.cp__mdoc {
+	color: var(--sl-color-gray-2);
+	line-height: 1.5;
+	font-size: 0.82rem;
+}
+
+/* ── Types ───────────────────────────────────────────────────────────── */
+.cp__type { margin-bottom: 1.5rem; }
+
+.cp__type-header {
+	display: flex;
+	align-items: baseline;
+	gap: 1rem;
+	margin-bottom: 0.5rem;
+}
+
+.cp__type-sig {
+	font-family: var(--sl-font-mono, monospace);
+	font-size: 0.85rem;
+	font-weight: 500;
+	color: var(--sl-color-text);
+}
+
+.cp__type-doc {
+	font-size: 0.85rem;
+	color: var(--sl-color-gray-2);
+}
+</style>

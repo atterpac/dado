@@ -1,0 +1,24 @@
+---
+title: LineGraph
+description: Line chart rendered with braille characters for high-resolution curves in a terminal cell grid.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/line-graph.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Braille rendering
+
+Each terminal cell encodes a 2×4 braille dot grid, giving ~4× the vertical resolution of normal block characters. This produces smooth curves even at small component sizes.
+
+## Auto-scaling
+
+When `SetYRange` is not called, the Y axis auto-scales to the min/max of all series. Call `SetYRange(min, max)` to pin the scale — useful when comparing across time windows.
+
+## Cursor
+
+`SetShowCursor(true)` adds a vertical cursor that follows the mouse or can be positioned programmatically. Use `SetOnCursorMove` to read the X position and show values in a tooltip.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

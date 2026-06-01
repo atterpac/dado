@@ -1,0 +1,25 @@
+---
+title: Drawer
+description: Slide-out panel anchored to the left or right screen edge. Implements nav.ModalComponent — Esc dismisses and restores focus automatically.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/drawer.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Position
+
+| Constant | Edge |
+|----------|------|
+| `DrawerRight` | Right edge (default) |
+| `DrawerLeft` | Left edge |
+
+The drawer spans the full height of the terminal.
+
+## Focus
+
+`SetFocusOnShow(p)` sets which primitive receives focus when the drawer opens. Useful when the drawer contains a form or list that should be immediately interactive.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -2,7 +2,8 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
 // Align specifies text alignment.
@@ -31,7 +32,7 @@ const (
 // It delegates focus and input handling to its content.
 type Panel struct {
 	widgetBase
-	content    tview.Primitive
+	content    core.Widget
 	title      string
 	titleColor tcell.Color // 0 means use theme default (Accent)
 	titleAlign TitleAlign  // Title alignment (default: center)
@@ -41,12 +42,12 @@ type Panel struct {
 // NewPanel creates a new Panel container.
 func NewPanel() *Panel {
 	p := &Panel{}
-	p.initWidget(tview.NewBox())
+	p.initWidget()
 	return p
 }
 
-// SetContent sets the inner content primitive.
-func (p *Panel) SetContent(content tview.Primitive) *Panel {
+// SetContent sets the inner content widget.
+func (p *Panel) SetContent(content core.Widget) *Panel {
 	p.content = content
 	return p
 }
@@ -81,14 +82,14 @@ func (p *Panel) IsFocused() bool {
 	return p.focused
 }
 
-// GetContent returns the inner content primitive.
-func (p *Panel) GetContent() tview.Primitive {
+// GetContent returns the inner content widget.
+func (p *Panel) GetContent() core.Widget {
 	return p.content
 }
 
 // Draw renders the panel with rounded borders.
 func (p *Panel) Draw(screen tcell.Screen) {
-	p.Box.DrawForSubclass(screen, p)
+	p.Box.DrawForSubclass(screen)
 
 	x, y, width, height := p.GetInnerRect()
 	if width < 2 || height < 2 {
@@ -160,7 +161,7 @@ func (p *Panel) Draw(screen tcell.Screen) {
 	bgStyle := tcell.StyleDefault.Background(bgColor)
 	fillRect(screen, x+1, y+1, width-2, height-2, bgStyle)
 
-	// Draw content inside border
+	// Draw content inside border.
 	if p.content != nil {
 		p.content.SetRect(x+1, y+1, width-2, height-2)
 		p.content.Draw(screen)
@@ -168,9 +169,9 @@ func (p *Panel) Draw(screen tcell.Screen) {
 }
 
 // Focus delegates to content.
-func (p *Panel) Focus(delegate func(tview.Primitive)) {
+func (p *Panel) Focus() {
 	if p.content != nil {
-		delegate(p.content)
+		p.content.Focus()
 	}
 }
 
@@ -189,25 +190,12 @@ func (p *Panel) HasFocus() bool {
 	return false
 }
 
-// InputHandler delegates to content.
-func (p *Panel) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if p.content != nil {
-			if handler := p.content.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
+// HandleKey processes a key event for the Panel.
+func (p *Panel) HandleKey(ev *tcell.EventKey) bool {
+	if p.content != nil {
+		if kh, ok := p.content.(core.KeyHandler); ok {
+			return kh.HandleKey(ev)
 		}
-	})
-}
-
-// MouseHandler delegates to content.
-func (p *Panel) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return p.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if p.content != nil {
-			if handler := p.content.MouseHandler(); handler != nil {
-				return handler(action, event, setFocus)
-			}
-		}
-		return false, nil
-	})
+	}
+	return false
 }

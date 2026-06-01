@@ -1,10 +1,9 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
-
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -26,21 +25,19 @@ type MasterDetailDemo struct {
 }
 
 // Component returns the demo component.
-func (d *MasterDetailDemo) Component() tview.Primitive {
+func (d *MasterDetailDemo) Component() core.Widget {
 	// Create master content (list)
-	master := tview.NewList()
-	master.SetBackgroundColor(theme.Bg())
-	master.SetMainTextColor(theme.Fg())
-	master.SetSecondaryTextColor(theme.FgDim())
-	master.AddItem("Item 1", "First item description", 0, nil)
-	master.AddItem("Item 2", "Second item description", 0, nil)
-	master.AddItem("Item 3", "Third item description", 0, nil)
+	master := components.NewList()
+	master.SetItems([]components.ListItem{
+		{Text: "Item 1", Secondary: "First item description"},
+		{Text: "Item 2", Secondary: "Second item description"},
+		{Text: "Item 3", Secondary: "Third item description"},
+	})
 
 	// Create detail content (preview)
-	detail := tview.NewTextView()
+	detail := core.NewTextView()
 	detail.SetText("Select an item to see details\n\nThis panel shows a preview of the selected item.")
-	detail.SetBackgroundColor(theme.Bg())
-	detail.SetTextColor(theme.Fg())
+	detail.Box.SetBackgroundColor(theme.Bg())
 
 	d.view = components.NewMasterDetailView().
 		SetMasterTitle("Items").

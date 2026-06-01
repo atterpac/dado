@@ -1,0 +1,19 @@
+---
+title: BottomSheet
+description: Panel anchored to the bottom edge spanning full width. Implements nav.ModalComponent — Esc dismisses automatically.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/bottom-sheet.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Relationship to Modal and Drawer
+
+All three (`Modal`, `Drawer`, `BottomSheet`) implement `nav.ModalComponent` with identical lifecycle behavior. Choose based on layout intent:
+- **Modal** — centered dialog
+- **Drawer** — right/left edge panel
+- **BottomSheet** — bottom-anchored panel
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

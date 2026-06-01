@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // Convenience color getters forward to the default provider's accessors
@@ -48,7 +47,7 @@ func Crumb() tcell.Color       { return defaultProvider.Crumb() }
 func PanelBorder() tcell.Color { return defaultProvider.PanelBorder() }
 func PanelTitle() tcell.Color  { return defaultProvider.PanelTitle() }
 
-// Tag color functions for tview color tags [#hexcolor]text[-]
+// Tag color functions for color tags [#hexcolor]text[-]
 
 // Base colors
 func TagBg() string      { return ColorToHex(Bg()) }
@@ -82,7 +81,7 @@ func TagCrumb() string       { return ColorToHex(Crumb()) }
 func TagPanelBorder() string { return ColorToHex(PanelBorder()) }
 func TagPanelTitle() string  { return ColorToHex(PanelTitle()) }
 
-// ColorToHex converts tcell.Color to "#RRGGBB" string for tview tags.
+// ColorToHex converts tcell.Color to "#RRGGBB" string for color tags.
 func ColorToHex(c tcell.Color) string {
 	r, g, b := c.RGB()
 	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
@@ -109,45 +108,4 @@ func SelectionStyle() tcell.Style {
 // InactiveSelectionStyle returns a style for selected items in inactive panes.
 func InactiveSelectionStyle() tcell.Style {
 	return tcell.StyleDefault.Background(Bg()).Foreground(Fg())
-}
-
-// ConfigureList sets up a tview.List with proper theme colors including
-// high-contrast selection styling.
-func ConfigureList(list *tview.List) *tview.List {
-	bg := Bg()
-	fg := Fg()
-	fgDim := FgDim()
-
-	list.SetBackgroundColor(bg)
-	list.SetMainTextColor(fg)
-	list.SetMainTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
-	list.SetSecondaryTextColor(fgDim)
-	list.SetSecondaryTextStyle(tcell.StyleDefault.Background(bg).Foreground(fgDim))
-	list.SetSelectedBackgroundColor(SelectionBg())
-	list.SetSelectedTextColor(SelectionFg())
-	list.SetSelectedStyle(SelectionStyle())
-	list.SetHighlightFullLine(true)
-
-	return list
-}
-
-// ConfigureListInactive sets a list to show as inactive (no selection highlight).
-func ConfigureListInactive(list *tview.List) *tview.List {
-	bg := Bg()
-	fg := Fg()
-
-	list.SetSelectedBackgroundColor(bg)
-	list.SetSelectedTextColor(fg)
-	list.SetSelectedStyle(InactiveSelectionStyle())
-
-	return list
-}
-
-// ConfigureListActive sets a list to show as active (with selection highlight).
-func ConfigureListActive(list *tview.List) *tview.List {
-	list.SetSelectedBackgroundColor(SelectionBg())
-	list.SetSelectedTextColor(SelectionFg())
-	list.SetSelectedStyle(SelectionStyle())
-
-	return list
 }

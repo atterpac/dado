@@ -2,8 +2,8 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -29,11 +29,11 @@ type DrawerConfig struct {
 // Unlike Modal which is centered, Drawer attaches to a screen edge.
 // Drawer implements the nav.ModalComponent interface for automatic lifecycle management.
 type Drawer struct {
-	*tview.Flex
+	*core.Flex
 	panel       *Panel
 	hintBar     *KeyHintBar
-	content     tview.Primitive
-	focusTarget tview.Primitive
+	content     core.Widget
+	focusTarget core.Widget
 	config      DrawerConfig
 	behavior    ModalBehavior
 	onClose     func()
@@ -46,8 +46,8 @@ func (d *Drawer) Subs() *Subscriptions { return &d.subs }
 
 // NewDrawer creates a new drawer with the given configuration.
 func NewDrawer(config DrawerConfig) *Drawer {
-	flex := tview.NewFlex()
-	flex.SetBackgroundColor(theme.Bg())
+	flex := core.NewFlex()
+	flex.Box.SetBackgroundColor(theme.Bg())
 
 	// Default width
 	width := config.Width
@@ -76,7 +76,7 @@ func NewDrawer(config DrawerConfig) *Drawer {
 		d.panel.SetTitle(config.Title)
 	}
 
-	d.subs.Add(theme.Register(flex))
+	d.subs.Add(theme.RegisterFn(func(c tcell.Color) { flex.Box.SetBackgroundColor(c) }))
 	d.setupLayout()
 
 	return d
@@ -85,32 +85,32 @@ func NewDrawer(config DrawerConfig) *Drawer {
 // setupLayout builds the drawer's internal structure.
 func (d *Drawer) setupLayout() {
 	// Inner content area with hint bar at bottom
-	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	contentBox := tview.NewBox()
+	innerFlex := core.NewFlex().SetDirection(core.Column)
+	contentBox := new(core.Box)
 	innerFlex.AddItem(contentBox, 0, 1, true)
 	innerFlex.AddItem(d.hintBar, 1, 0, false)
 	d.panel.SetContent(innerFlex)
 
 	// Build edge-aligned layout
-	d.Flex.SetDirection(tview.FlexColumn)
+	d.Flex.SetDirection(core.Row)
 
 	switch d.config.Position {
 	case DrawerRight:
 		// Left spacer (fills available space) | drawer panel (fixed width)
-		d.Flex.AddItem(nil, 0, 1, false) // Transparent spacer
+		d.Flex.AddItem(new(core.Box), 0, 1, false) // Transparent spacer
 		d.Flex.AddItem(d.panel, d.config.Width, 0, true)
 	case DrawerLeft:
 		// Drawer panel (fixed width) | right spacer (fills available space)
 		d.Flex.AddItem(d.panel, d.config.Width, 0, true)
-		d.Flex.AddItem(nil, 0, 1, false) // Transparent spacer
+		d.Flex.AddItem(new(core.Box), 0, 1, false) // Transparent spacer
 	}
 }
 
 // SetContent sets the drawer's main content.
-func (d *Drawer) SetContent(content tview.Primitive) *Drawer {
+func (d *Drawer) SetContent(content core.Widget) *Drawer {
 	d.content = content
 
-	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	innerFlex := core.NewFlex().SetDirection(core.Column)
 	innerFlex.AddItem(content, 0, 1, true)
 	innerFlex.AddItem(d.hintBar, 1, 0, false)
 	d.panel.SetContent(innerFlex)
@@ -139,7 +139,7 @@ func (d *Drawer) Close() {
 
 // Draw renders the drawer, optionally with backdrop.
 func (d *Drawer) Draw(screen tcell.Screen) {
-	d.Flex.SetBackgroundColor(theme.Bg())
+	d.Flex.Box.SetBackgroundColor(theme.Bg())
 	d.hintBar.SetBackgroundColor(theme.Bg())
 
 	if d.config.Backdrop {
@@ -171,19 +171,18 @@ func (d *Drawer) drawBackdrop(screen tcell.Screen) {
 	fillRect(screen, backdropX, y, backdropWidth, height, style)
 }
 
-// InputHandler handles input with drawer behavior.
-func (d *Drawer) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return d.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if d.handleBaseInput(event) {
-			return
-		}
+// HandleKey processes a key event for the Drawer.
+func (d *Drawer) HandleKey(ev *tcell.EventKey) bool {
+	if d.handleBaseInput(ev) {
+		return true
+	}
 
-		if d.content != nil {
-			if handler := d.content.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
+	if d.content != nil {
+		if kh, ok := d.content.(interface{ HandleKey(*tcell.EventKey) bool }); ok {
+			kh.HandleKey(ev)
 		}
-	})
+	}
+	return false
 }
 
 // handleBaseInput handles Escape for close.
@@ -195,29 +194,13 @@ func (d *Drawer) handleBaseInput(event *tcell.EventKey) bool {
 	return false
 }
 
-// WrapInputHandler wraps a custom handler with drawer's base handler.
-func (d *Drawer) WrapInputHandler(handler func(*tcell.EventKey, func(tview.Primitive))) func(*tcell.EventKey, func(tview.Primitive)) {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if d.handleBaseInput(event) {
-			return
-		}
-		handler(event, setFocus)
-	}
+// Focus delegates focus to the box.
+func (d *Drawer) Focus() {
+	d.Flex.Box.Focus()
 }
 
-// Focus delegates to focusTarget, content, or panel.
-func (d *Drawer) Focus(delegate func(tview.Primitive)) {
-	if d.focusTarget != nil {
-		delegate(d.focusTarget)
-	} else if d.content != nil {
-		delegate(d.content)
-	} else {
-		delegate(d.panel)
-	}
-}
-
-// SetFocusOnShow sets a specific primitive to focus when the drawer is shown.
-func (d *Drawer) SetFocusOnShow(p tview.Primitive) *Drawer {
+// SetFocusOnShow sets a specific widget to focus when the drawer is shown.
+func (d *Drawer) SetFocusOnShow(p core.Widget) *Drawer {
 	d.focusTarget = p
 	return d
 }

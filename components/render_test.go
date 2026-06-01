@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,8 +56,8 @@ func (ts *testScreen) containsText(text string) bool {
 	return strings.Contains(ts.dump(), text)
 }
 
-// drawPrimitive draws a tview.Primitive to the test screen.
-func (ts *testScreen) drawPrimitive(p tview.Primitive) {
+// drawPrimitive draws a core.Widget to the test screen.
+func (ts *testScreen) drawPrimitive(p core.Widget) {
 	w, h := ts.Size()
 	p.SetRect(0, 0, w, h)
 	p.Draw(ts.SimulationScreen)
@@ -231,7 +231,7 @@ func TestModal_Render(t *testing.T) {
 		Height: 10,
 	})
 
-	textContent := tview.NewTextView()
+	textContent := core.NewTextView()
 	textContent.SetText("Are you sure?")
 	modal.SetContent(textContent)
 
@@ -247,7 +247,7 @@ func TestScreen_GetContent(t *testing.T) {
 	screen := newTestScreen(20, 5)
 
 	// Draw a simple text view at known position
-	tv := tview.NewTextView()
+	tv := core.NewTextView()
 	tv.SetText("ABCDE")
 	tv.SetRect(0, 0, 20, 5)
 
@@ -262,7 +262,7 @@ func TestScreen_GetContent(t *testing.T) {
 func TestScreen_ContainsText(t *testing.T) {
 	screen := newTestScreen(40, 10)
 
-	tv := tview.NewTextView()
+	tv := core.NewTextView()
 	tv.SetText("Hello World")
 	tv.SetRect(0, 0, 40, 10)
 
@@ -302,7 +302,7 @@ func TestComponent_FocusRender(t *testing.T) {
 	field := NewTextField("test").SetValue("focused field")
 
 	// Focus the field
-	field.Focus(func(p tview.Primitive) {})
+	field.Focus()
 
 	screen.drawPrimitive(field)
 
@@ -317,7 +317,7 @@ func TestPanel_RenderWithContent(t *testing.T) {
 	panel := NewPanel().SetTitle("Content Panel")
 	panel.SetBorder(true)
 
-	textContent := tview.NewTextView()
+	textContent := core.NewTextView()
 	textContent.SetText("Panel body text goes here")
 	panel.SetContent(textContent)
 
@@ -352,7 +352,7 @@ func TestScreen_Clear(t *testing.T) {
 	screen := newTestScreen(20, 5)
 
 	// Draw something
-	tv := tview.NewTextView()
+	tv := core.NewTextView()
 	tv.SetText("Content")
 	tv.SetRect(0, 0, 20, 5)
 	screen.drawPrimitive(tv)

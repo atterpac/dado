@@ -1,10 +1,10 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -27,7 +27,7 @@ type CodeViewDemo struct {
 }
 
 // Component returns the demo component.
-func (d *CodeViewDemo) Component() tview.Primitive {
+func (d *CodeViewDemo) Component() core.Widget {
 	d.language = "go"
 	d.showNumbers = true
 
@@ -92,7 +92,6 @@ func main() {
 
 const codeViewCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create a code viewer
 code := components.NewCodeView().

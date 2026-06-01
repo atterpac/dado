@@ -1,0 +1,12 @@
+---
+title: Badge
+description: Compact inline label for counts, statuses, or tags. Renders as colored text in a rounded pill.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/badge.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

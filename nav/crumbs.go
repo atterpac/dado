@@ -4,16 +4,16 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
 // Crumbs displays a breadcrumb navigation trail.
 type Crumbs struct {
-	*tview.TextView
+	core.TextView
 	path      []string
 	separator string
 	subs      components.Subscriptions
@@ -24,20 +24,15 @@ func (c *Crumbs) Subs() *components.Subscriptions { return &c.subs }
 
 // NewCrumbs creates a new breadcrumb component.
 func NewCrumbs() *Crumbs {
-	tv := tview.NewTextView()
-	tv.SetBackgroundColor(theme.Bg())
-
 	c := &Crumbs{
-		TextView:  tv,
 		path:      make([]string, 0),
 		separator: " > ",
 	}
-
 	c.TextView.SetDynamicColors(true)
-	c.TextView.SetTextAlign(tview.AlignLeft)
-
-	c.subs.Add(theme.Register(tv))
-
+	c.TextView.Box.SetBackgroundColor(theme.Bg())
+	c.subs.Add(theme.RegisterFn(func(col tcell.Color) {
+		c.TextView.Box.SetBackgroundColor(col)
+	}))
 	return c
 }
 
@@ -99,24 +94,19 @@ func (c *Crumbs) refresh() {
 	var parts []string
 	for i, crumb := range c.path {
 		if i == len(c.path)-1 {
-			// Last item: accent color
 			parts = append(parts, "["+accent+"]"+crumb+"[-]")
 		} else {
-			// Previous items: dim color
 			parts = append(parts, "["+fgDim+"]"+crumb+"[-]")
 		}
 	}
 
-	// Join with styled separator
 	sepStyled := "[" + fgMuted + "]" + c.separator + "[-]"
 	c.TextView.SetText(strings.Join(parts, sepStyled))
 }
 
 // Draw renders the breadcrumbs with current theme colors.
 func (c *Crumbs) Draw(screen tcell.Screen) {
-	// Refresh colors before drawing (theme may have changed)
 	c.refresh()
-	c.TextView.SetBackgroundColor(theme.Bg())
 	c.TextView.Draw(screen)
 }
 

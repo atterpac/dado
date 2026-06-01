@@ -1,0 +1,35 @@
+---
+title: HeatMap
+description: 2D grid where cell color intensity encodes a float64 value. Read-only; no keyboard interaction.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/heat-map.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Color scales
+
+Six built-in scales control how values map to terminal colors:
+
+| Constant | Appearance |
+|----------|------------|
+| `ColorScaleGreen` | Dark → bright green |
+| `ColorScaleRed` | Dark → bright red |
+| `ColorScaleBlue` | Dark → bright blue |
+| `ColorScaleHeat` | Blue → green → yellow → red |
+| `ColorScaleTheme` | Theme background (low) → theme accent (high) |
+| `ColorScaleCustom` | Supply your own `func(normalized float64) tcell.Color` |
+
+`ColorScaleHeat` is the default. Use `ColorScaleTheme` when you want the heatmap to match the active color theme automatically.
+
+## Auto-scaling
+
+By default (`autoScale = true`) the min/max are computed from the data on each `SetCells` or `SetData` call. Call `SetRange(min, max)` to pin the scale to fixed bounds — useful when comparing multiple heatmaps or when the range has meaningful semantics (e.g. 0–100%).
+
+## Value labels
+
+`SetShowValues(true)` overlays the raw value in each cell. The default format is `"%.0f"`; override with `SetValueFormat` using any `fmt.Sprintf` verb.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

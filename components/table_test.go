@@ -110,7 +110,7 @@ func TestTable_MultiSelect(t *testing.T) {
 	assert.Empty(t, table.GetSelectedRows())
 
 	// Toggle selection
-	table.Table.Select(0, 0) // Select first row in tview
+	table.Table.Select(0, 0) // Select first row
 	table.ToggleSelection()
 
 	assert.True(t, table.IsRowSelected(0))
@@ -195,8 +195,7 @@ func TestTable_OnSelect(t *testing.T) {
 
 	// Simulate Enter key on row 1
 	table.Table.Select(1, 0)
-	handler := table.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), nil)
+	table.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
 	assert.Equal(t, 1, selectedRow)
 }
@@ -216,8 +215,7 @@ func TestTable_OnSelectWithHeader(t *testing.T) {
 
 	// Select table row 2 (data row 1)
 	table.Table.Select(2, 0)
-	handler := table.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), nil)
+	table.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
 	assert.Equal(t, 1, selectedRow) // Data index, not table row
 }
@@ -256,18 +254,16 @@ func TestTable_InputHandler_MultiSelect(t *testing.T) {
 	table.AddRow("Row 2")
 	table.AddRow("Row 3")
 
-	handler := table.InputHandler()
-
 	t.Run("Space toggles selection", func(t *testing.T) {
 		table.ClearSelection()
 		table.Table.Select(0, 0)
-		handler(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone), nil)
+		table.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 		assert.True(t, table.IsRowSelected(0))
 	})
 
 	t.Run("Ctrl+A selects all", func(t *testing.T) {
 		table.ClearSelection()
-		handler(tcell.NewEventKey(tcell.KeyCtrlA, 0, tcell.ModNone), nil)
+		table.HandleKey(tcell.NewEventKey(tcell.KeyCtrlA, 0, tcell.ModNone))
 		assert.Len(t, table.GetSelectedRows(), 3)
 	})
 }

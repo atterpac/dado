@@ -8,7 +8,7 @@ import (
 
 // Draw renders the ERD graph.
 func (g *ERDGraph) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 || g.data == nil || len(g.data.tables) == 0 {
@@ -18,7 +18,11 @@ func (g *ERDGraph) Draw(screen tcell.Screen) {
 	// Auto-center on first draw after data is set.
 	if g.needsCenter {
 		g.needsCenter = false
-		g.centerOnFocused()
+		if g.fitAll {
+			g.centerOnAll()
+		} else {
+			g.centerOnFocused()
+		}
 	}
 
 	// Precompute the set of tables connected to the focused table.

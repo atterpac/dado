@@ -2,16 +2,16 @@ package layout
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
 // Menu is a bottom bar showing key hints and optional right-aligned text.
 type Menu struct {
-	*tview.Box
+	core.Box
 	hints     []components.KeyHint
 	rightText string
 	subs      components.Subscriptions
@@ -24,13 +24,12 @@ func (m *Menu) Subs() *components.Subscriptions { return &m.subs }
 // NewMenu creates a new menu bar.
 func NewMenu() *Menu {
 	m := &Menu{
-		Box:   tview.NewBox(),
 		hints: make([]components.KeyHint, 0),
 	}
 
 	m.Box.SetBackgroundColor(theme.Bg())
 
-	m.subs.Add(theme.Register(m.Box))
+	m.subs.Add(theme.RegisterFn(func(c tcell.Color) { m.Box.SetBackgroundColor(c) }))
 
 	return m
 }
@@ -56,7 +55,7 @@ func (m *Menu) Clear() *Menu {
 
 // Draw renders the menu with pill-style key hints.
 func (m *Menu) Draw(screen tcell.Screen) {
-	m.Box.DrawForSubclass(screen, m)
+	m.Box.DrawForSubclass(screen)
 
 	x, y, width, height := m.GetInnerRect()
 	if width < 1 || height < 1 {

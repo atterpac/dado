@@ -1,0 +1,42 @@
+---
+title: VirtualList
+description: High-performance list that virtualizes rendering — only visible rows are drawn, making it efficient for thousands of items.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/virtual-list.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move up one item |
+| `↓` / `j` | Move down one item |
+| `Home` / `g` | Jump to first item |
+| `End` / `G` | Jump to last item |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `Ctrl+U` | Half-page up |
+| `Ctrl+D` | Half-page down |
+| `Enter` | Select item (fires `onSelect`) |
+
+## When to use
+
+Use `VirtualList` when your list can have thousands of rows or when items are loaded lazily. For small, static lists with no dynamic loading, the simpler `List` component is sufficient.
+
+## Data model
+
+Provide a total count and an item-fetch function — VirtualList calls the function only for rows in the visible viewport:
+
+```go
+vl := components.NewVirtualList()
+vl.SetTotalCount(len(items))
+vl.SetItemFunc(func(index int) *components.VirtualItem {
+    return &components.VirtualItem{Label: items[index].Name}
+})
+```
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

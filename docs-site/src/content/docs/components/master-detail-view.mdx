@@ -1,0 +1,33 @@
+---
+title: MasterDetailView
+description: Two-panel layout combining a list master and a detail preview. Handles empty state, search, and keyboard resize automatically.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/master-detail-view.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Detail toggle
+
+`ToggleDetail()` collapses or expands the detail pane. Use it to give users a full-width master view. Wire a key hint to it:
+
+```go
+base.SetHints([]components.KeyHint{
+    {Key: "Tab", Description: "Toggle detail"},
+})
+```
+
+## Search
+
+```go
+view.SetSearchEnabled(true).
+    SetOnSearch(func(query string) {
+        table.SetFilter(query)
+    })
+```
+
+When search is enabled, the master title shows the current query. `SetShowSearchFunc` lets you supply a custom search UI (e.g., a `Finder` overlay) instead of the built-in inline search.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

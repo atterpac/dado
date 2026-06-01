@@ -1,0 +1,40 @@
+---
+title: Split
+description: Resizable split-pane container. Tab or Ctrl+W switches focus between panes; Ctrl+Arrow resizes.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/split.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Toggle focus between panes |
+| `Ctrl+W` | Toggle focus between panes |
+| `Ctrl+←` / `Ctrl+→` | Resize horizontal split (±5%) |
+| `Ctrl+↑` / `Ctrl+↓` | Resize vertical split (±5%) |
+
+Resize keys only work when `SetResizable(true)` is set (default: false). All other keys pass through to the focused pane.
+
+## Directions
+
+```go
+// Horizontal: left | right
+split := components.NewSplit(components.SplitHorizontal).
+    SetFirst(leftPane).
+    SetSecond(rightPane).
+    SetRatio(0.3) // 30% left, 70% right
+
+// Vertical: top | bottom
+split := components.NewSplit(components.SplitVertical).
+    SetFirst(topPane).
+    SetSecond(bottomPane)
+```
+
+`SplitHorizontal` is the default direction.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

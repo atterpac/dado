@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // Braille dot positions (2x4 grid per cell):
@@ -24,7 +23,8 @@ var brailleDots = [2][4]rune{
 	{0x08, 0x10, 0x20, 0x80}, // right column (x=1): dots 4,5,6,8
 }
 
-// DataSeries represents a single line in the graph
+// DataSeries is a named set of float64 values plotted as a single line.
+// Color 0 falls back to the theme accent; set it explicitly for multi-series charts.
 type DataSeries struct {
 	Label  string
 	Values []float64
@@ -40,7 +40,8 @@ const (
 	LineGraphFilled                       // Fill area under line
 )
 
-// AxisConfig configures axis display
+// AxisConfig controls Y-axis display. LabelCount 0 auto-selects a reasonable
+// density based on component height. Format uses fmt.Sprintf syntax.
 type AxisConfig struct {
 	Show       bool
 	LabelCount int    // Number of labels on Y axis (0 = auto)
@@ -70,6 +71,13 @@ type LineGraph struct {
 	showGrid  bool
 	gridColor tcell.Color // 0 = use theme FgDim
 
+	// Scrub cursor: a vertical guide at a fractional X position (0..1).
+	// Negative disables it. Useful for correlating a selected point in time
+	// across stacked graphs. cursorLabel, when set, renders a floating card of
+	// plain-text lines next to the cursor.
+	cursorFrac  float64
+	cursorLabel []string
+
 	// Callbacks
 	onHover func(seriesIdx, pointIdx int, value float64)
 
@@ -85,15 +93,16 @@ type LineGraph struct {
 // NewLineGraph creates a new line graph component
 func NewLineGraph() *LineGraph {
 	g := &LineGraph{
-		autoScale: true,
-		style:     LineGraphSolid,
+		autoScale:  true,
+		cursorFrac: -1,
+		style:      LineGraphSolid,
 		yAxis: AxisConfig{
 			Show:       true,
 			LabelCount: 5,
 			Format:     "%.1f",
 		},
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
@@ -235,6 +244,27 @@ func (g *LineGraph) SetGridColor(color tcell.Color) *LineGraph {
 	return g
 }
 
+// SetCursorFrac positions a vertical scrub cursor at fractional X (0..1 across
+// the plot). A negative value (the default) hides it. Drawn beneath the series
+// so the line stays visible on top, letting callers correlate a selected point
+// across stacked graphs.
+func (g *LineGraph) SetCursorFrac(frac float64) *LineGraph {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cursorFrac = frac
+	return g
+}
+
+// SetCursorLabel sets the plain-text lines shown in a floating card beside the
+// scrub cursor. Pass nil to hide the card. Drawn on top of the plot, flipping
+// to the cursor's left when there isn't room on the right.
+func (g *LineGraph) SetCursorLabel(lines []string) *LineGraph {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cursorLabel = lines
+	return g
+}
+
 // SetOnHover sets the hover callback
 func (g *LineGraph) SetOnHover(fn func(seriesIdx, pointIdx int, value float64)) *LineGraph {
 	g.mu.Lock()
@@ -347,7 +377,7 @@ func (g *LineGraph) mapValueToX(index, dataLen, width int) int {
 
 // Draw renders the line graph
 func (g *LineGraph) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -582,6 +612,20 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		}
 	}
 
+	// Draw scrub cursor ON TOP of the series: a solid high-contrast vertical
+	// bar so it stays visible even where a line crosses it.
+	if g.cursorFrac >= 0 && chartWidth > 0 {
+		cursorCol := chartX + int(g.cursorFrac*float64(chartWidth-1))
+		if cursorCol >= chartX && cursorCol < chartX+chartWidth {
+				// Thin high-contrast vertical line drawn on top of the series.
+			barStyle := tcell.StyleDefault.Background(bgColor).Foreground(accentColor).Bold(true)
+			for row := chartY; row < chartY+chartHeight; row++ {
+				screen.SetContent(cursorCol, row, '│', nil, barStyle)
+			}
+			g.drawCursorCard(screen, cursorCol, chartX, chartY, chartWidth, chartHeight, bgColor, fgColor, accentColor)
+		}
+	}
+
 	// Draw legend
 	if g.showLegend && len(g.series) > 0 {
 		legendY := chartY + chartHeight
@@ -669,6 +713,75 @@ func (g *LineGraph) fillToBottom(canvas [][]rune, bx, by, width, height int) {
 		dotY := y % 4
 		if cellX >= 0 && cellX < width && cellY >= 0 && cellY < height {
 			canvas[cellY][cellX] |= brailleDots[dotX][dotY]
+		}
+	}
+}
+
+// drawCursorCard renders a bordered floating box of cursorLabel lines next to
+// the cursor column, flipping to the left edge when it would overflow right.
+func (g *LineGraph) drawCursorCard(screen tcell.Screen, cursorCol, chartX, chartY, chartWidth, chartHeight int, bgColor, fgColor, accentColor tcell.Color) {
+	lines := g.cursorLabel
+	if len(lines) == 0 {
+		return
+	}
+	innerW := 0
+	for _, l := range lines {
+		if len(l) > innerW {
+			innerW = len(l)
+		}
+	}
+	boxW := innerW + 2 // borders
+	boxH := len(lines) + 2
+	if boxW > chartWidth || boxH > chartHeight {
+		return // not enough room; skip rather than clip badly
+	}
+
+	// Prefer right of the cursor; flip left if it would overflow.
+	bx := cursorCol + 2
+	if bx+boxW > chartX+chartWidth {
+		bx = cursorCol - 1 - boxW
+	}
+	if bx < chartX {
+		bx = chartX
+	}
+	by := chartY
+	if by+boxH > chartY+chartHeight {
+		by = chartY + chartHeight - boxH
+	}
+
+	border := tcell.StyleDefault.Background(bgColor).Foreground(accentColor)
+	text := tcell.StyleDefault.Background(bgColor).Foreground(fgColor)
+
+	set := func(col, row int, r rune, st tcell.Style) {
+		if col >= chartX && col < chartX+chartWidth && row >= chartY && row < chartY+chartHeight {
+			screen.SetContent(col, row, r, nil, st)
+		}
+	}
+
+	for r := 0; r < boxH; r++ {
+		for c := 0; c < boxW; c++ {
+			ch := ' '
+			st := text
+			switch {
+			case r == 0 && c == 0:
+				ch, st = '┌', border
+			case r == 0 && c == boxW-1:
+				ch, st = '┐', border
+			case r == boxH-1 && c == 0:
+				ch, st = '└', border
+			case r == boxH-1 && c == boxW-1:
+				ch, st = '┘', border
+			case r == 0 || r == boxH-1:
+				ch, st = '─', border
+			case c == 0 || c == boxW-1:
+				ch, st = '│', border
+			}
+			set(bx+c, by+r, ch, st)
+		}
+	}
+	for i, l := range lines {
+		for j, r := range l {
+			set(bx+1+j, by+1+i, r, text)
 		}
 	}
 }

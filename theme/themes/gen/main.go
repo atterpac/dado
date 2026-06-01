@@ -22,6 +22,7 @@ type def struct {
 	Name    string            `yaml:"name"`
 	Ident   string            `yaml:"ident"`
 	Default bool              `yaml:"default"`
+	Hidden  bool              `yaml:"hidden"`
 	Colors  map[string]string `yaml:"colors"`
 }
 
@@ -121,22 +122,42 @@ func run() error {
 	fmt.Fprintf(&b, "// DefaultName is the name of the default theme.\n")
 	fmt.Fprintf(&b, "const DefaultName = %q\n\n", defaultName)
 
-	fmt.Fprintln(&b, "// All returns all built-in themes keyed by name.")
+	fmt.Fprintln(&b, "// All returns all built-in themes keyed by name. Themes marked")
+	fmt.Fprintln(&b, "// `hidden: true` are excluded; resolve those by name with Get.")
 	fmt.Fprintln(&b, "func All() map[string]theme.Theme {")
 	fmt.Fprintln(&b, "\treturn map[string]theme.Theme{")
 	for _, d := range defs {
+		if d.Hidden {
+			continue
+		}
 		fmt.Fprintf(&b, "\t\t%q: %s,\n", d.Name, d.Ident)
 	}
 	fmt.Fprintln(&b, "\t}")
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 
-	names := make([]string, len(defs))
-	for i, d := range defs {
-		names[i] = d.Name
+	fmt.Fprintln(&b, "// all returns every built-in theme keyed by name, including hidden ones.")
+	fmt.Fprintln(&b, "func all() map[string]theme.Theme {")
+	fmt.Fprintln(&b, "\tm := All()")
+	for _, d := range defs {
+		if d.Hidden {
+			fmt.Fprintf(&b, "\tm[%q] = %s\n", d.Name, d.Ident)
+		}
+	}
+	fmt.Fprintln(&b, "\treturn m")
+	fmt.Fprintln(&b, "}")
+	fmt.Fprintln(&b)
+
+	names := make([]string, 0, len(defs))
+	for _, d := range defs {
+		if d.Hidden {
+			continue
+		}
+		names = append(names, d.Name)
 	}
 	sort.Strings(names)
-	fmt.Fprintln(&b, "// Names returns a sorted list of all built-in theme names.")
+	fmt.Fprintln(&b, "// Names returns a sorted list of all built-in theme names, excluding")
+	fmt.Fprintln(&b, "// themes marked `hidden: true`.")
 	fmt.Fprintln(&b, "func Names() []string {")
 	fmt.Fprintln(&b, "\treturn []string{")
 	for _, n := range names {
@@ -146,8 +167,9 @@ func run() error {
 	fmt.Fprintln(&b, "}")
 	fmt.Fprintln(&b)
 
-	fmt.Fprintln(&b, "// Get returns a theme by name, or nil if not found.")
-	fmt.Fprintln(&b, "func Get(name string) theme.Theme { return All()[name] }")
+	fmt.Fprintln(&b, "// Get returns a theme by name, or nil if not found. Hidden themes are")
+	fmt.Fprintln(&b, "// resolvable here even though they are absent from All and Names.")
+	fmt.Fprintln(&b, "func Get(name string) theme.Theme { return all()[name] }")
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "// Default returns the default theme.")
 	fmt.Fprintf(&b, "func Default() theme.Theme { return Get(DefaultName) }\n")

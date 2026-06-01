@@ -1,0 +1,12 @@
+---
+title: Chip
+description: Removable tag element. Displays a label with an optional dismiss button.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/chip.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

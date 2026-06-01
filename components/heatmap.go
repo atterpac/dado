@@ -2,7 +2,6 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // HeatMapCell represents a single cell in the heat map
@@ -19,6 +18,7 @@ const (
 	ColorScaleRed                      // Low=dark, High=bright red
 	ColorScaleBlue                     // Low=dark, High=bright blue
 	ColorScaleHeat                     // Blue -> Green -> Yellow -> Red
+	ColorScaleTheme                    // Bg (low) → Accent (high) from active theme
 	ColorScaleCustom                   // Use custom color function
 )
 
@@ -67,7 +67,7 @@ func NewHeatMap() *HeatMap {
 		valueFormat: "%.0f",
 		cellChar:    '█',
 	}
-	h.initWidget(tview.NewBox())
+	h.initWidget()
 	return h
 }
 
@@ -137,7 +137,9 @@ func (h *HeatMap) SetColLabels(labels []string) *HeatMap {
 	return h
 }
 
-// SetRange sets fixed value range
+// SetRange pins the color scale to a fixed [min, max] range and disables
+// auto-scaling. Use this when comparing multiple heatmaps side-by-side or
+// when the range has domain meaning (e.g., 0–100 for percentages).
 func (h *HeatMap) SetRange(min, max float64) *HeatMap {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -167,7 +169,8 @@ func (h *HeatMap) SetCellSize(width, height int) *HeatMap {
 	return h
 }
 
-// SetColorScale sets the color mapping
+// SetColorScale sets the color mapping strategy. ColorScaleTheme adapts to
+// the active theme automatically; ColorScaleCustom requires a SetColorFunc.
 func (h *HeatMap) SetColorScale(scale ColorScale) *HeatMap {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -175,7 +178,8 @@ func (h *HeatMap) SetColorScale(scale ColorScale) *HeatMap {
 	return h
 }
 
-// SetColorFunc sets a custom color function
+// SetColorFunc sets a custom color function and switches the scale to
+// ColorScaleCustom. The argument is the normalized value in [0.0, 1.0].
 func (h *HeatMap) SetColorFunc(fn func(normalized float64) tcell.Color) *HeatMap {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -321,6 +325,16 @@ func (h *HeatMap) getColor(normalized float64) tcell.Color {
 			return tcell.NewRGBColor(255, int32((1-t)*255), 0)
 		}
 
+	case ColorScaleTheme:
+		// Interpolate from theme bg (low) to accent (high)
+		th := h.th()
+		lr, lg, lb := th.Bg().RGB()
+		hr, hg, hb := th.Accent().RGB()
+		r := int32(float64(lr) + normalized*float64(int32(hr)-int32(lr)))
+		g := int32(float64(lg) + normalized*float64(int32(hg)-int32(lg)))
+		b := int32(float64(lb) + normalized*float64(int32(hb)-int32(lb)))
+		return tcell.NewRGBColor(r, g, b)
+
 	case ColorScaleCustom:
 		if h.colorFunc != nil {
 			return h.colorFunc(normalized)
@@ -334,7 +348,7 @@ func (h *HeatMap) getColor(normalized float64) tcell.Color {
 
 // Draw renders the heat map
 func (h *HeatMap) Draw(screen tcell.Screen) {
-	h.Box.DrawForSubclass(screen, h)
+	h.Box.DrawForSubclass(screen)
 	x, y, width, height := h.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -408,7 +422,15 @@ func (h *HeatMap) Draw(screen tcell.Screen) {
 		cellHeight = 1
 	}
 
-	gridX := chartX + rowLabelWidth
+	// Center the grid horizontally within the available chart width so a
+	// fixed cell size doesn't hug the left edge of an oversized box.
+	gridWidth := rowLabelWidth + h.cols*cellWidth
+	leftPad := 0
+	if gridWidth < chartWidth {
+		leftPad = (chartWidth - gridWidth) / 2
+	}
+
+	gridX := chartX + leftPad + rowLabelWidth
 	gridY := chartY + colLabelHeight
 
 	// Draw column labels

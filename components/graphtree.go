@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/theme"
 )
@@ -109,7 +108,7 @@ func NewGraphTree() *GraphTree {
 	t := &GraphTree{
 		indentSize: 3,
 	}
-	t.initWidget(tview.NewBox())
+	t.initWidget()
 	return t
 }
 
@@ -177,7 +176,7 @@ func (t *GraphTree) flattenNode(nodeID string, depth int) {
 
 // Draw renders the tree.
 func (t *GraphTree) Draw(screen tcell.Screen) {
-	t.Box.DrawForSubclass(screen, t)
+	t.Box.DrawForSubclass(screen)
 	x, y, width, height := t.GetInnerRect()
 
 	if width <= 0 || height <= 0 || len(t.flatNodes) == 0 {
@@ -438,82 +437,81 @@ func (t *GraphTree) getStatusIcon(status string) string {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (t *GraphTree) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if len(t.flatNodes) == 0 {
-			return
-		}
+// HandleKey handles keyboard input.
+func (t *GraphTree) HandleKey(ev *tcell.EventKey) bool {
+	if len(t.flatNodes) == 0 {
+		return false
+	}
 
-		prevIndex := t.selectedIndex
+	prevIndex := t.selectedIndex
 
-		switch event.Key() {
-		case tcell.KeyDown:
-			t.moveDown()
-		case tcell.KeyUp:
-			t.moveUp()
-		case tcell.KeyRight:
-			t.expandOrMoveIn()
-		case tcell.KeyLeft:
-			t.collapseOrMoveOut()
-		case tcell.KeyHome:
-			t.selectedIndex = 0
-		case tcell.KeyEnd:
+	switch ev.Key() {
+	case tcell.KeyDown:
+		t.moveDown()
+	case tcell.KeyUp:
+		t.moveUp()
+	case tcell.KeyRight:
+		t.expandOrMoveIn()
+	case tcell.KeyLeft:
+		t.collapseOrMoveOut()
+	case tcell.KeyHome:
+		t.selectedIndex = 0
+	case tcell.KeyEnd:
+		t.selectedIndex = len(t.flatNodes) - 1
+	case tcell.KeyPgDn:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex += height
+		if t.selectedIndex >= len(t.flatNodes) {
 			t.selectedIndex = len(t.flatNodes) - 1
-		case tcell.KeyPgDn:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex += height
-			if t.selectedIndex >= len(t.flatNodes) {
-				t.selectedIndex = len(t.flatNodes) - 1
-			}
-		case tcell.KeyPgUp:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex -= height
-			if t.selectedIndex < 0 {
-				t.selectedIndex = 0
-			}
-		case tcell.KeyEnter:
-			if node := t.GetSelected(); node != nil && t.onSelect != nil {
-				t.onSelect(node)
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				t.moveDown()
-			case 'k':
-				t.moveUp()
-			case 'l':
-				t.expandOrMoveIn()
-			case 'h':
-				t.collapseOrMoveOut()
-			case 'g':
-				t.selectedIndex = 0
-			case 'G':
-				t.selectedIndex = len(t.flatNodes) - 1
-			case ' ', 'o':
-				t.toggleExpanded()
-			}
-		case tcell.KeyCtrlD:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex += height / 2
-			if t.selectedIndex >= len(t.flatNodes) {
-				t.selectedIndex = len(t.flatNodes) - 1
-			}
-		case tcell.KeyCtrlU:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex -= height / 2
-			if t.selectedIndex < 0 {
-				t.selectedIndex = 0
-			}
 		}
+	case tcell.KeyPgUp:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex -= height
+		if t.selectedIndex < 0 {
+			t.selectedIndex = 0
+		}
+	case tcell.KeyEnter:
+		if node := t.GetSelected(); node != nil && t.onSelect != nil {
+			t.onSelect(node)
+		}
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
+			t.moveDown()
+		case 'k':
+			t.moveUp()
+		case 'l':
+			t.expandOrMoveIn()
+		case 'h':
+			t.collapseOrMoveOut()
+		case 'g':
+			t.selectedIndex = 0
+		case 'G':
+			t.selectedIndex = len(t.flatNodes) - 1
+		case ' ', 'o':
+			t.toggleExpanded()
+		}
+	case tcell.KeyCtrlD:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex += height / 2
+		if t.selectedIndex >= len(t.flatNodes) {
+			t.selectedIndex = len(t.flatNodes) - 1
+		}
+	case tcell.KeyCtrlU:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex -= height / 2
+		if t.selectedIndex < 0 {
+			t.selectedIndex = 0
+		}
+	}
 
-		// Call onChange if the selected index changed
-		if t.selectedIndex != prevIndex && t.onChange != nil {
-			if node := t.GetSelected(); node != nil {
-				t.onChange(node)
-			}
+	// Call onChange if the selected index changed
+	if t.selectedIndex != prevIndex && t.onChange != nil {
+		if node := t.GetSelected(); node != nil {
+			t.onChange(node)
 		}
-	})
+	}
+	return false
 }
 
 func (t *GraphTree) moveDown() {
@@ -606,64 +604,7 @@ func (t *GraphTree) toggleExpanded() {
 	t.rebuildFlatList()
 }
 
-// MouseHandler handles mouse input.
-func (t *GraphTree) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return t.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		_, y, _, _ := t.GetInnerRect()
-		mx, my := event.Position()
-
-		if !t.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(t)
-			clickedIndex := t.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(t.flatNodes) {
-				prevIndex := t.selectedIndex
-				t.selectedIndex = clickedIndex
-				if t.selectedIndex != prevIndex && t.onChange != nil {
-					if node := t.GetSelected(); node != nil {
-						t.onChange(node)
-					}
-				}
-				return true, t
-			}
-		case tview.MouseLeftDoubleClick:
-			clickedIndex := t.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(t.flatNodes) {
-				t.selectedIndex = clickedIndex
-				node := t.flatNodes[clickedIndex]
-				if node.CanExpand {
-					t.toggleExpanded()
-				} else if t.onSelect != nil {
-					t.onSelect(node)
-				}
-				return true, t
-			}
-		case tview.MouseScrollUp:
-			if t.offset > 0 {
-				t.offset--
-			}
-			return true, t
-		case tview.MouseScrollDown:
-			_, _, _, height := t.GetInnerRect()
-			if t.offset < len(t.flatNodes)-height {
-				t.offset++
-			}
-			return true, t
-		}
-
-		return false, nil
-	})
-}
-
 // Focus handles focus.
-func (t *GraphTree) Focus(delegate func(tview.Primitive)) {
-	t.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the tree has focus.
 func (t *GraphTree) HasFocus() bool {
 	return t.Box.HasFocus()

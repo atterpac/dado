@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -21,23 +21,23 @@ func init() {
 // DividerDemo demonstrates the Divider component.
 type DividerDemo struct {
 	demos.DemoBase
-	container *tview.Flex
+	container *core.Flex
 	divider   *components.Divider
 	showLabel bool
 }
 
 // Component returns the demo component.
-func (d *DividerDemo) Component() tview.Primitive {
+func (d *DividerDemo) Component() core.Widget {
 	d.showLabel = true
 
-	d.container = tview.NewFlex().SetDirection(tview.FlexRow)
+	d.container = core.NewFlex()
 
 	d.divider = components.NewDivider().SetLabel("Section")
 	simple := components.NewDivider()
 
-	text1 := tview.NewTextView().SetText("Content above divider")
-	text2 := tview.NewTextView().SetText("Content between dividers")
-	text3 := tview.NewTextView().SetText("Content below divider")
+	text1 := core.NewTextView().SetText("Content above divider")
+	text2 := core.NewTextView().SetText("Content between dividers")
+	text3 := core.NewTextView().SetText("Content below divider")
 
 	d.container.AddItem(text1, 2, 0, false)
 	d.container.AddItem(d.divider, 1, 0, false)
@@ -65,7 +65,6 @@ func (d *DividerDemo) Component() tview.Primitive {
 
 const dividerCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Simple horizontal divider
 divider := components.NewDivider()

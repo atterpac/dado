@@ -2,42 +2,37 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
-// InputHandler handles keyboard input for the DataGrid.
-func (dg *DataGrid) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	// gg sequence state
-	gPressed := false
+// HandleKey processes a key event for the DataGrid.
+func (dg *DataGrid) HandleKey(ev *tcell.EventKey) bool {
+	dg.mu.Lock()
 
-	return dg.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		dg.mu.Lock()
-
-		if dg.source == nil || dg.source.RowCount() == 0 {
-			dg.mu.Unlock()
-			return
-		}
-
-		if dg.mode == GridModeEdit {
-			gPressed = false
-			dg.handleEditInput(event)
-			dg.mu.Unlock()
-			return
-		}
-
-		dg.handleNormalInput(event, &gPressed)
-
-		// Collect deferred callback before releasing the lock.
-		// External callbacks (onModalEdit, onBack, onSearch, onCopy)
-		// may call public methods that take mu, so they must run unlocked.
-		deferred := dg.deferredCallback
-		dg.deferredCallback = nil
+	if dg.source == nil || dg.source.RowCount() == 0 {
 		dg.mu.Unlock()
+		return false
+	}
 
-		if deferred != nil {
-			deferred()
-		}
-	})
+	if dg.mode == GridModeEdit {
+		dg.gPressed = false
+		dg.handleEditInput(ev)
+		dg.mu.Unlock()
+		return true
+	}
+
+	dg.handleNormalInput(ev, &dg.gPressed)
+
+	// Collect deferred callback before releasing the lock.
+	// External callbacks (onModalEdit, onBack, onSearch, onCopy)
+	// may call public methods that take mu, so they must run unlocked.
+	deferred := dg.deferredCallback
+	dg.deferredCallback = nil
+	dg.mu.Unlock()
+
+	if deferred != nil {
+		deferred()
+	}
+	return false
 }
 
 // handleNormalInput processes input in normal mode.
@@ -104,6 +99,12 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 		return
 	case tcell.KeyEnter:
 		*gPressed = false
+		// Enter edits the current cell when it is editable; otherwise it falls
+		// back to the cell-select callback (e.g. read-only grids used as pickers).
+		if dg.source != nil && !dg.source.Cell(dg.cursor.Row, dg.cursor.Col).ReadOnly {
+			dg.enterEdit()
+			return
+		}
 		if dg.onCellSelect != nil {
 			pos := dg.cursor
 			val := dg.getCellValue(pos)
@@ -327,82 +328,6 @@ func (dg *DataGrid) halfPageUp() {
 }
 
 // --- Mouse Handler ---
-
-// MouseHandler handles mouse input.
-func (dg *DataGrid) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return dg.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		mx, my := event.Position()
-		if !dg.InRect(mx, my) {
-			return false, nil
-		}
-
-		dg.mu.Lock()
-		defer dg.mu.Unlock()
-
-		x, y, _, _ := dg.GetInnerRect()
-
-		headerHeight := 0
-		if dg.showHeader {
-			headerHeight = 1
-		}
-		gutterWidth := 0
-		if dg.showRowNumbers {
-			rowCount := 0
-			if dg.source != nil {
-				rowCount = dg.source.RowCount()
-			}
-			gutterWidth = len(itoa(rowCount)) + 2
-			if gutterWidth < 4 {
-				gutterWidth = 4
-			}
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(dg)
-
-			clickRow := (my - y - headerHeight) + dg.viewport.RowOffset
-			if my-y < headerHeight || dg.source == nil {
-				return true, dg
-			}
-
-			clickCol := dg.mouseXToCol(mx - x - gutterWidth)
-			if clickCol < 0 {
-				return true, dg
-			}
-
-			if clickRow >= 0 && clickRow < dg.source.RowCount() && clickCol < dg.source.ColCount() {
-				prevRow := dg.cursor.Row
-				dg.cursor.Row = clickRow
-				dg.cursor.Col = clickCol
-				if prevRow != dg.cursor.Row {
-					dg.fireCursorMove()
-				}
-			}
-			return true, dg
-
-		case tview.MouseLeftDoubleClick:
-			if dg.source != nil && dg.mode == GridModeNormal {
-				dg.enterEdit()
-			}
-			return true, dg
-
-		case tview.MouseScrollUp:
-			if dg.viewport.RowOffset > 0 {
-				dg.viewport.RowOffset--
-			}
-			return true, dg
-
-		case tview.MouseScrollDown:
-			if dg.source != nil && dg.viewport.RowOffset < dg.source.RowCount()-dg.viewport.VisRows {
-				dg.viewport.RowOffset++
-			}
-			return true, dg
-		}
-
-		return false, nil
-	})
-}
 
 // mouseXToCol converts a mouse X position (relative to content area) to a column index.
 func (dg *DataGrid) mouseXToCol(relX int) int {

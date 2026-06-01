@@ -71,7 +71,7 @@ func (s *Status) Color() tcell.Color {
 	return s.colorFunc()
 }
 
-// ColorTag returns the hex color string for tview tags (e.g., "#FF0000").
+// ColorTag returns the hex color string for color tags (e.g., "#FF0000").
 func (s *Status) ColorTag() string {
 	return ColorToHex(s.Color())
 }
@@ -95,7 +95,7 @@ func (s *Status) String() string {
 	return s.name
 }
 
-// Format returns a tview-formatted string with color tags.
+// Format returns a string with color tags.
 // Example output: "[#00FF00]󰄬 Running[-]"
 func (s *Status) Format() string {
 	if s == nil {

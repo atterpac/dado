@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -27,7 +27,7 @@ type CheckboxDemo struct {
 }
 
 // Component returns the demo component.
-func (d *CheckboxDemo) Component() tview.Primitive {
+func (d *CheckboxDemo) Component() core.Widget {
 	d.label = "Enable notifications"
 	d.checked = false
 

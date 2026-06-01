@@ -111,16 +111,19 @@ func (r *ActionRegistry) matchesEvent(action KeyAction, event *tcell.EventKey) b
 		return action.Key == event.Key()
 	}
 
-	// Match rune keys
-	if action.Rune != 0 && event.Key() == tcell.KeyRune {
-		return action.Rune == event.Rune()
-	}
-
-	// Match Ctrl+key (tcell sends as KeyCtrl* or modified rune)
+	// Match Ctrl+key FIRST (tcell delivers Ctrl+letter as KeyCtrl*, not as a
+	// modified rune). This must precede the plain-rune match below, otherwise a
+	// Ctrl+<rune> action (e.g. Ctrl+I) would incorrectly match a plain <rune>
+	// press (plain 'i'), since both share Rune=='i'.
 	if action.Modifiers&tcell.ModCtrl != 0 {
 		// Ctrl+A through Ctrl+Z map to KeyCtrlA through KeyCtrlZ
 		ctrlKey := tcell.Key(int(tcell.KeyCtrlA) + int(action.Rune) - int('a'))
 		return event.Key() == ctrlKey
+	}
+
+	// Match plain rune keys (no Ctrl modifier).
+	if action.Rune != 0 && event.Key() == tcell.KeyRune {
+		return action.Rune == event.Rune()
 	}
 
 	return false

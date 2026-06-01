@@ -1,0 +1,40 @@
+---
+title: TextField
+description: Single-line text input with cursor, validation, and emacs-style editing shortcuts.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/text-field.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `←` / `→` | Move cursor |
+| `Home` | Jump to start |
+| `End` | Jump to end |
+| `Backspace` | Delete character before cursor |
+| `Delete` | Delete character at cursor |
+| `Ctrl+U` | Delete from cursor to start of line |
+| `Ctrl+K` | Delete from cursor to end of line |
+| `Ctrl+W` | Delete word backward |
+| `Enter` | Submit (fires `onSubmit`) |
+
+## Validation
+
+```go
+field := components.NewTextField().
+    SetLabel("Email").
+    SetValidator(validators.Email())
+```
+
+The validator runs on every keystroke. The field draws a red border when the current value is invalid. `FieldValue()` returns the raw string regardless of validation state — check `IsValid()` before using the value.
+
+## Form integration
+
+TextField implements `FormField`. The bound value type is `string`.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -44,11 +44,9 @@ func NewPropertyModal(demo demos.Demo, onClose func()) *PropertyModal {
 
 	if len(properties) == 0 {
 		// Show message when no properties
-		noProps := tview.NewTextView()
+		noProps := core.NewTextView()
 		noProps.SetText("No editable properties for this component")
-		noProps.SetTextAlign(tview.AlignCenter)
-		noProps.SetBackgroundColor(theme.Bg())
-		noProps.SetTextColor(theme.FgMuted())
+		noProps.Box.SetBackgroundColor(theme.Bg())
 		modal.SetContent(noProps)
 		modal.SetFocusOnShow(noProps)
 	} else {
@@ -67,7 +65,7 @@ func NewPropertyModal(demo demos.Demo, onClose func()) *PropertyModal {
 	})
 
 	if m.form != nil {
-		m.subs.Add(theme.Register(m.form))
+		m.subs.Add(theme.RegisterFn(func(c tcell.Color) { m.form.SetBackgroundColor(c) }))
 	}
 
 	return m
@@ -163,11 +161,11 @@ func (m *PropertyModal) Hints() []components.KeyHint {
 }
 
 // Focus handles focus.
-func (m *PropertyModal) Focus(delegate func(tview.Primitive)) {
+func (m *PropertyModal) Focus() {
 	if m.form != nil {
-		delegate(m.form)
+		m.form.Focus()
 	} else {
-		m.Modal.Focus(delegate)
+		m.Modal.Focus()
 	}
 }
 
@@ -177,9 +175,4 @@ func (m *PropertyModal) HasFocus() bool {
 		return m.form.HasFocus()
 	}
 	return m.Modal.HasFocus()
-}
-
-// InputHandler handles keyboard input.
-func (m *PropertyModal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return m.Modal.InputHandler()
 }

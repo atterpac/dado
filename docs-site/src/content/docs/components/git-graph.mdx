@@ -1,0 +1,35 @@
+---
+title: GitGraph
+description: Git commit graph visualizer. j/k navigate commits; p/P/c jump parent/child; Enter selects.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/git-graph.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move up one commit |
+| `↓` / `j` | Move down one commit |
+| `Home` / `g` | Jump to newest commit (top) |
+| `End` / `G` | Jump to oldest commit (bottom) |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `Ctrl+U` | Half-page up |
+| `Ctrl+D` | Half-page down |
+| `p` | Jump to first parent |
+| `P` | Jump to second parent (merge commits) |
+| `c` | Jump to first child |
+| `Enter` | Select commit (fires `onSelect`) |
+
+`onHighlight` fires on every cursor move for driving a detail panel; `onSelect` fires only on `Enter`.
+
+## Data model
+
+Build `GitGraphData` with commits and their parent/child relationships. The renderer draws branch lines automatically based on the parent hash list.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

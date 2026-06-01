@@ -1,10 +1,10 @@
 package intermediate
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +26,7 @@ type GaugeDemo struct {
 }
 
 // Component returns the demo component.
-func (d *GaugeDemo) Component() tview.Primitive {
+func (d *GaugeDemo) Component() core.Widget {
 	d.value = 0.75
 
 	d.gauge = components.NewGauge().

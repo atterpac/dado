@@ -103,6 +103,11 @@ func sortedThemeNames(m map[string]theme.Theme) []string {
 	return names
 }
 
+// OpenThemeSelector opens the live-preview theme selector programmatically.
+// No-op if EnableThemes was not called or the selector is already open.
+// Must be called on the UI thread (or via QueueUpdateDraw).
+func (a *App) OpenThemeSelector() { a.openThemeSelector() }
+
 // openThemeSelector pushes the live-preview theme selector onto the page stack.
 func (a *App) openThemeSelector() {
 	ts := a.themeState
@@ -140,7 +145,7 @@ func (a *App) openThemeSelector() {
 }
 
 // themeSelectorWrapper adapts theme.ThemeSelectorModal to nav.Component.
-// The modal already implements tview.Primitive; this adds the lifecycle and
+// The modal already implements core.Widget; this adds the lifecycle and
 // hint methods nav.Pages requires.
 type themeSelectorWrapper struct {
 	*theme.ThemeSelectorModal

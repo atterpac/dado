@@ -2,10 +2,10 @@ package main
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/layout"
 	"github.com/atterpac/dado/theme"
 )
@@ -21,7 +21,7 @@ type Tutorial struct {
 	demoPanel     *components.Panel
 	demoContent   *components.Layout
 	currentDemo   demos.Demo
-	demoComponent tview.Primitive // Cached to avoid re-creation
+	demoComponent core.Widget // Cached to avoid re-creation
 	subs          components.Subscriptions
 }
 
@@ -65,7 +65,7 @@ func NewTutorial() *Tutorial {
 		t.selectDemo(demo)
 	})
 
-	t.subs.Add(theme.Register(t.demoContent))
+	t.subs.Add(theme.RegisterFn(func(c tcell.Color) { t.demoContent.Flex.Box.SetBackgroundColor(c) }))
 
 	return t
 }
@@ -265,22 +265,12 @@ func (t *Tutorial) Draw(screen tcell.Screen) {
 	t.Split.Draw(screen)
 }
 
-// InputHandler handles input for the tutorial.
-func (t *Tutorial) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.Split.InputHandler()
-}
-
 // Focus handles focus delegation.
-func (t *Tutorial) Focus(delegate func(tview.Primitive)) {
-	t.Split.Focus(delegate)
+func (t *Tutorial) Focus() {
+	t.Split.Focus()
 }
 
 // HasFocus returns whether the tutorial has focus.
 func (t *Tutorial) HasFocus() bool {
 	return t.Split.HasFocus()
-}
-
-// MouseHandler handles mouse events.
-func (t *Tutorial) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return t.Split.MouseHandler()
 }

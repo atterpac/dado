@@ -20,10 +20,6 @@
 //	        return true
 //	    })
 //
-//	component.SetInputHandler(bindings.Build())
-//
-// For components.ComponentBase (bool-return convention) use BuildBool:
-//
 //	componentBase.SetInputHandler(bindings.BuildBool())
 //
 // # Vim Navigation

@@ -3,10 +3,10 @@ package intermediate
 import (
 	"math/rand"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -29,7 +29,7 @@ type HeatMapDemo struct {
 }
 
 // Component returns the demo component.
-func (d *HeatMapDemo) Component() tview.Primitive {
+func (d *HeatMapDemo) Component() core.Widget {
 	d.colorScale = "heat"
 	d.showValues = false
 
@@ -90,7 +90,6 @@ func (d *HeatMapDemo) Component() tview.Primitive {
 
 const heatMapCode = `package main
 
-import "github.com/atterpac/dado/components"
 
 // Create a heat map
 heatmap := components.NewHeatMap().

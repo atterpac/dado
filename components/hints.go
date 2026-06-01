@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // KeyHint represents a single key binding hint.
@@ -25,7 +24,7 @@ func NewKeyHintBar() *KeyHintBar {
 		Hints: make([]KeyHint, 0),
 	}
 
-	k.initWidget(tview.NewBox())
+	k.initWidget()
 
 	return k
 }
@@ -50,7 +49,7 @@ func (k *KeyHintBar) Clear() *KeyHintBar {
 
 // Draw renders the key hint bar.
 func (k *KeyHintBar) Draw(screen tcell.Screen) {
-	k.Box.DrawForSubclass(screen, k)
+	k.Box.DrawForSubclass(screen)
 
 	x, y, width, height := k.GetInnerRect()
 	if width < 1 || height < 1 || len(k.Hints) == 0 {

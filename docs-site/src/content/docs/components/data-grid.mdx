@@ -1,0 +1,69 @@
+---
+title: DataGrid
+description: Virtualized table with vim-style navigation, inline editing, multi-row selection, and changeset tracking.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/data-grid.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Navigation (normal mode)
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move up one row |
+| `↓` / `j` | Move down one row |
+| `←` / `h` | Move left one column |
+| `→` / `l` | Move right one column |
+| `Home` | Jump to first row |
+| `End` | Jump to last row |
+| `0` | Jump to first column |
+| `$` | Jump to last column |
+| `gg` | Jump to first row (double-tap `g`) |
+| `G` | Jump to last row |
+| `Ctrl+D` / `PgDn` | Half-page down |
+| `Ctrl+U` / `PgUp` | Half-page up |
+
+## Editing
+
+| Key | Action |
+|-----|--------|
+| `i` | Enter edit mode (cursor at end) |
+| `c` | Enter edit mode and clear the cell |
+| `e` | Open modal edit (for long values) |
+| `u` | Revert current cell to original value |
+| `U` / `Ctrl+Z` | Revert all changes |
+
+In edit mode: `Enter` or `Esc` commits; `Tab` commits and moves to the next cell.
+
+## Selection and actions
+
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle row selection |
+| `V` | Clear all row selections |
+| `Ctrl+A` | Select all rows |
+| `y` | Copy cell value (fires `onCopy`) |
+| `/` | Trigger search (fires `onSearch`) |
+| `Ctrl+S` | Submit changeset (fires `onSubmit` if changes exist) |
+| `Enter` | Select cell (fires `onCellSelect`) |
+| `Esc` / `q` | Go back (fires `onBack`) |
+
+## Changeset tracking
+
+Every edit is recorded in a `Changeset`. Pass `onSubmit` to receive the full changeset when the user presses `Ctrl+S`:
+
+```go
+grid.SetOnSubmit(func(cs components.Changeset) {
+    for _, change := range cs.Changes() {
+        fmt.Printf("row %d col %s: %q → %q\n",
+            change.Row, change.Column, change.OldValue, change.NewValue)
+    }
+})
+```
+
+Changed cells are visually marked; `Changeset.HasChanges()` returns true when there are pending edits.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

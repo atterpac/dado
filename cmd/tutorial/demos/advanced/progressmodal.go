@@ -1,10 +1,9 @@
 package advanced
 
 import (
-	"github.com/rivo/tview"
-
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -27,7 +26,7 @@ type ProgressModalDemo struct {
 }
 
 // Component returns the demo component.
-func (d *ProgressModalDemo) Component() tview.Primitive {
+func (d *ProgressModalDemo) Component() core.Widget {
 	d.cancelable = true
 
 	d.modal = components.NewProgressModal().
@@ -39,13 +38,11 @@ func (d *ProgressModalDemo) Component() tview.Primitive {
 		SetShowBackdrop(false) // Disable for demo so background shows
 
 	// Background
-	bg := tview.NewTextView()
+	bg := core.NewTextView()
 	bg.SetText("Progress Modal Demo\n\nShows a progress indicator for long operations")
-	bg.SetTextAlign(tview.AlignCenter)
 	bg.SetBackgroundColor(theme.Bg())
-	bg.SetTextColor(theme.FgDim())
 
-	pages := tview.NewPages()
+	pages := core.NewPages()
 	pages.AddPage("bg", bg, true, true)
 	pages.AddPage("modal", d.modal, true, true)
 

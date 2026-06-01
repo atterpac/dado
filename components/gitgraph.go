@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // Box drawing characters for git graph
@@ -328,7 +327,7 @@ func NewGitGraph() *GitGraph {
 		showDate:   false,
 		dateFormat: "2006-01-02",
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
@@ -518,7 +517,7 @@ func (g *GitGraph) buildRowStates() []map[int]*gitLaneState {
 
 // Draw renders the git graph
 func (g *GitGraph) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -945,91 +944,101 @@ func (g *GitGraph) getNodeChar(commit *GitCommit) rune {
 	return gitNode
 }
 
-// InputHandler handles keyboard input
-func (g *GitGraph) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return g.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if g.graph == nil || len(g.graph.Commits) == 0 {
-			return
-		}
+// HandleKey handles keyboard input
+func (g *GitGraph) HandleKey(ev *tcell.EventKey) bool {
+	if g.graph == nil || len(g.graph.Commits) == 0 {
+		return false
+	}
 
-		prevIndex := g.selectedIndex
+	prevIndex := g.selectedIndex
 
-		switch event.Key() {
-		case tcell.KeyDown:
-			g.moveDown()
-		case tcell.KeyUp:
-			g.moveUp()
-		case tcell.KeyHome:
-			g.selectedIndex = 0
-		case tcell.KeyEnd:
+	switch ev.Key() {
+	case tcell.KeyDown:
+		g.moveDown()
+	case tcell.KeyUp:
+		g.moveUp()
+	case tcell.KeyHome:
+		g.selectedIndex = 0
+	case tcell.KeyEnd:
+		g.selectedIndex = len(g.graph.Commits) - 1
+	case tcell.KeyPgDn:
+		_, _, _, height := g.GetInnerRect()
+		g.selectedIndex += height
+		if g.selectedIndex >= len(g.graph.Commits) {
 			g.selectedIndex = len(g.graph.Commits) - 1
-		case tcell.KeyPgDn:
-			_, _, _, height := g.GetInnerRect()
-			g.selectedIndex += height
-			if g.selectedIndex >= len(g.graph.Commits) {
-				g.selectedIndex = len(g.graph.Commits) - 1
-			}
-		case tcell.KeyPgUp:
-			_, _, _, height := g.GetInnerRect()
-			g.selectedIndex -= height
-			if g.selectedIndex < 0 {
+		}
+	case tcell.KeyPgUp:
+		_, _, _, height := g.GetInnerRect()
+		g.selectedIndex -= height
+		if g.selectedIndex < 0 {
+			g.selectedIndex = 0
+		}
+	case tcell.KeyEnter:
+		if commit := g.GetSelected(); commit != nil && g.onSelect != nil {
+			g.onSelect(commit)
+		}
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
+			g.moveDown()
+		case 'k':
+			g.moveUp()
+		case 'g':
+			if g.selectedIndex != 0 {
 				g.selectedIndex = 0
+				g.triggerOnChange()
 			}
-		case tcell.KeyEnter:
-			if commit := g.GetSelected(); commit != nil && g.onSelect != nil {
-				g.onSelect(commit)
+		case 'G':
+			lastIdx := len(g.graph.Commits) - 1
+			if g.selectedIndex != lastIdx {
+				g.selectedIndex = lastIdx
+				g.triggerOnChange()
 			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				g.moveDown()
-			case 'k':
-				g.moveUp()
-			case 'g':
-				if g.selectedIndex != 0 {
-					g.selectedIndex = 0
-					g.triggerOnChange()
-				}
-			case 'G':
-				lastIdx := len(g.graph.Commits) - 1
-				if g.selectedIndex != lastIdx {
-					g.selectedIndex = lastIdx
-					g.triggerOnChange()
-				}
-			case 'p':
-				// Jump to first parent
-				if commit := g.GetSelected(); commit != nil && len(commit.Parents) > 0 {
-					g.SelectByHash(commit.Parents[0])
-				}
-			case 'P':
-				// Jump to second parent (merge commits)
-				if commit := g.GetSelected(); commit != nil && len(commit.Parents) > 1 {
-					g.SelectByHash(commit.Parents[1])
-				}
-			case 'c':
-				// Jump to first child
-				if commit := g.GetSelected(); commit != nil && len(commit.Children) > 0 {
-					g.SelectByHash(commit.Children[0])
-				}
+		case 'p':
+			// Jump to first parent
+			if commit := g.GetSelected(); commit != nil && len(commit.Parents) > 0 {
+				g.SelectByHash(commit.Parents[0])
 			}
-		case tcell.KeyCtrlD:
-			_, _, _, height := g.GetInnerRect()
-			g.selectedIndex += height / 2
-			if g.selectedIndex >= len(g.graph.Commits) {
-				g.selectedIndex = len(g.graph.Commits) - 1
+		case 'P':
+			// Jump to second parent (merge commits)
+			if commit := g.GetSelected(); commit != nil && len(commit.Parents) > 1 {
+				g.SelectByHash(commit.Parents[1])
 			}
-		case tcell.KeyCtrlU:
-			_, _, _, height := g.GetInnerRect()
-			g.selectedIndex -= height / 2
-			if g.selectedIndex < 0 {
-				g.selectedIndex = 0
+		case 'c':
+			// Jump to first child
+			if commit := g.GetSelected(); commit != nil && len(commit.Children) > 0 {
+				g.SelectByHash(commit.Children[0])
 			}
 		}
+	case tcell.KeyCtrlD:
+		_, _, _, height := g.GetInnerRect()
+		g.selectedIndex += height / 2
+		if g.selectedIndex >= len(g.graph.Commits) {
+			g.selectedIndex = len(g.graph.Commits) - 1
+		}
+	case tcell.KeyCtrlU:
+		_, _, _, height := g.GetInnerRect()
+		g.selectedIndex -= height / 2
+		if g.selectedIndex < 0 {
+			g.selectedIndex = 0
+		}
+	}
 
-		if g.selectedIndex != prevIndex {
-			g.triggerOnChange()
+	if g.selectedIndex != prevIndex {
+		g.triggerOnChange()
+	}
+	// Return true if the key matched a known action (even if selection didn't change).
+	switch ev.Key() {
+	case tcell.KeyDown, tcell.KeyUp, tcell.KeyHome, tcell.KeyEnd, tcell.KeyPgDn, tcell.KeyPgUp, tcell.KeyEnter,
+		tcell.KeyCtrlD, tcell.KeyCtrlU:
+		return true
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j', 'k', 'g', 'G', 'p', 'c':
+			return true
 		}
-	})
+	}
+	return false
 }
 
 func (g *GitGraph) moveDown() {
@@ -1044,59 +1053,7 @@ func (g *GitGraph) moveUp() {
 	}
 }
 
-// MouseHandler handles mouse input
-func (g *GitGraph) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return g.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		_, y, _, _ := g.GetInnerRect()
-		mx, my := event.Position()
-
-		if !g.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(g)
-			clickedIndex := g.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(g.graph.Commits) {
-				prevIndex := g.selectedIndex
-				g.selectedIndex = clickedIndex
-				if g.selectedIndex != prevIndex {
-					g.triggerOnChange()
-				}
-				return true, g
-			}
-		case tview.MouseLeftDoubleClick:
-			clickedIndex := g.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(g.graph.Commits) {
-				g.selectedIndex = clickedIndex
-				if g.onSelect != nil {
-					g.onSelect(g.graph.Commits[clickedIndex])
-				}
-				return true, g
-			}
-		case tview.MouseScrollUp:
-			if g.offset > 0 {
-				g.offset--
-			}
-			return true, g
-		case tview.MouseScrollDown:
-			_, _, _, height := g.GetInnerRect()
-			if g.offset < len(g.graph.Commits)-height {
-				g.offset++
-			}
-			return true, g
-		}
-
-		return false, nil
-	})
-}
-
 // Focus handles focus
-func (g *GitGraph) Focus(delegate func(tview.Primitive)) {
-	g.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the component has focus
 func (g *GitGraph) HasFocus() bool {
 	return g.Box.HasFocus()

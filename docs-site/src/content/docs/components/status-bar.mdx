@@ -1,0 +1,33 @@
+---
+title: StatusBar
+description: Sectioned status bar with icons, dynamic colors, command mode, and inline completion.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/status-bar.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Sections
+
+StatusBar renders left-aligned and right-aligned sections, each with an optional icon and dynamic color:
+
+```go
+sb := layout.NewStatusBar()
+sb.SetSections([]layout.StatusSection{
+    {Icon: " ", Text: "main", ColorFunc: branchColor},
+    {Icon: " ", Text: "12 pods"},
+})
+sb.SetRightSections([]layout.StatusSection{
+    {Icon: " ", Text: "Connected", Color: tcell.ColorGreen},
+})
+```
+
+`ColorFunc` takes precedence over `Color` and is called on every redraw — use it for status that changes at runtime (e.g., connection state).
+
+## Command mode
+
+Call `EnterCommandMode()` to show an inline input field for command entry. Wire `SetOnSubmit` and `SetOnCancel` to handle the result. Completion popup and history navigation are available via `SetOnComplete`, `SetOnHistoryPrev`, and `SetOnHistoryNext`.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -1,0 +1,45 @@
+---
+title: Finder
+description: Fuzzy-search picker with live filtering, optional preview pane, and vim mode.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/finder.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings (default mode)
+
+| Key | Action |
+|-----|--------|
+| Any character | Append to query |
+| `Backspace` | Delete last query character |
+| `Ctrl+U` | Clear query |
+| `↑` / `Ctrl+P` | Move selection up |
+| `↓` / `Ctrl+N` | Move selection down |
+| `Home` | Jump to first result |
+| `End` | Jump to last result |
+| `PgUp` / `PgDn` | Page scroll |
+| `Tab` | Toggle preview pane (if `previewFunc` is set) |
+| `Enter` | Select highlighted item |
+| `Esc` | Cancel (fires `onCancel`) |
+
+## Vim mode
+
+Enable with `SetVimMode(true)`. In vim mode:
+- Press `/` to enter search mode (typing goes to the query)
+- Press `Esc` to leave search mode (keys become navigation)
+- Navigation: `j`/`k` to move, `gg`/`G` for first/last
+
+## Preview pane
+
+```go
+finder.SetPreviewFunc(func(item string) string {
+    return fetchDetails(item)
+})
+```
+
+When a `previewFunc` is set, `Tab` toggles a right-side preview showing the returned string for the currently highlighted item.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -4,7 +4,8 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
 // LoadState represents the loading state of a component.
@@ -21,7 +22,7 @@ const (
 	LoadStateSuccess
 )
 
-// StatefulComponentBase wraps a tview.Primitive and provides state management.
+// StatefulComponentBase wraps a core.Widget and provides state management.
 // Use this for components that need to manage data state (loading, error, success).
 //
 // Example:
@@ -64,8 +65,8 @@ type StatefulComponentBase[T any] struct {
 	onDataChange  func(data T)
 }
 
-// NewStatefulComponentBase creates a new stateful component base wrapping the given primitive.
-func NewStatefulComponentBase[T any](p tview.Primitive) *StatefulComponentBase[T] {
+// NewStatefulComponentBase creates a new stateful component base wrapping the given widget.
+func NewStatefulComponentBase[T any](p core.Widget) *StatefulComponentBase[T] {
 	return &StatefulComponentBase[T]{
 		ComponentBase: NewComponentBase(p),
 		loadState:     LoadStateIdle,
@@ -106,7 +107,7 @@ func (scb *StatefulComponentBase[T]) SetOnStop(fn func()) *StatefulComponentBase
 
 // SetInputHandler sets a custom input handler.
 // Return true to consume the event; false to delegate to the wrapped primitive.
-func (scb *StatefulComponentBase[T]) SetInputHandler(fn func(*tcell.EventKey, func(tview.Primitive)) bool) *StatefulComponentBase[T] {
+func (scb *StatefulComponentBase[T]) SetInputHandler(fn func(*tcell.EventKey) bool) *StatefulComponentBase[T] {
 	scb.ComponentBase.SetInputHandler(fn)
 	return scb
 }

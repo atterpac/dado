@@ -2,10 +2,10 @@ package nav
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 // ListNavigator provides standard list navigation behavior.
@@ -96,11 +96,11 @@ func (n *TableNavigator) GetItemCount() int {
 
 // TextViewNavigator implements ListNavigator for scrollable TextView.
 type TextViewNavigator struct {
-	textView *tview.TextView
+	textView *core.TextView
 }
 
 // NewTextViewNavigator creates a navigator for a TextView.
-func NewTextViewNavigator(tv *tview.TextView) *TextViewNavigator {
+func NewTextViewNavigator(tv *core.TextView) *TextViewNavigator {
 	return &TextViewNavigator{
 		textView: tv,
 	}
@@ -124,7 +124,6 @@ func (n *TextViewNavigator) MoveToTop() {
 }
 
 func (n *TextViewNavigator) MoveToBottom() {
-	// Scroll to a very large row number; tview will clamp it
 	_, col := n.textView.GetScrollOffset()
 	n.textView.ScrollTo(999999, col)
 }
@@ -140,8 +139,6 @@ func (n *TextViewNavigator) SetSelectedIndex(index int) {
 }
 
 func (n *TextViewNavigator) GetItemCount() int {
-	// TextView doesn't expose line count directly
-	// Return a large number; actual scrolling will be clamped
 	return 999999
 }
 
@@ -163,13 +160,11 @@ func NavigationInputHandler(nav ListNavigator) func(*tcell.EventKey) bool {
 			nav.MoveToBottom()
 			return true
 		case tcell.KeyPgUp:
-			// Move up 10 items
 			for i := 0; i < 10; i++ {
 				nav.MoveUp()
 			}
 			return true
 		case tcell.KeyPgDn:
-			// Move down 10 items
 			for i := 0; i < 10; i++ {
 				nav.MoveDown()
 			}
@@ -192,21 +187,5 @@ func NavigationInputHandler(nav ListNavigator) func(*tcell.EventKey) bool {
 		}
 
 		return false
-	}
-}
-
-// WrapWithNavigation wraps a component's input handler with navigation support.
-func WrapWithNavigation(nav ListNavigator, handler func(*tcell.EventKey, func(tview.Primitive))) func(*tcell.EventKey, func(tview.Primitive)) {
-	navHandler := NavigationInputHandler(nav)
-
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Try navigation first
-		if navHandler(event) {
-			return
-		}
-		// Fall through to wrapped handler
-		if handler != nil {
-			handler(event, setFocus)
-		}
 	}
 }

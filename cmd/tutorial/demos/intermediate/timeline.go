@@ -3,10 +3,10 @@ package intermediate
 import (
 	"time"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -29,7 +29,7 @@ type TimelineDemo struct {
 }
 
 // Component returns the demo component.
-func (d *TimelineDemo) Component() tview.Primitive {
+func (d *TimelineDemo) Component() core.Widget {
 	d.showLegend = true
 
 	d.timeline = components.NewTimeline().

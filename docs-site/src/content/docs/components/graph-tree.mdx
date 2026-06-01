@@ -1,0 +1,33 @@
+---
+title: GraphTree
+description: Tree specialized for workflow/DAG relationships. Vim navigation with expand/collapse and half-page scroll.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/graph-tree.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move up |
+| `↓` / `j` | Move down |
+| `→` / `l` | Expand or move into first child |
+| `←` / `h` | Collapse or move to parent |
+| `Home` / `g` | Jump to first node |
+| `End` / `G` | Jump to last node |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `Ctrl+U` | Half-page up |
+| `Ctrl+D` | Half-page down |
+| `Space` / `o` | Toggle expand/collapse |
+| `Enter` | Select node (fires `onSelect`) |
+
+## Difference from Tree
+
+`GraphTree` is optimized for workflow/pipeline DAGs where nodes may have status states (running, success, failed, etc.). Node colors and icons reflect the `Status` field. Use the standard `Tree` component for general hierarchical data.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +21,7 @@ func TestTabs_NewTabs(t *testing.T) {
 // TestTabs_AddTab tests adding tabs.
 func TestTabs_AddTab(t *testing.T) {
 	tabs := NewTabs()
-	content := tview.NewBox()
+	content := new(core.Box)
 
 	result := tabs.AddTab("Tab 1", content)
 
@@ -32,7 +32,7 @@ func TestTabs_AddTab(t *testing.T) {
 // TestTabs_AddTabWithIcon tests adding tabs with icons.
 func TestTabs_AddTabWithIcon(t *testing.T) {
 	tabs := NewTabs()
-	content := tview.NewBox()
+	content := new(core.Box)
 
 	result := tabs.AddTabWithIcon("Files", "📁", content)
 
@@ -253,41 +253,39 @@ func TestTabs_TabNavigation(t *testing.T) {
 	tabs.AddTab("Tab 2", nil)
 	tabs.AddTab("Tab 3", nil)
 
-	handler := tabs.InputHandler()
-
 	t.Run("Tab key cycles forward", func(t *testing.T) {
 		tabs.SetActive(0)
-		handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		assert.Equal(t, 1, tabs.GetActive())
 
-		handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		assert.Equal(t, 2, tabs.GetActive())
 
-		handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		assert.Equal(t, 0, tabs.GetActive()) // Wraps around
 	})
 
 	t.Run("BackTab cycles backward", func(t *testing.T) {
 		tabs.SetActive(0)
-		handler(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
 		assert.Equal(t, 2, tabs.GetActive()) // Wraps to end
 	})
 
 	t.Run("number keys select tabs directly", func(t *testing.T) {
 		tabs.SetActive(0)
-		handler(tcell.NewEventKey(tcell.KeyRune, '2', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, '2', tcell.ModNone))
 		assert.Equal(t, 1, tabs.GetActive()) // 0-indexed
 
-		handler(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone))
 		assert.Equal(t, 0, tabs.GetActive())
 	})
 
 	t.Run("H and L for navigation", func(t *testing.T) {
 		tabs.SetActive(1)
-		handler(tcell.NewEventKey(tcell.KeyRune, 'H', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'H', tcell.ModNone))
 		assert.Equal(t, 0, tabs.GetActive())
 
-		handler(tcell.NewEventKey(tcell.KeyRune, 'L', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'L', tcell.ModNone))
 		assert.Equal(t, 1, tabs.GetActive())
 	})
 }
@@ -301,8 +299,7 @@ func TestTabs_CloseTab(t *testing.T) {
 		tabs.AddTab("Tab 2", nil)
 		tabs.SetActive(0)
 
-		handler := tabs.InputHandler()
-		handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
 		assert.Equal(t, 1, tabs.TabCount())
 	})
@@ -313,8 +310,7 @@ func TestTabs_CloseTab(t *testing.T) {
 		tabs.AddTab("Tab 1", nil)
 		tabs.AddTab("Tab 2", nil)
 
-		handler := tabs.InputHandler()
-		handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
 		assert.Equal(t, 2, tabs.TabCount()) // No change
 	})
@@ -327,8 +323,7 @@ func TestTabs_CloseTab(t *testing.T) {
 		})
 		tabs.AddTab("Tab 1", nil)
 
-		handler := tabs.InputHandler()
-		handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), nil)
+		tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
 		assert.Equal(t, 1, tabs.TabCount()) // Should not be closed
 	})
@@ -369,9 +364,8 @@ func TestTabs_EmptyTabs(t *testing.T) {
 	tabs.SetBadge("NotFound", 5)
 	tabs.ClearBadge("NotFound")
 
-	handler := tabs.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), nil)
-	handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), nil)
+	tabs.HandleKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	tabs.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
 	assert.Equal(t, 0, tabs.TabCount())
 	assert.Nil(t, tabs.GetActiveTab())

@@ -1,0 +1,49 @@
+---
+title: DebugOverlay
+description: Runtime bus event inspector. Enable with one AppConfig flag; press Ctrl+D to open.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/debug-overlay.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Setup
+
+Enable the overlay by setting `Debug: true` in your `AppConfig`. That's it — `layout.NewApp` wires the rest automatically.
+
+```go
+app := layout.NewApp(layout.AppConfig{
+    Debug: true,
+    // DebugKey defaults to Ctrl+D; override if needed:
+    // DebugKey: tcell.KeyCtrlF1,
+})
+```
+
+When `Debug` is true, pressing **Ctrl+D** pushes the overlay onto the page stack. Pressing **Esc** inside the overlay pops it and returns to the previous view.
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `b` | Toggle filter: binding source |
+| `t` | Toggle filter: theme source |
+| `n` | Toggle filter: nav source |
+| `a` | Toggle filter: async source |
+| `i` | Toggle filter: input source |
+| `e` | Toggle filter: effect source |
+| `c` | Clear all source filters |
+| `p` | Pause / resume live updates |
+| `x` | Clear the event list |
+| `Esc` | Close the overlay |
+
+Multiple source filters can be active at once; only events matching any active filter are shown. The title bar reflects the current filter set and paused state.
+
+## Notes
+
+- The overlay enables the event bus on open and restores its prior state on close, so it is safe to open even if you did not call `bus.SetEnabled(true)` yourself.
+- Recent events captured before the overlay opened are backfilled from the ring buffer on start.
+- The overlay is constructed with `NewDebugOverlay(0)` internally; the zero capacity defaults to 500 events.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

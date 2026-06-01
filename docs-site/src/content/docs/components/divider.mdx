@@ -1,0 +1,12 @@
+---
+title: Divider
+description: Single-line visual separator. Use inside a core.Flex column to separate sections.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/divider.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

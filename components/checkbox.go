@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // Checkbox is a boolean toggle component.
@@ -27,7 +26,7 @@ func NewCheckbox(name string) *Checkbox {
 	c := &Checkbox{
 		name: name,
 	}
-	c.initWidget(tview.NewBox())
+	c.initWidget()
 	return c
 }
 
@@ -103,7 +102,7 @@ func (c *Checkbox) Toggle() *Checkbox {
 
 // Draw renders the checkbox.
 func (c *Checkbox) Draw(screen tcell.Screen) {
-	c.Box.DrawForSubclass(screen, c)
+	c.Box.DrawForSubclass(screen)
 	x, y, width, height := c.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -147,20 +146,18 @@ func (c *Checkbox) Draw(screen tcell.Screen) {
 	drawText(screen, col, y, x+width-col, c.label, labelStyle)
 }
 
-// InputHandler handles keyboard input.
-func (c *Checkbox) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return c.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Space to toggle (Enter is reserved for form submit)
-		if event.Key() == tcell.KeyRune && event.Rune() == ' ' {
-			c.Toggle()
-		}
-	})
+func (c *Checkbox) HandleKey(ev *tcell.EventKey) bool {
+	if ev.Key() == tcell.KeyRune && ev.Rune() == ' ' {
+		c.Toggle()
+		return true
+	}
+	return false
 }
 
 // Focus handles focus.
-func (c *Checkbox) Focus(delegate func(tview.Primitive)) {
+func (c *Checkbox) Focus() {
 	c.focused = true
-	c.Box.Focus(delegate)
+	c.Box.Focus()
 }
 
 // Blur handles blur.
@@ -218,7 +215,7 @@ func NewRadioGroup(name string) *RadioGroup {
 		name:     name,
 		selected: -1,
 	}
-	r.initWidget(tview.NewBox())
+	r.initWidget()
 	return r
 }
 
@@ -330,7 +327,7 @@ func (r *RadioGroup) emitChange(oldIndex, newIndex int) {
 
 // Draw renders the radio group.
 func (r *RadioGroup) Draw(screen tcell.Screen) {
-	r.Box.DrawForSubclass(screen, r)
+	r.Box.DrawForSubclass(screen)
 	x, y, width, height := r.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -403,42 +400,44 @@ func (r *RadioGroup) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (r *RadioGroup) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return r.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyUp:
-			if r.cursor > 0 {
-				r.cursor--
-			}
-		case tcell.KeyDown:
+func (r *RadioGroup) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyUp:
+		if r.cursor > 0 {
+			r.cursor--
+		}
+		return true
+	case tcell.KeyDown:
+		if r.cursor < len(r.options)-1 {
+			r.cursor++
+		}
+		return true
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case ' ':
+			oldSelected := r.selected
+			r.selected = r.cursor
+			r.emitChange(oldSelected, r.selected)
+			return true
+		case 'j':
 			if r.cursor < len(r.options)-1 {
 				r.cursor++
 			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case ' ':
-				// Space to select (Enter is reserved for form submit)
-				oldSelected := r.selected
-				r.selected = r.cursor
-				r.emitChange(oldSelected, r.selected)
-			case 'j':
-				if r.cursor < len(r.options)-1 {
-					r.cursor++
-				}
-			case 'k':
-				if r.cursor > 0 {
-					r.cursor--
-				}
+			return true
+		case 'k':
+			if r.cursor > 0 {
+				r.cursor--
 			}
+			return true
 		}
-	})
+	}
+	return false
 }
 
 // Focus handles focus.
-func (r *RadioGroup) Focus(delegate func(tview.Primitive)) {
+func (r *RadioGroup) Focus() {
 	r.focused = true
-	r.Box.Focus(delegate)
+	r.Box.Focus()
 }
 
 // Blur handles blur.

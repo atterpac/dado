@@ -33,7 +33,7 @@ func TestRender_ForegroundStaticHexTag(t *testing.T) {
 
 func TestRender_EscapesUserInput(t *testing.T) {
 	got := New().Bold().Render("a[red]b")
-	// tview.Escape replaces "[" with "[" — verify the inner '[' is escaped.
+	// Escaping replaces "[" with "[[" — verify the inner '[' is escaped.
 	if strings.Contains(got, "[red]") {
 		t.Fatalf("user '[red]' tag not escaped: %q", got)
 	}

@@ -1,0 +1,44 @@
+---
+title: Select
+description: Single-value dropdown selector. Space opens/closes the dropdown; arrow keys or j/k navigate options.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/select.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle dropdown open/close |
+| `↑` / `k` | Move selection up (requires dropdown open) |
+| `↓` / `j` | Move selection down (requires dropdown open) |
+| `Esc` | Close dropdown without confirming |
+
+Note: `Enter` is intentionally reserved for form-level submission. Close and confirm with `Space` or by navigating away.
+
+## Options
+
+Use `SetOptions` when label and value are the same string, or `SetOptionsWithValues` when you need separate display and storage values:
+
+```go
+// Label == Value
+sel.SetOptions([]string{"Alpha", "Beta", "Gamma"})
+
+// Distinct label and value
+sel.SetOptionsWithValues([]components.SelectOption{
+    {Label: "North America", Value: "na"},
+    {Label: "Europe",        Value: "eu"},
+})
+```
+
+`SetDefault` selects by value string; `SetSelected` selects by index. `SetSelectedIndex` returns an error for out-of-range indices.
+
+## Form integration
+
+Select implements `FormField` and binds automatically when registered with a `Form`. The bound value is the selected option's `Value` string.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

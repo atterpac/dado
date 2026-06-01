@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/input"
 	"github.com/atterpac/dado/nav"
 	"github.com/atterpac/dado/theme"
@@ -16,7 +16,7 @@ import (
 // ResourceList is a K9s-style filterable resource list with actions.
 // It provides a complete view for listing, filtering, and acting on resources.
 type ResourceList[T any] struct {
-	*tview.Flex
+	*core.Flex
 
 	// Components
 	table     *components.Table
@@ -49,7 +49,7 @@ type ResourceList[T any] struct {
 // NewResourceList creates a new ResourceList.
 func NewResourceList[T any]() *ResourceList[T] {
 	r := &ResourceList[T]{
-		Flex:      tview.NewFlex().SetDirection(tview.FlexRow),
+		Flex:      core.NewFlex(),
 		table:     components.NewTable(),
 		filterBar: input.NewCommandBar(),
 		hintBar:   components.NewKeyHintBar(),
@@ -345,65 +345,53 @@ func (r *ResourceList[T]) Draw(screen tcell.Screen) {
 	r.Flex.Draw(screen)
 }
 
-// InputHandler handles keyboard input.
-func (r *ResourceList[T]) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return r.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Handle filter bar if visible
-		if r.filterBar.IsVisible() {
-			if handler := r.filterBar.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
-			return
-		}
+func (r *ResourceList[T]) HandleKey(ev *tcell.EventKey) bool {
+	if r.filterBar.IsVisible() {
+		r.filterBar.HandleKey(ev)
+		return false
+	}
 
-		// Check for filter key
-		if event.Key() == tcell.KeyRune && event.Rune() == '/' {
-			r.filterBar.Show(input.CommandTypeFilter)
-			return
-		}
+	if ev.Key() == tcell.KeyRune && ev.Rune() == '/' {
+		r.filterBar.Show(input.CommandTypeFilter)
+		return true
+	}
 
-		// Check for refresh
-		if event.Key() == tcell.KeyRune && event.Rune() == 'r' {
-			go func() {
-				r.Refresh()
-				theme.QueueUpdateDraw(func() {})
-			}()
-			return
-		}
+	if ev.Key() == tcell.KeyRune && ev.Rune() == 'r' {
+		go func() {
+			r.Refresh()
+			theme.QueueUpdateDraw(func() {})
+		}()
+		return true
+	}
 
-		// Check for clear filter
-		if event.Key() == tcell.KeyEscape {
-			if r.filterQuery != "" {
-				r.filterQuery = ""
-				r.applyFilter()
-				return
-			}
+	if ev.Key() == tcell.KeyEscape {
+		if r.filterQuery != "" {
+			r.filterQuery = ""
+			r.applyFilter()
+			return true
 		}
+	}
 
-		// Check registered actions
-		if r.actions.Handle(event) {
-			return
-		}
+	if r.actions.Handle(ev) {
+		return true
+	}
 
-		// Pass to table
-		if handler := r.table.InputHandler(); handler != nil {
-			handler(event, setFocus)
-		}
-	})
+	return false
 }
 
 // Focus handles focus.
-func (r *ResourceList[T]) Focus(delegate func(tview.Primitive)) {
-	if r.filterBar.IsVisible() {
-		delegate(r.filterBar)
-	} else {
-		delegate(r.table)
-	}
+func (r *ResourceList[T]) Focus() {
+	r.Flex.Box.Focus()
 }
 
 // HasFocus returns whether the list has focus.
 func (r *ResourceList[T]) HasFocus() bool {
 	return r.table.HasFocus() || r.filterBar.HasFocus()
+}
+
+// Blur removes focus.
+func (r *ResourceList[T]) Blur() {
+	r.Flex.Box.Blur()
 }
 
 // Ensure ResourceList implements nav.Component

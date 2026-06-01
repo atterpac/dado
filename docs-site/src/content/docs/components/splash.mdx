@@ -1,0 +1,42 @@
+---
+title: Splash
+description: Full-screen splash shown on startup. Configurable dismiss keys, auto-dismiss timer, and gradient logo.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/splash.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Dismiss keys
+
+By default, `Esc`, `Enter`, `Space`, and `q` dismiss the splash. Override with `SetDismissKeys`:
+
+```go
+splash := components.NewSplash().
+    SetDismissKeys([]components.DismissKey{
+        components.DismissEnter,
+        components.DismissAnyKey, // any key press dismisses
+    })
+```
+
+Pre-defined dismiss key constants: `DismissEscape`, `DismissEnter`, `DismissSpace`, `DismissQ`, `DismissAnyKey`.
+
+## Auto-dismiss
+
+```go
+splash.SetAutoDismiss(3 * time.Second) // dismiss after 3s
+```
+
+Auto-dismiss and key-press dismissal are additive — whichever comes first wins.
+
+## Logo
+
+```go
+splash.SetLogo(asciiArtString) // multi-line ASCII art
+```
+
+The logo is rendered with a gradient using the active theme's accent color range. Width and height can be tuned with `SetLogoSize`.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

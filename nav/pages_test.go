@@ -3,16 +3,16 @@ package nav
 import (
 	"testing"
 
-	"github.com/rivo/tview"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 // mockComponent implements nav.Component for testing.
 type mockComponent struct {
-	tview.Primitive
+	core.Box
 	name        string
 	startCalled bool
 	stopCalled  bool
@@ -25,9 +25,8 @@ type mockComponent struct {
 
 func newMockComponent(name string) *mockComponent {
 	return &mockComponent{
-		Primitive: tview.NewBox(),
-		name:      name,
-		hints:     make([]components.KeyHint, 0),
+		name:  name,
+		hints: make([]components.KeyHint, 0),
 	}
 }
 

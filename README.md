@@ -2,7 +2,7 @@
 
 > **Caution:** This is a personal project for building personal tools and may not work as expected.
 
-A Go TUI component library built on [tview](https://github.com/rivo/tview) for creating terminal applications with consistent design patterns.
+A Go TUI component library built on [tcell](https://github.com/gdamore/tcell) for creating terminal applications with consistent design patterns.
 
 ## Features
 
@@ -25,14 +25,22 @@ go get github.com/atterpac/dado
 package main
 
 import (
+    "log"
+
     "github.com/atterpac/dado/layout"
     "github.com/atterpac/dado/theme"
+    "github.com/atterpac/dado/theme/themes"
 )
 
 func main() {
-    theme.SetTheme("tokyonight")
-    app := layout.NewApp("My App")
-    app.Run()
+    theme.SetProvider(themes.TokyoNightStorm)
+
+    app := layout.NewApp(layout.AppConfig{})
+    // app.Pages().Push(NewHomeView()) // push your nav.Component views
+
+    if err := app.Run(); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 

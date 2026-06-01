@@ -49,7 +49,7 @@
 //
 // # Using ComponentBase
 //
-// ComponentBase wraps any tview.Primitive to implement nav.Component:
+// ComponentBase wraps any core.Widget to implement nav.Component:
 //
 //	type MyView struct {
 //	    *ComponentBase

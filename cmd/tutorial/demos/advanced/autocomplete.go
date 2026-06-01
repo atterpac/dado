@@ -3,10 +3,10 @@ package advanced
 import (
 	"strings"
 
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -28,7 +28,7 @@ type AutocompleteDemo struct {
 }
 
 // Component returns the demo component.
-func (d *AutocompleteDemo) Component() tview.Primitive {
+func (d *AutocompleteDemo) Component() core.Widget {
 	d.maxSuggestions = 8
 
 	d.input = components.NewAutocompleteInput().

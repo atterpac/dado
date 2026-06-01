@@ -1,10 +1,10 @@
 package basic
 
 import (
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/cmd/tutorial/demos"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 )
 
 func init() {
@@ -26,7 +26,7 @@ type MultiSelectDemo struct {
 }
 
 // Component returns the demo component.
-func (d *MultiSelectDemo) Component() tview.Primitive {
+func (d *MultiSelectDemo) Component() core.Widget {
 	d.label = "Select toppings"
 
 	d.multiSelect = components.NewMultiSelect("toppings").

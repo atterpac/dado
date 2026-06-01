@@ -1,0 +1,12 @@
+---
+title: HintGrid
+description: Multi-row pill grid for displaying many key hints in a compact layout.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/hint-grid.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

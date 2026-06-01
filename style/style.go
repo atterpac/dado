@@ -14,14 +14,14 @@
 //
 // Two render modes are supported:
 //
-//   - Render(string) returns a string with tview color tags, suitable for
-//     TextView content, table cells, and any tview primitive that interprets
+//   - Render(string) returns a string with color tags, suitable for
+//     TextView content, table cells, and any widget that interprets
 //     dynamic colors.
 //   - TcellStyle() returns a tcell.Style for direct use in custom Draw().
 //
-// Apply(*tview.Box) is a narrow integration point that copies border, border
+// Apply(*core.Box) is a narrow integration point that copies border, border
 // color, and background color settings onto a Box. Layout (width, height,
-// alignment) is intentionally NOT modeled — tview.Flex/Grid remain the
+// alignment) is intentionally NOT modeled — Flex/Grid layouts remain the
 // layout engines.
 package style
 
@@ -29,8 +29,8 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -147,7 +147,7 @@ func (s Style) BorderColorFn(fn func(theme.Theme) tcell.Color) Style {
 // --- Padding ---
 
 // PaddingX adds n spaces of horizontal padding inside Render(string) output.
-// Has no effect on Apply(*tview.Box) — use the Box's own padding for layout.
+// Has no effect on Apply(*core.Box) — use the Box's own padding for layout.
 func (s Style) PaddingX(n int) Style {
 	if n < 0 {
 		n = 0
@@ -157,7 +157,7 @@ func (s Style) PaddingX(n int) Style {
 }
 
 // PaddingY adds n blank lines above and below Render(string) output.
-// Has no effect on Apply(*tview.Box).
+// Has no effect on Apply(*core.Box).
 func (s Style) PaddingY(n int) Style {
 	if n < 0 {
 		n = 0
@@ -166,13 +166,13 @@ func (s Style) PaddingY(n int) Style {
 	return s
 }
 
-// --- Render: tview color tags ---
+// --- Render: color tags ---
 
-// Render produces a string wrapped in tview color tags reflecting this Style.
+// Render produces a string wrapped in color tags reflecting this Style.
 // User-supplied content is escaped so embedded '[' characters do not open
 // unintended tags. PaddingX/PaddingY are applied to the rendered text.
 func (s Style) Render(text string) string {
-	text = tview.Escape(text)
+	text = strings.ReplaceAll(text, "[", "[[]")
 
 	if s.padX > 0 {
 		pad := strings.Repeat(" ", s.padX)
@@ -190,7 +190,7 @@ func (s Style) Render(text string) string {
 	return open + text + close
 }
 
-// tagPair builds the [fg:bg:attrs] open and [-:-:-] close tags for tview.
+// tagPair builds the [fg:bg:attrs] open and [-:-:-] close tags.
 // Returns ("", "") when the style is empty.
 func (s Style) tagPair() (string, string) {
 	if s.isEmpty() {
@@ -238,7 +238,7 @@ func (s Style) attrTag() string {
 	return b.String()
 }
 
-// colorTag formats a tcell.Color for use inside a tview tag.
+// colorTag formats a tcell.Color for use inside a color tag.
 // Returns an empty string for ColorDefault so the slot is left blank.
 func colorTag(c tcell.Color) string {
 	if c == tcell.ColorDefault {
@@ -273,24 +273,24 @@ func (s Style) TcellStyle() tcell.Style {
 	return st
 }
 
-// --- Apply: integrate with tview.Box ---
+// --- Apply: integrate with core.Box ---
 
-// Apply copies this Style's border + colors onto a tview.Box.
+// Apply copies this Style's border + colors onto a core.Box.
 // Padding is intentionally not applied (use Box.SetBorderPadding directly).
 // Returns box for chaining.
-func (s Style) Apply(box *tview.Box) *tview.Box {
+func (s Style) Apply(box *core.Box) *core.Box {
 	if s.bg != nil {
 		box.SetBackgroundColor(s.bg.resolve())
 	}
 	if s.border != nil {
 		box.SetBorder(true)
-		// Apply rune set via tview.Box.SetBorderStyle when available.
+		// Apply rune set via Box.SetBorderStyle when available.
 		applyBorderRunes(box, *s.border)
 		bdr := s.bdr
 		if bdr == nil {
 			bdr = &colorRef{static: theme.Border()}
 		}
-		box.SetBorderColor(bdr.resolve())
+		box.SetBorderStyle(tcell.StyleDefault.Foreground(bdr.resolve()))
 	}
 	return box
 }

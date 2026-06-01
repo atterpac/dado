@@ -1,0 +1,33 @@
+---
+title: ProgressModal
+description: Overlay modal for long-running operations. Supports determinate (0–100%) and indeterminate spinner modes.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/progress-modal.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Determinate vs indeterminate
+
+The modal defaults to **indeterminate** mode (spinner, `progress = -1`). Switch to determinate by calling `SetProgress` with a value in `[0.0, 1.0]`, or explicitly with `SetIndeterminate(false)`.
+
+```go
+// Indeterminate (default) — shows animated spinner
+modal := components.NewProgressModal().
+    SetTitle("Connecting...")
+
+// Determinate — shows filled progress bar
+modal.SetProgress(0.45) // 45%
+```
+
+## Completion and failure
+
+Call `Complete()` to show a success state and fire `onComplete`. Call `Fail(err)` to show an error state and fire `onError`. Both stop the spinner. After either call the modal stays visible until the user presses any key (or `Close()` is called directly).
+
+## Cancelable
+
+Set `SetCancelable(true)` and wire `SetOnCancel` to let the user abort. The cancel button appears in the modal footer when cancelable.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

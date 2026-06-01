@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/bus"
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -24,15 +24,19 @@ func (p *Pages) publishNav(kind, op, name string) {
 }
 
 // Pages manages stack-based page navigation with automatic modal handling.
+// It implements core.Widget so it can be placed directly inside a core.Flex.
 type Pages struct {
-	*tview.Pages
+	x, y, w, h int
+	bgColor     tcell.Color
+	hasFocus    bool
+
 	stack          []Component
-	focusStack     []tview.Primitive // Saved focus for modal restoration
+	focusStack     []core.Widget // saved focus for modal restoration
 	onChange       func(Component)
-	onModalDismiss func(Modal)        // Optional callback when any modal dismisses
-	counter        int                // For generating unique page names
-	app            *tview.Application // Reference for focus management
-	crumbs         *Crumbs            // Optional breadcrumb component
+	onModalDismiss func(Modal)
+	counter        int
+	fm             *core.FocusManager
+	crumbs         *Crumbs
 	subs           components.Subscriptions
 }
 
@@ -41,24 +45,78 @@ func (p *Pages) Subs() *components.Subscriptions { return &p.subs }
 
 // NewPages creates a new page stack manager.
 func NewPages() *Pages {
-	pages := tview.NewPages()
-	pages.SetBackgroundColor(theme.Bg())
-
 	p := &Pages{
-		Pages:      pages,
 		stack:      make([]Component, 0),
-		focusStack: make([]tview.Primitive, 0),
+		focusStack: make([]core.Widget, 0),
+		bgColor:    theme.Bg(),
 	}
-
-	p.subs.Add(theme.Register(pages))
-
+	p.subs.Add(theme.RegisterFn(func(c tcell.Color) { p.bgColor = c }))
 	return p
 }
 
-// SetApplication sets the tview.Application reference for focus management.
-// This should be called by App during initialization.
-func (p *Pages) SetApplication(app *tview.Application) {
-	p.app = app
+
+// --- core.Widget implementation ---
+
+// Draw renders the background and the front component.
+func (p *Pages) Draw(screen tcell.Screen) {
+	bg := theme.Bg()
+	style := tcell.StyleDefault.Background(bg)
+	for row := p.y; row < p.y+p.h; row++ {
+		for col := p.x; col < p.x+p.w; col++ {
+			screen.SetContent(col, row, ' ', nil, style)
+		}
+	}
+	if c := p.Current(); c != nil {
+		c.SetRect(p.x, p.y, p.w, p.h)
+		c.Draw(screen)
+	}
+}
+
+// Rect returns the current geometry.
+func (p *Pages) Rect() (x, y, w, h int) { return p.x, p.y, p.w, p.h }
+
+// SetRect sets the geometry. Passed down to the front component on Draw.
+func (p *Pages) SetRect(x, y, w, h int) { p.x = x; p.y = y; p.w = w; p.h = h }
+
+// Focus marks Pages as focused and forwards to the front component.
+func (p *Pages) Focus() { p.hasFocus = true }
+
+// Blur removes focus.
+func (p *Pages) Blur() { p.hasFocus = false }
+
+// HasFocus returns whether Pages is focused.
+func (p *Pages) HasFocus() bool { return p.hasFocus }
+
+// HandleKey routes the key event to the front component's HandleKey.
+func (p *Pages) HandleKey(ev *tcell.EventKey) bool {
+	c := p.Current()
+	if c == nil {
+		return false
+	}
+	if kh, ok := c.(core.KeyHandler); ok {
+		return kh.HandleKey(ev)
+	}
+	return false
+}
+
+// HandleMouse routes mouse events to the front component.
+func (p *Pages) HandleMouse(action core.MouseAction, ev *tcell.EventMouse) (bool, core.Widget) {
+	c := p.Current()
+	if c == nil {
+		return false, nil
+	}
+	if mh, ok := c.(core.MouseHandler); ok {
+		return mh.HandleMouse(action, ev)
+	}
+	return false, nil
+}
+
+// --- Focus manager wiring ---
+
+// SetFocusManager sets the core.FocusManager used for modal focus save/restore.
+// Call from layout.App after creating the Pages.
+func (p *Pages) SetFocusManager(fm *core.FocusManager) {
+	p.fm = fm
 }
 
 // SetOnModalDismiss sets a callback that fires when any modal is dismissed.
@@ -72,7 +130,7 @@ func (p *Pages) SetOnModalDismiss(fn func(Modal)) {
 func (p *Pages) Push(c Component) {
 	// Check if a blocking modal is active
 	if p.hasBlockingModal() {
-		return // Cannot push while blocking modal is active
+		return
 	}
 
 	// Stop current component
@@ -81,18 +139,16 @@ func (p *Pages) Push(c Component) {
 		current.Stop()
 
 		// If pushing a modal, save current focus for restoration
-		if IsModal(c) && p.app != nil {
-			p.focusStack = append(p.focusStack, p.app.GetFocus())
+		if IsModal(c) && p.fm != nil {
+			p.focusStack = append(p.focusStack, p.fm.Focused())
 		}
 	}
 
-	// Generate unique page name
 	p.counter++
-	name := fmt.Sprintf("page-%d", p.counter)
+	_ = fmt.Sprintf("page-%d", p.counter) // preserve counter semantics
 
-	// Add to stack and pages
+	// Add to stack
 	p.stack = append(p.stack, c)
-	p.Pages.AddPage(name, c, true, true)
 
 	// Start the new component
 	c.Start()
@@ -114,37 +170,26 @@ func (p *Pages) Pop() bool {
 
 	// Handle modal dismiss
 	if modal := AsModal(current); modal != nil {
-		// Check OnDismiss callback
 		if !modal.OnDismiss() {
-			return false // Dismiss was cancelled
+			return false
 		}
-		// Notify modal dismiss callback
 		if p.onModalDismiss != nil {
 			p.onModalDismiss(modal)
 		}
 
 		// Restore focus if configured
 		behavior := modal.ModalBehavior()
-		if behavior.RestoreFocusOnDismiss && len(p.focusStack) > 0 && p.app != nil {
+		if behavior.RestoreFocusOnDismiss && len(p.focusStack) > 0 && p.fm != nil {
 			restoreTo := p.focusStack[len(p.focusStack)-1]
 			p.focusStack = p.focusStack[:len(p.focusStack)-1]
-			// Set focus directly - we're already on the UI thread via QueueUpdateDraw
-			// from App's modal dismiss handler. Calling QueueUpdateDraw again here
-			// can cause deadlocks.
 			if restoreTo != nil {
-				p.app.SetFocus(restoreTo)
+				p.fm.Focus(restoreTo)
 			}
 		}
 	}
 
 	// Stop and remove current
 	current.Stop()
-
-	// Get current page name and remove it
-	name, _ := p.Pages.GetFrontPage()
-	p.Pages.RemovePage(name)
-
-	// Update stack
 	p.stack = p.stack[:len(p.stack)-1]
 
 	// Show and start previous
@@ -176,16 +221,7 @@ func (p *Pages) Clear() {
 	for i := len(p.stack) - 1; i >= 0; i-- {
 		p.stack[i].Stop()
 	}
-
 	p.stack = make([]Component, 0)
-
-	// Remove all pages from the existing tview.Pages instead of replacing it.
-	// Replacing with tview.NewPages() would orphan the primitive from the layout,
-	// breaking focus management after profile switches.
-	for _, name := range p.Pages.GetPageNames(true) {
-		p.Pages.RemovePage(name)
-	}
-
 	p.notifyChange()
 }
 
@@ -195,7 +231,6 @@ func (p *Pages) StackDepth() int {
 }
 
 // SetOnChange sets callback when active component changes.
-// The callback receives the new current component (may be nil).
 func (p *Pages) SetOnChange(fn func(Component)) {
 	p.onChange = fn
 }
@@ -207,18 +242,15 @@ func (p *Pages) SetCrumbs(crumbs *Crumbs) {
 
 // notifyChange calls the onChange callback if set and updates crumbs.
 func (p *Pages) notifyChange() {
-	// Update crumbs from stack
 	if p.crumbs != nil {
 		var path []string
 		for _, c := range p.stack {
-			// Skip modals in breadcrumb path
 			if !IsModal(c) {
 				path = append(path, c.Name())
 			}
 		}
 		p.crumbs.SetPath(path)
 	}
-
 	if p.onChange != nil {
 		p.onChange(p.Current())
 	}
@@ -236,43 +268,21 @@ func (p *Pages) GetStack() []Component {
 	return result
 }
 
-// Draw renders the pages with current theme background.
-func (p *Pages) Draw(screen tcell.Screen) {
-	p.Pages.SetBackgroundColor(theme.Bg())
-	p.Pages.Draw(screen)
-}
-
 // Replace replaces the current component without affecting stack depth.
-// Useful for swapping views at the same level.
 func (p *Pages) Replace(c Component) {
 	if len(p.stack) == 0 {
 		p.Push(c)
 		return
 	}
-
-	// Check if a blocking modal is active
 	if p.hasBlockingModal() {
 		return
 	}
 
-	// Stop current
 	current := p.stack[len(p.stack)-1]
 	current.Stop()
-
-	// Remove current page
-	name, _ := p.Pages.GetFrontPage()
-	p.Pages.RemovePage(name)
-
-	// Add new component
-	p.counter++
-	newName := fmt.Sprintf("page-%d", p.counter)
 	p.stack[len(p.stack)-1] = c
-	p.Pages.AddPage(newName, c, true, true)
-
-	// Start new component
 	c.Start()
 
-	// Notify listener
 	p.notifyChange()
 	p.publishNav(bus.KindNavReplace, "replace", c.Name())
 }
@@ -286,7 +296,6 @@ func (p *Pages) CurrentIsModal() bool {
 }
 
 // CurrentModalBehavior returns the modal behavior if the current page is a modal.
-// Returns nil if the current page is not a modal.
 func (p *Pages) CurrentModalBehavior() *components.ModalBehavior {
 	if c := p.Current(); c != nil {
 		return GetModalBehavior(c)
@@ -295,7 +304,6 @@ func (p *Pages) CurrentModalBehavior() *components.ModalBehavior {
 }
 
 // DismissModal attempts to dismiss the current modal.
-// Returns false if no modal is active, or if the modal's OnDismiss() cancelled it.
 func (p *Pages) DismissModal() bool {
 	if !p.CurrentIsModal() {
 		return false

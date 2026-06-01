@@ -2,15 +2,15 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
 // Label is a simple text display component.
-// It wraps tview.TextView with themed defaults and a cleaner API.
+// It wraps core.TextView with themed defaults and a cleaner API.
 type Label struct {
-	*tview.TextView
+	*core.TextView
 	subs Subscriptions
 }
 
@@ -19,7 +19,7 @@ func (l *Label) Subs() *Subscriptions { return &l.subs }
 
 // NewLabel creates a new Label with the given text.
 func NewLabel(text string) *Label {
-	tv := tview.NewTextView()
+	tv := core.NewTextView()
 	tv.SetText(text)
 	tv.SetDynamicColors(true)
 	tv.SetBackgroundColor(theme.Bg())
@@ -29,7 +29,7 @@ func NewLabel(text string) *Label {
 		TextView: tv,
 	}
 
-	l.subs.Add(theme.Register(tv))
+	l.subs.Add(theme.RegisterFn(func(c tcell.Color) { tv.SetBackgroundColor(c) }))
 
 	return l
 }
@@ -42,16 +42,16 @@ func (l *Label) SetText(text string) *Label {
 
 // SetAlign sets the text alignment.
 func (l *Label) SetAlign(align Align) *Label {
-	var tviewAlign int
+	var coreAlign int
 	switch align {
 	case AlignLeft:
-		tviewAlign = tview.AlignLeft
+		coreAlign = core.AlignLeft
 	case AlignRight:
-		tviewAlign = tview.AlignRight
+		coreAlign = core.AlignRight
 	default:
-		tviewAlign = tview.AlignCenter
+		coreAlign = core.AlignCenter
 	}
-	l.TextView.SetTextAlign(tviewAlign)
+	l.TextView.SetTextAlign(coreAlign)
 	return l
 }
 
@@ -97,13 +97,24 @@ func (l *Label) SetRegions(enabled bool) *Label {
 	return l
 }
 
-// Primitive returns the underlying tview.TextView for advanced usage.
-func (l *Label) Primitive() *tview.TextView {
-	return l.TextView
-}
-
 // Text is a convenience function to create a Label.
 // Alias for NewLabel.
 func Text(text string) *Label {
 	return NewLabel(text)
+}
+
+// Focus implements core.Widget. Focuses the underlying core.TextView.
+func (l *Label) Focus() {
+	l.TextView.Focus()
+}
+
+// Blur implements core.Widget.
+func (l *Label) Blur() {
+	l.TextView.Blur()
+}
+
+// Rect implements core.Widget.
+func (l *Label) Rect() (x, y, w, h int) {
+	x, y, w, h = l.TextView.GetRect()
+	return
 }

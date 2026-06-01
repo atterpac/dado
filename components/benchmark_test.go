@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/validators"
 )
 
@@ -78,12 +78,11 @@ func BenchmarkTextField_ChangeEvent(b *testing.B) {
 		_ = e.NewValue
 	})
 
-	handler := field.InputHandler()
 	event := tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		handler(event, nil)
+		field.HandleKey(event)
 	}
 }
 
@@ -275,7 +274,7 @@ func BenchmarkModal_Render(b *testing.B) {
 		Height: 10,
 	})
 
-	content := tview.NewTextView()
+	content := core.NewTextView()
 	content.SetText("Modal content for benchmarking")
 	modal.SetContent(content)
 	modal.SetRect(0, 0, 80, 24)
@@ -367,7 +366,7 @@ func BenchmarkForm_SetValues(b *testing.B) {
 
 // BenchmarkComponentBase_Lifecycle measures Start/Stop cycle performance.
 func BenchmarkComponentBase_Lifecycle(b *testing.B) {
-	base := NewComponentBase(tview.NewBox()).
+	base := NewComponentBase(new(core.Box)).
 		SetOnStart(func() {}).
 		SetOnStop(func() {})
 
@@ -380,7 +379,7 @@ func BenchmarkComponentBase_Lifecycle(b *testing.B) {
 
 // BenchmarkStatefulComponentBase_SetData measures data setting performance.
 func BenchmarkStatefulComponentBase_SetData(b *testing.B) {
-	base := NewStatefulComponentBase[string](tview.NewBox())
+	base := NewStatefulComponentBase[string](new(core.Box))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -390,7 +389,7 @@ func BenchmarkStatefulComponentBase_SetData(b *testing.B) {
 
 // BenchmarkStatefulComponentBase_UpdateData measures update cycle performance.
 func BenchmarkStatefulComponentBase_UpdateData(b *testing.B) {
-	base := NewStatefulComponentBase[int](tview.NewBox())
+	base := NewStatefulComponentBase[int](new(core.Box))
 	base.SetData(0)
 
 	b.ResetTimer()
@@ -405,31 +404,29 @@ func BenchmarkStatefulComponentBase_UpdateData(b *testing.B) {
 // Input Handling Benchmarks
 // ============================================================================
 
-// BenchmarkTextField_InputHandler measures input handling performance.
-func BenchmarkTextField_InputHandler(b *testing.B) {
+// BenchmarkTextField_HandleKey measures input handling performance.
+func BenchmarkTextField_HandleKey(b *testing.B) {
 	field := NewTextField("test")
-	handler := field.InputHandler()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		handler(event, nil)
+		field.HandleKey(event)
 	}
 }
 
-// BenchmarkTextField_InputHandler_WithValidation measures input with validation.
-func BenchmarkTextField_InputHandler_WithValidation(b *testing.B) {
+// BenchmarkTextField_HandleKey_WithValidation measures input with validation.
+func BenchmarkTextField_HandleKey_WithValidation(b *testing.B) {
 	field := NewTextField("test").
 		SetValidator(func(v string) error {
 			return validators.MaxLength(100)(v)
 		})
 
-	handler := field.InputHandler()
 	event := tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		handler(event, nil)
+		field.HandleKey(event)
 	}
 }
 
@@ -440,10 +437,9 @@ func BenchmarkTextField_TypeString(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		field := NewTextField("test")
-		handler := field.InputHandler()
 		for _, r := range text {
 			event := tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)
-			handler(event, nil)
+			field.HandleKey(event)
 		}
 	}
 }

@@ -1,0 +1,40 @@
+---
+title: DiffViewer
+description: Unified and side-by-side diff viewer with syntax-aware highlighting and change navigation.
+---
+
+import ComponentPage from '../../../components/ComponentPage.astro';
+import data from '../../api/diff-viewer.json';
+import { getAvailableThemes } from '../../../lib/themes';
+
+export const themes = await getAvailableThemes();
+
+## Key bindings
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move up one line |
+| `↓` / `j` | Move down one line |
+| `Home` / `g` | Jump to first line |
+| `End` / `G` | Jump to last line |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `Ctrl+U` | Half-page up |
+| `Ctrl+D` | Half-page down |
+| `n` | Jump to next change hunk |
+| `N` | Jump to previous change hunk |
+| `u` | Switch to unified view |
+| `s` | Switch to side-by-side view |
+| `l` | Toggle line numbers |
+| `w` | Toggle word-diff highlighting |
+| `Enter` | Select line (fires `onLineSelect`) |
+
+## Providing diff content
+
+Call `SetDiff(unified string)` with a standard unified diff string (e.g., the output of `git diff` or `diff -u`). The viewer parses it into hunks internally.
+
+## Views
+
+Default is unified view. `s` switches to side-by-side, which splits the viewport into before/after columns. `u` returns to unified. Both views support the same navigation bindings.
+
+<ComponentPage data={data} themes={themes} defaultTheme="nord" />

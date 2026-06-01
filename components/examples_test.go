@@ -47,45 +47,38 @@ func ExampleTextField_SetValidator() {
 	// Validation passed
 }
 
-func ExampleNewCheckbox() {
-	// Create a checkbox
-	checkbox := components.NewCheckbox("notify").
-		SetLabel("Enable notifications").
-		SetChecked(true)
-
-	// Get the value
-	fmt.Println(checkbox.Value())
-	// Output: true
-}
-
-func ExampleNewSelect() {
-	// Create a select dropdown
-	sel := components.NewSelect("role").
-		SetLabel("Role").
-		SetOptions([]string{"Admin", "User", "Guest"}).
-		SetDefault("User")
-
-	// Get selected value
-	value := sel.Value()
-	fmt.Println(value)
-	// Output: User
-}
-
-func ExampleNewSelect_withValues() {
-	// Create a select with custom label/value pairs
-	sel := components.NewSelect("status").
-		SetLabel("Status").
+// ExampleSelect is a kitchen-sink walkthrough of the Select API: distinct
+// display labels and stored values, a default selection, a change handler,
+// reading the current selection, and selecting programmatically by value.
+func ExampleSelect() {
+	sel := components.NewSelect("region").
+		SetLabel("Region").
+		SetPlaceholder("Choose a region").
 		SetOptionsWithValues([]components.SelectOption{
-			{Label: "Active", Value: "active"},
-			{Label: "Inactive", Value: "inactive"},
-			{Label: "Pending", Value: "pending"},
+			{Label: "North America", Value: "na"},
+			{Label: "Europe", Value: "eu"},
+			{Label: "Asia Pacific", Value: "apac"},
 		}).
-		SetDefault("active")
+		SetDefault("eu")
 
-	// Get selected value (returns the Value field, not the Label)
-	value := sel.Value()
-	fmt.Println(value)
-	// Output: active
+	// React to selection changes. The handler receives the typed option so
+	// you get both the human-readable label and the stored value.
+	sel.SetOnChange(func(e *components.ChangeEvent[components.SelectOption]) {
+		fmt.Printf("changed to %s (%s)\n", e.NewValue.Label, e.NewValue.Value)
+	})
+
+	// Read the current selection.
+	fmt.Println("value:", sel.Value())
+	fmt.Println("label:", sel.SelectedOption().Label)
+
+	// Select programmatically by value (does not fire onChange).
+	_ = sel.SetSelectedValue("apac")
+	fmt.Println("value:", sel.Value())
+
+	// Output:
+	// value: eu
+	// label: Europe
+	// value: apac
 }
 
 func ExampleNewPanel() {

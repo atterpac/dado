@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -16,7 +16,7 @@ func nextComponentID() uint64 {
 	return atomic.AddUint64(&componentIDCounter, 1)
 }
 
-// ComponentBase wraps a tview.Primitive and provides nav.Component implementation.
+// ComponentBase wraps a core.Widget and provides nav.Component implementation.
 // Use as a field (composition), not embedded, for type-safe access to the underlying primitive.
 //
 // Example:
@@ -37,7 +37,7 @@ func nextComponentID() uint64 {
 //	}
 type ComponentBase struct {
 	mu        sync.RWMutex
-	primitive tview.Primitive
+	primitive core.Widget
 	name      string
 	id        uint64
 	hints     []KeyHint
@@ -46,7 +46,7 @@ type ComponentBase struct {
 	subs      Subscriptions
 
 	// Optional overrides
-	inputHandler func(*tcell.EventKey, func(tview.Primitive)) bool
+	inputHandler func(*tcell.EventKey) bool
 	drawOverlay  func(screen tcell.Screen)
 	themeP       *theme.Provider
 }
@@ -89,8 +89,8 @@ func (s *Subscriptions) Len() int {
 	return len(s.funcs)
 }
 
-// NewComponentBase creates a new component base wrapping the given primitive.
-func NewComponentBase(p tview.Primitive) *ComponentBase {
+// NewComponentBase creates a new component base wrapping the given widget.
+func NewComponentBase(p core.Widget) *ComponentBase {
 	return &ComponentBase{
 		primitive: p,
 		id:        nextComponentID(),
@@ -154,12 +154,7 @@ func (cb *ComponentBase) SetOnStop(fn func()) *ComponentBase {
 
 // SetInputHandler sets a custom input handler.
 // Return true to indicate the event was consumed; false to delegate to the wrapped primitive.
-//
-// Note: this signature differs from tview's input handler, which uses
-// *tcell.EventKey returns to allow event transformation. To rebind keys
-// before delegation, mutate event fields in place or call setFocus directly
-// before returning false.
-func (cb *ComponentBase) SetInputHandler(fn func(*tcell.EventKey, func(tview.Primitive)) bool) *ComponentBase {
+func (cb *ComponentBase) SetInputHandler(fn func(*tcell.EventKey) bool) *ComponentBase {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.inputHandler = fn
@@ -174,20 +169,20 @@ func (cb *ComponentBase) SetDrawOverlay(fn func(screen tcell.Screen)) *Component
 	return cb
 }
 
-// Primitive returns the underlying tview.Primitive.
-func (cb *ComponentBase) Primitive() tview.Primitive {
+// Primitive returns the underlying core.Widget.
+func (cb *ComponentBase) Primitive() core.Widget {
 	return cb.primitive
 }
 
-// Typed returns the wrapped primitive cast to P. Panics if the stored
-// primitive is not a P — the cast mirrors the type the caller used at
+// Typed returns the wrapped widget cast to P. Panics if the stored
+// widget is not a P — the cast mirrors the type the caller used at
 // NewComponentBase, so a mismatch is a programmer error, not a runtime
 // condition. Use when a caller needs typed access without going through
 // a component-specific accessor.
 //
 //	tbl := components.Typed[*Table](cb)
 //	tbl.SetCell(0, 0, ...)
-func Typed[P tview.Primitive](cb *ComponentBase) P {
+func Typed[P core.Widget](cb *ComponentBase) P {
 	return cb.primitive.(P)
 }
 
@@ -234,7 +229,7 @@ func (cb *ComponentBase) Start() {
 
 // Stop is called when the component is no longer the active view.
 // Releases all registered Subscriptions after the user-provided onStop
-// runs. If the wrapped primitive exposes a Subs() *Subscriptions
+// runs. If the wrapped widget exposes a Subs() *Subscriptions
 // accessor (the convention used by dado's leaf widgets), its
 // subscriptions are released as well so theme/binding hooks attached
 // inside the widget's own constructor are torn down with the component.
@@ -262,9 +257,9 @@ func (cb *ComponentBase) Hints() []KeyHint {
 	return result
 }
 
-// --- tview.Primitive Implementation (Delegation) ---
+// --- core.Widget Implementation (Delegation) ---
 
-// Draw delegates to the wrapped primitive.
+// Draw delegates to the wrapped widget.
 func (cb *ComponentBase) Draw(screen tcell.Screen) {
 	cb.primitive.Draw(screen)
 	cb.mu.RLock()
@@ -275,57 +270,41 @@ func (cb *ComponentBase) Draw(screen tcell.Screen) {
 	}
 }
 
-// GetRect delegates to the wrapped primitive.
+// GetRect delegates to the wrapped widget.
 func (cb *ComponentBase) GetRect() (int, int, int, int) {
-	return cb.primitive.GetRect()
+	return cb.primitive.Rect()
 }
 
-// SetRect delegates to the wrapped primitive.
+// SetRect delegates to the wrapped widget.
 func (cb *ComponentBase) SetRect(x, y, width, height int) {
 	cb.primitive.SetRect(x, y, width, height)
 }
 
-// InputHandler returns the input handler, with optional custom handling.
-func (cb *ComponentBase) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Custom handler first
-		cb.mu.RLock()
-		customHandler := cb.inputHandler
-		cb.mu.RUnlock()
-
-		if customHandler != nil && customHandler(event, setFocus) {
-			return // Event consumed
-		}
-
-		// Delegate to primitive
-		handler := cb.primitive.InputHandler()
-		if handler != nil {
-			handler(event, setFocus)
-		}
+// HandleKey implements core.KeyHandler — custom handler first, then primitive.
+func (cb *ComponentBase) HandleKey(ev *tcell.EventKey) bool {
+	cb.mu.RLock()
+	custom := cb.inputHandler
+	cb.mu.RUnlock()
+	if custom != nil && custom(ev) {
+		return true
 	}
+	if kh, ok := cb.primitive.(interface{ HandleKey(*tcell.EventKey) bool }); ok {
+		return kh.HandleKey(ev)
+	}
+	return false
 }
 
-// Focus delegates to the wrapped primitive.
-func (cb *ComponentBase) Focus(delegate func(tview.Primitive)) {
-	cb.primitive.Focus(delegate)
+// Focus delegates to the wrapped widget.
+func (cb *ComponentBase) Focus() {
+	cb.primitive.Focus()
 }
 
-// Blur delegates to the wrapped primitive.
+// Blur delegates to the wrapped widget.
 func (cb *ComponentBase) Blur() {
 	cb.primitive.Blur()
 }
 
-// HasFocus delegates to the wrapped primitive.
+// HasFocus delegates to the wrapped widget.
 func (cb *ComponentBase) HasFocus() bool {
 	return cb.primitive.HasFocus()
-}
-
-// MouseHandler delegates to the wrapped primitive.
-func (cb *ComponentBase) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-	return cb.primitive.MouseHandler()
-}
-
-// PasteHandler delegates to the wrapped primitive.
-func (cb *ComponentBase) PasteHandler() func(pastedText string, setFocus func(p tview.Primitive)) {
-	return cb.primitive.PasteHandler()
 }

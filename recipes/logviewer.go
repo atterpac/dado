@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/input"
 	"github.com/atterpac/dado/nav"
 	"github.com/atterpac/dado/theme"
@@ -23,7 +23,7 @@ type LogLine struct {
 
 // LogViewer is a streaming log display with rich features.
 type LogViewer struct {
-	*tview.Box
+	core.Box
 
 	// Data
 	lines    []LogLine
@@ -55,7 +55,6 @@ type LogViewer struct {
 // NewLogViewer creates a new LogViewer.
 func NewLogViewer() *LogViewer {
 	l := &LogViewer{
-		Box:            tview.NewBox(),
 		maxLines:       10000,
 		follow:         true,
 		showTimestamps: true,
@@ -308,7 +307,7 @@ func (l *LogViewer) updateHints() {
 
 // Draw renders the log viewer.
 func (l *LogViewer) Draw(screen tcell.Screen) {
-	l.Box.DrawForSubclass(screen, l)
+	l.Box.DrawForSubclass(screen)
 	x, y, width, height := l.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -485,86 +484,81 @@ func (l *LogViewer) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (l *LogViewer) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return l.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Handle search bar if visible
-		if l.searchBar.IsVisible() {
-			if handler := l.searchBar.InputHandler(); handler != nil {
-				handler(event, setFocus)
+func (l *LogViewer) HandleKey(ev *tcell.EventKey) bool {
+	if l.searchBar.IsVisible() {
+		l.searchBar.HandleKey(ev)
+		return false
+	}
+
+	_, _, _, height := l.GetInnerRect()
+	logHeight := height - 2
+
+	switch ev.Key() {
+	case tcell.KeyUp:
+		l.offset--
+		l.paused = true
+	case tcell.KeyDown:
+		l.offset++
+	case tcell.KeyPgUp:
+		l.offset -= logHeight
+		l.paused = true
+	case tcell.KeyPgDn:
+		l.offset += logHeight
+	case tcell.KeyHome:
+		l.offset = 0
+		l.paused = true
+	case tcell.KeyEnd:
+		l.scrollToBottom()
+		l.paused = false
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case '/':
+			l.searchBar.Show(input.CommandTypeSearch)
+		case 'n':
+			l.nextSearchResult()
+		case 'N':
+			l.prevSearchResult()
+		case 'f':
+			l.follow = !l.follow
+			if l.follow {
+				l.scrollToBottom()
 			}
-			return
-		}
-
-		_, _, _, height := l.GetInnerRect()
-		logHeight := height - 2
-
-		switch event.Key() {
-		case tcell.KeyUp:
-			l.offset--
-			l.paused = true
-		case tcell.KeyDown:
-			l.offset++
-		case tcell.KeyPgUp:
-			l.offset -= logHeight
-			l.paused = true
-		case tcell.KeyPgDn:
-			l.offset += logHeight
-		case tcell.KeyHome:
+		case 'p':
+			if l.paused {
+				l.Resume()
+			} else {
+				l.Pause()
+			}
+		case 't':
+			l.showTimestamps = !l.showTimestamps
+		case 'w':
+			l.wrap = !l.wrap
+		case 'c':
+			l.Clear()
+		case 'g':
 			l.offset = 0
 			l.paused = true
-		case tcell.KeyEnd:
+		case 'G':
 			l.scrollToBottom()
 			l.paused = false
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case '/':
-				l.searchBar.Show(input.CommandTypeSearch)
-			case 'n':
-				l.nextSearchResult()
-			case 'N':
-				l.prevSearchResult()
-			case 'f':
-				l.follow = !l.follow
-				if l.follow {
-					l.scrollToBottom()
-				}
-			case 'p':
-				if l.paused {
-					l.Resume()
-				} else {
-					l.Pause()
-				}
-			case 't':
-				l.showTimestamps = !l.showTimestamps
-			case 'w':
-				l.wrap = !l.wrap
-			case 'c':
-				l.Clear()
-			case 'g':
-				l.offset = 0
-				l.paused = true
-			case 'G':
-				l.scrollToBottom()
-				l.paused = false
-			case 'j':
-				l.offset++
-			case 'k':
-				l.offset--
-				l.paused = true
-			}
-		case tcell.KeyCtrlD:
-			l.offset += logHeight / 2
-		case tcell.KeyCtrlU:
-			l.offset -= logHeight / 2
+		case 'j':
+			l.offset++
+		case 'k':
+			l.offset--
 			l.paused = true
-		case tcell.KeyEscape:
-			if l.searchQuery != "" {
-				l.searchQuery = ""
-				l.searchResults = nil
-			}
 		}
-	})
+	case tcell.KeyCtrlD:
+		l.offset += logHeight / 2
+	case tcell.KeyCtrlU:
+		l.offset -= logHeight / 2
+		l.paused = true
+	case tcell.KeyEscape:
+		if l.searchQuery != "" {
+			l.searchQuery = ""
+			l.searchResults = nil
+		}
+	}
+	return false
 }
 
 // Start begins the log viewer lifecycle.
@@ -581,11 +575,11 @@ func (l *LogViewer) Hints() []components.KeyHint {
 }
 
 // Focus handles focus.
-func (l *LogViewer) Focus(delegate func(tview.Primitive)) {
+func (l *LogViewer) Focus() {
 	if l.searchBar.IsVisible() {
-		delegate(l.searchBar)
+		l.searchBar.Focus()
 	} else {
-		l.Box.Focus(delegate)
+		l.Box.Focus()
 	}
 }
 
