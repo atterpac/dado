@@ -291,7 +291,14 @@ func (m *Modal) handleBaseInput(event *tcell.EventKey) bool {
 
 // Focus delegates to focusTarget, content, or panel.
 func (m *Modal) Focus() {
-	m.Flex.Box.Focus()
+	switch {
+	case m.focusTarget != nil:
+		m.focusTarget.Focus()
+	case m.content != nil:
+		m.content.Focus()
+	default:
+		m.Flex.Box.Focus()
+	}
 }
 
 // SetFocusOnShow sets a specific widget to focus when the modal is shown.
