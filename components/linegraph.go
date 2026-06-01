@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // Braille dot positions (2x4 grid per cell):
@@ -24,7 +23,8 @@ var brailleDots = [2][4]rune{
 	{0x08, 0x10, 0x20, 0x80}, // right column (x=1): dots 4,5,6,8
 }
 
-// DataSeries represents a single line in the graph
+// DataSeries is a named set of float64 values plotted as a single line.
+// Color 0 falls back to the theme accent; set it explicitly for multi-series charts.
 type DataSeries struct {
 	Label  string
 	Values []float64
@@ -40,7 +40,8 @@ const (
 	LineGraphFilled                       // Fill area under line
 )
 
-// AxisConfig configures axis display
+// AxisConfig controls Y-axis display. LabelCount 0 auto-selects a reasonable
+// density based on component height. Format uses fmt.Sprintf syntax.
 type AxisConfig struct {
 	Show       bool
 	LabelCount int    // Number of labels on Y axis (0 = auto)
@@ -101,7 +102,7 @@ func NewLineGraph() *LineGraph {
 			Format:     "%.1f",
 		},
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
@@ -376,7 +377,7 @@ func (g *LineGraph) mapValueToX(index, dataLen, width int) int {
 
 // Draw renders the line graph
 func (g *LineGraph) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 {

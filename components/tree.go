@@ -4,12 +4,13 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/theme"
 )
 
-// TreeNode represents a node in the tree.
+// TreeNode is a single node in a Tree. Set Expanded to control initial
+// open/closed state. Color 0 uses the default foreground. Data holds
+// arbitrary caller data returned by onSelect and onHighlight callbacks.
 type TreeNode struct {
 	ID       string
 	Label    string
@@ -68,7 +69,7 @@ func NewTree() *Tree {
 		indentSize: 2,
 		selected:   make(map[*TreeNode]bool),
 	}
-	t.initWidget(tview.NewBox())
+	t.initWidget()
 	return t
 }
 
@@ -319,7 +320,7 @@ func (t *Tree) filterNode(node *TreeNode, query string) bool {
 
 // Draw renders the tree.
 func (t *Tree) Draw(screen tcell.Screen) {
-	t.Box.DrawForSubclass(screen, t)
+	t.Box.DrawForSubclass(screen)
 	x, y, width, height := t.GetInnerRect()
 
 	if width <= 0 || height <= 0 || len(t.flatNodes) == 0 {
@@ -472,98 +473,97 @@ func (t *Tree) buildLinePrefix(node *TreeNode) string {
 	return strings.Join(parts, "")
 }
 
-// InputHandler handles keyboard input.
-func (t *Tree) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if len(t.flatNodes) == 0 {
-			return
-		}
+// HandleKey processes a key event for the Tree.
+func (t *Tree) HandleKey(ev *tcell.EventKey) bool {
+	if len(t.flatNodes) == 0 {
+		return false
+	}
 
-		prevIndex := t.selectedIndex
+	prevIndex := t.selectedIndex
 
-		switch event.Key() {
-		case tcell.KeyDown:
-			t.moveDown()
-		case tcell.KeyUp:
-			t.moveUp()
-		case tcell.KeyRight:
-			t.expandOrMoveIn()
-		case tcell.KeyLeft:
-			t.collapseOrMoveOut()
-		case tcell.KeyHome:
-			t.selectedIndex = 0
-		case tcell.KeyEnd:
+	switch ev.Key() {
+	case tcell.KeyDown:
+		t.moveDown()
+	case tcell.KeyUp:
+		t.moveUp()
+	case tcell.KeyRight:
+		t.expandOrMoveIn()
+	case tcell.KeyLeft:
+		t.collapseOrMoveOut()
+	case tcell.KeyHome:
+		t.selectedIndex = 0
+	case tcell.KeyEnd:
+		t.selectedIndex = len(t.flatNodes) - 1
+	case tcell.KeyPgDn:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex += height
+		if t.selectedIndex >= len(t.flatNodes) {
 			t.selectedIndex = len(t.flatNodes) - 1
-		case tcell.KeyPgDn:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex += height
-			if t.selectedIndex >= len(t.flatNodes) {
-				t.selectedIndex = len(t.flatNodes) - 1
-			}
-		case tcell.KeyPgUp:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex -= height
-			if t.selectedIndex < 0 {
-				t.selectedIndex = 0
-			}
-		case tcell.KeyEnter:
-			if node := t.GetSelected(); node != nil && t.onSelect != nil {
-				t.onSelect(node)
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				t.moveDown()
-			case 'k':
-				t.moveUp()
-			case 'l':
-				t.expandOrMoveIn()
-			case 'h':
-				t.collapseOrMoveOut()
-			case 'g':
-				t.selectedIndex = 0
-			case 'G':
-				t.selectedIndex = len(t.flatNodes) - 1
-			case ' ':
-				if t.multiSelect {
-					if node := t.GetSelected(); node != nil {
-						if t.selected[node] {
-							delete(t.selected, node)
-						} else {
-							t.selected[node] = true
-						}
+		}
+	case tcell.KeyPgUp:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex -= height
+		if t.selectedIndex < 0 {
+			t.selectedIndex = 0
+		}
+	case tcell.KeyEnter:
+		if node := t.GetSelected(); node != nil && t.onSelect != nil {
+			t.onSelect(node)
+		}
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
+			t.moveDown()
+		case 'k':
+			t.moveUp()
+		case 'l':
+			t.expandOrMoveIn()
+		case 'h':
+			t.collapseOrMoveOut()
+		case 'g':
+			t.selectedIndex = 0
+		case 'G':
+			t.selectedIndex = len(t.flatNodes) - 1
+		case ' ':
+			if t.multiSelect {
+				if node := t.GetSelected(); node != nil {
+					if t.selected[node] {
+						delete(t.selected, node)
+					} else {
+						t.selected[node] = true
 					}
-				} else {
-					t.toggleExpanded()
 				}
-			case 'o':
+			} else {
 				t.toggleExpanded()
-			case 'O':
-				t.ExpandAll()
-			case 'C':
-				t.CollapseAll()
 			}
-		case tcell.KeyCtrlD:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex += height / 2
-			if t.selectedIndex >= len(t.flatNodes) {
-				t.selectedIndex = len(t.flatNodes) - 1
-			}
-		case tcell.KeyCtrlU:
-			_, _, _, height := t.GetInnerRect()
-			t.selectedIndex -= height / 2
-			if t.selectedIndex < 0 {
-				t.selectedIndex = 0
-			}
+		case 'o':
+			t.toggleExpanded()
+		case 'O':
+			t.ExpandAll()
+		case 'C':
+			t.CollapseAll()
 		}
+	case tcell.KeyCtrlD:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex += height / 2
+		if t.selectedIndex >= len(t.flatNodes) {
+			t.selectedIndex = len(t.flatNodes) - 1
+		}
+	case tcell.KeyCtrlU:
+		_, _, _, height := t.GetInnerRect()
+		t.selectedIndex -= height / 2
+		if t.selectedIndex < 0 {
+			t.selectedIndex = 0
+		}
+	}
 
-		// Call onHighlight if the selected index changed
-		if t.selectedIndex != prevIndex && t.onHighlight != nil {
-			if node := t.GetSelected(); node != nil {
-				t.onHighlight(node)
-			}
+	// Call onHighlight if the selected index changed
+	if t.selectedIndex != prevIndex && t.onHighlight != nil {
+		if node := t.GetSelected(); node != nil {
+			t.onHighlight(node)
 		}
-	})
+	}
+	return false
 }
 
 func (t *Tree) moveDown() {
@@ -657,58 +657,7 @@ func (t *Tree) toggleExpanded() {
 	t.rebuildFlatList()
 }
 
-// MouseHandler handles mouse input.
-func (t *Tree) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return t.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		_, y, _, _ := t.GetInnerRect()
-		mx, my := event.Position()
-
-		if !t.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(t)
-			clickedIndex := t.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(t.flatNodes) {
-				t.selectedIndex = clickedIndex
-				return true, t
-			}
-		case tview.MouseLeftDoubleClick:
-			clickedIndex := t.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(t.flatNodes) {
-				t.selectedIndex = clickedIndex
-				node := t.flatNodes[clickedIndex]
-				if !node.IsLeaf() {
-					t.toggleExpanded()
-				} else if t.onSelect != nil {
-					t.onSelect(node)
-				}
-				return true, t
-			}
-		case tview.MouseScrollUp:
-			if t.offset > 0 {
-				t.offset--
-			}
-			return true, t
-		case tview.MouseScrollDown:
-			_, _, _, height := t.GetInnerRect()
-			if t.offset < len(t.flatNodes)-height {
-				t.offset++
-			}
-			return true, t
-		}
-
-		return false, nil
-	})
-}
-
 // Focus handles focus.
-func (t *Tree) Focus(delegate func(tview.Primitive)) {
-	t.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the tree has focus.
 func (t *Tree) HasFocus() bool {
 	return t.Box.HasFocus()

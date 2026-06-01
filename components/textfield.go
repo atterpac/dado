@@ -3,9 +3,9 @@ package components
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/validators"
 )
@@ -44,7 +44,7 @@ func NewTextField(name string) *TextField {
 	t := &TextField{
 		name: name,
 	}
-	t.initWidget(tview.NewBox())
+	t.initWidget()
 	return t
 }
 
@@ -88,6 +88,13 @@ func (t *TextField) SetValue(value string) *TextField {
 // GetValue returns the current value.
 func (t *TextField) GetValue() string {
 	return t.value
+}
+
+// CursorPos returns the text cursor position (rune index within the value).
+// Useful for callers that render the field's text inline and need to draw the
+// cursor themselves (e.g. an inline command bar).
+func (t *TextField) CursorPos() int {
+	return t.cursorPos
 }
 
 // Value returns the current value (alias for GetValue).
@@ -200,7 +207,7 @@ func (t *TextField) GetError() string {
 
 // Draw renders the text field.
 func (t *TextField) Draw(screen tcell.Screen) {
-	t.Box.DrawForSubclass(screen, t)
+	t.Box.DrawForSubclass(screen)
 	x, y, width, height := t.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -332,77 +339,85 @@ func (t *TextField) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (t *TextField) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		oldValue := t.value
+func (t *TextField) HandleKey(ev *tcell.EventKey) bool {
+	oldValue := t.value
 
-		switch event.Key() {
-		case tcell.KeyLeft:
-			if t.cursorPos > 0 {
-				t.cursorPos--
-			}
-		case tcell.KeyRight:
-			if t.cursorPos < len(t.value) {
-				t.cursorPos++
-			}
-		case tcell.KeyHome:
-			t.cursorPos = 0
-		case tcell.KeyEnd:
-			t.cursorPos = len(t.value)
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if t.cursorPos > 0 {
-				t.value = t.value[:t.cursorPos-1] + t.value[t.cursorPos:]
-				t.cursorPos--
-				t.validate()
-				t.emitChange(oldValue, t.value)
-			}
-		case tcell.KeyDelete:
-			if t.cursorPos < len(t.value) {
-				t.value = t.value[:t.cursorPos] + t.value[t.cursorPos+1:]
-				t.validate()
-				t.emitChange(oldValue, t.value)
-			}
-		case tcell.KeyEnter:
-			t.emitSubmit()
-		case tcell.KeyCtrlU:
-			t.value = t.value[t.cursorPos:]
-			t.cursorPos = 0
-			t.validate()
-			t.emitChange(oldValue, t.value)
-		case tcell.KeyCtrlK:
-			t.value = t.value[:t.cursorPos]
-			t.validate()
-			t.emitChange(oldValue, t.value)
-		case tcell.KeyCtrlW:
-			// Delete word backward
-			if t.cursorPos > 0 {
-				pos := t.cursorPos - 1
-				for pos > 0 && t.value[pos] == ' ' {
-					pos--
-				}
-				for pos > 0 && t.value[pos-1] != ' ' {
-					pos--
-				}
-				t.value = t.value[:pos] + t.value[t.cursorPos:]
-				t.cursorPos = pos
-				t.validate()
-				t.emitChange(oldValue, t.value)
-			}
-		case tcell.KeyRune:
-			r := event.Rune()
-			t.value = t.value[:t.cursorPos] + string(r) + t.value[t.cursorPos:]
+	switch ev.Key() {
+	case tcell.KeyLeft:
+		if t.cursorPos > 0 {
+			t.cursorPos--
+		}
+		return true
+	case tcell.KeyRight:
+		if t.cursorPos < len(t.value) {
 			t.cursorPos++
+		}
+		return true
+	case tcell.KeyHome:
+		t.cursorPos = 0
+		return true
+	case tcell.KeyEnd:
+		t.cursorPos = len(t.value)
+		return true
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if t.cursorPos > 0 {
+			t.value = t.value[:t.cursorPos-1] + t.value[t.cursorPos:]
+			t.cursorPos--
 			t.validate()
 			t.emitChange(oldValue, t.value)
 		}
-	})
+		return true
+	case tcell.KeyDelete:
+		if t.cursorPos < len(t.value) {
+			t.value = t.value[:t.cursorPos] + t.value[t.cursorPos+1:]
+			t.validate()
+			t.emitChange(oldValue, t.value)
+		}
+		return true
+	case tcell.KeyEnter:
+		t.emitSubmit()
+		return true
+	case tcell.KeyCtrlU:
+		t.value = t.value[t.cursorPos:]
+		t.cursorPos = 0
+		t.validate()
+		t.emitChange(oldValue, t.value)
+		return true
+	case tcell.KeyCtrlK:
+		t.value = t.value[:t.cursorPos]
+		t.validate()
+		t.emitChange(oldValue, t.value)
+		return true
+	case tcell.KeyCtrlW:
+		if t.cursorPos > 0 {
+			pos := t.cursorPos - 1
+			for pos > 0 && t.value[pos] == ' ' {
+				pos--
+			}
+			for pos > 0 && t.value[pos-1] != ' ' {
+				pos--
+			}
+			t.value = t.value[:pos] + t.value[t.cursorPos:]
+			t.cursorPos = pos
+			t.validate()
+			t.emitChange(oldValue, t.value)
+		}
+		return true
+	case tcell.KeyRune:
+		r := ev.Rune()
+		t.value = t.value[:t.cursorPos] + string(r) + t.value[t.cursorPos:]
+		t.cursorPos++
+		t.validate()
+		t.emitChange(oldValue, t.value)
+		return true
+	}
+	return false
 }
 
 // Focus handles focus.
-func (t *TextField) Focus(delegate func(tview.Primitive)) {
+func (t *TextField) Focus() {
 	t.focused = true
-	t.Box.Focus(delegate)
+	t.Box.Focus()
 }
 
 // Blur handles blur.
@@ -474,7 +489,7 @@ func NewTextArea(name string) *TextArea {
 		lines:    []string{""},
 		maxLines: 100,
 	}
-	t.initWidget(tview.NewBox())
+	t.initWidget()
 	return t
 }
 
@@ -539,6 +554,81 @@ func (t *TextArea) SetOnChange(handler ChangeHandler[string]) *TextArea {
 	return t
 }
 
+// GetText returns the full text content (alias for GetValue).
+func (t *TextArea) GetText() string { return t.GetValue() }
+
+// SetText replaces the content. When cursorAtEnd is true the cursor is placed
+// at the end of the text; otherwise it is reset to the start.
+func (t *TextArea) SetText(text string, cursorAtEnd bool) *TextArea {
+	t.SetValue(text)
+	if cursorAtEnd {
+		t.cursorRow = len(t.lines) - 1
+		t.cursorCol = len(t.lines[t.cursorRow])
+	}
+	return t
+}
+
+// GetCursor returns the cursor position. Since the TextArea has no selection
+// model, the "from" and "to" positions are identical. Returned as
+// (fromRow, fromCol, toRow, toCol) to match the TextArea signature.
+func (t *TextArea) GetCursor() (int, int, int, int) {
+	return t.cursorRow, t.cursorCol, t.cursorRow, t.cursorCol
+}
+
+// GetOffset returns the current scroll offset (row, col).
+func (t *TextArea) GetOffset() (int, int) {
+	return t.offsetRow, t.offsetCol
+}
+
+// Replace replaces the rune range [startChar, endChar) in the full text with
+// the given text and positions the cursor immediately after the inserted text.
+// Character positions are rune offsets into the flattened (newline-joined) text.
+func (t *TextArea) Replace(startChar, endChar int, text string) {
+	old := t.GetValue()
+	runes := []rune(old)
+	if startChar < 0 {
+		startChar = 0
+	}
+	if endChar > len(runes) {
+		endChar = len(runes)
+	}
+	if startChar > endChar {
+		startChar = endChar
+	}
+
+	var b strings.Builder
+	b.WriteString(string(runes[:startChar]))
+	b.WriteString(text)
+	b.WriteString(string(runes[endChar:]))
+	newText := b.String()
+
+	t.lines = strings.Split(newText, "\n")
+	if len(t.lines) == 0 {
+		t.lines = []string{""}
+	}
+
+	t.setCursorCharPos(startChar + utf8.RuneCountInString(text))
+	t.emitChange(old, newText)
+}
+
+// setCursorCharPos positions the cursor at the given rune offset in the
+// flattened text. cursorCol is stored as a byte offset within its line to stay
+// consistent with the slicing done in HandleKey.
+func (t *TextArea) setCursorCharPos(pos int) {
+	remaining := pos
+	for r := 0; r < len(t.lines); r++ {
+		lineRunes := []rune(t.lines[r])
+		if remaining <= len(lineRunes) {
+			t.cursorRow = r
+			t.cursorCol = len(string(lineRunes[:remaining]))
+			return
+		}
+		remaining -= len(lineRunes) + 1 // +1 for the newline
+	}
+	t.cursorRow = len(t.lines) - 1
+	t.cursorCol = len(t.lines[t.cursorRow])
+}
+
 // emitChange emits a change event to all handlers.
 func (t *TextArea) emitChange(oldValue, newValue string) {
 	event := NewChangeEvent(t.name, oldValue, newValue)
@@ -554,7 +644,7 @@ func (t *TextArea) emitChange(oldValue, newValue string) {
 
 // Draw renders the text area.
 func (t *TextArea) Draw(screen tcell.Screen) {
-	t.Box.DrawForSubclass(screen, t)
+	t.Box.DrawForSubclass(screen)
 	x, y, width, height := t.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -657,90 +747,95 @@ func (t *TextArea) Draw(screen tcell.Screen) {
 	screen.SetContent(x+width-1, row, '╯', nil, borderStyle)
 }
 
-// InputHandler handles keyboard input.
-func (t *TextArea) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		oldValue := t.GetValue()
-		currentLine := t.lines[t.cursorRow]
+func (t *TextArea) HandleKey(ev *tcell.EventKey) bool {
+	oldValue := t.GetValue()
+	currentLine := t.lines[t.cursorRow]
 
-		switch event.Key() {
-		case tcell.KeyUp:
-			if t.cursorRow > 0 {
-				t.cursorRow--
-				if t.cursorCol > len(t.lines[t.cursorRow]) {
-					t.cursorCol = len(t.lines[t.cursorRow])
-				}
-			}
-		case tcell.KeyDown:
-			if t.cursorRow < len(t.lines)-1 {
-				t.cursorRow++
-				if t.cursorCol > len(t.lines[t.cursorRow]) {
-					t.cursorCol = len(t.lines[t.cursorRow])
-				}
-			}
-		case tcell.KeyLeft:
-			if t.cursorCol > 0 {
-				t.cursorCol--
-			} else if t.cursorRow > 0 {
-				t.cursorRow--
+	switch ev.Key() {
+	case tcell.KeyUp:
+		if t.cursorRow > 0 {
+			t.cursorRow--
+			if t.cursorCol > len(t.lines[t.cursorRow]) {
 				t.cursorCol = len(t.lines[t.cursorRow])
 			}
-		case tcell.KeyRight:
-			if t.cursorCol < len(currentLine) {
-				t.cursorCol++
-			} else if t.cursorRow < len(t.lines)-1 {
-				t.cursorRow++
-				t.cursorCol = 0
+		}
+		return true
+	case tcell.KeyDown:
+		if t.cursorRow < len(t.lines)-1 {
+			t.cursorRow++
+			if t.cursorCol > len(t.lines[t.cursorRow]) {
+				t.cursorCol = len(t.lines[t.cursorRow])
 			}
-		case tcell.KeyHome:
-			t.cursorCol = 0
-		case tcell.KeyEnd:
-			t.cursorCol = len(currentLine)
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if t.cursorCol > 0 {
-				t.lines[t.cursorRow] = currentLine[:t.cursorCol-1] + currentLine[t.cursorCol:]
-				t.cursorCol--
-			} else if t.cursorRow > 0 {
-				// Merge with previous line
-				prevLine := t.lines[t.cursorRow-1]
-				t.cursorCol = len(prevLine)
-				t.lines[t.cursorRow-1] = prevLine + currentLine
-				t.lines = append(t.lines[:t.cursorRow], t.lines[t.cursorRow+1:]...)
-				t.cursorRow--
-			}
-			t.emitChange(oldValue, t.GetValue())
-		case tcell.KeyDelete:
-			if t.cursorCol < len(currentLine) {
-				t.lines[t.cursorRow] = currentLine[:t.cursorCol] + currentLine[t.cursorCol+1:]
-			} else if t.cursorRow < len(t.lines)-1 {
-				// Merge with next line
-				t.lines[t.cursorRow] = currentLine + t.lines[t.cursorRow+1]
-				t.lines = append(t.lines[:t.cursorRow+1], t.lines[t.cursorRow+2:]...)
-			}
-			t.emitChange(oldValue, t.GetValue())
-		case tcell.KeyEnter:
-			if len(t.lines) < t.maxLines {
-				// Split line at cursor
-				newLine := currentLine[t.cursorCol:]
-				t.lines[t.cursorRow] = currentLine[:t.cursorCol]
-				t.lines = append(t.lines[:t.cursorRow+1], append([]string{newLine}, t.lines[t.cursorRow+1:]...)...)
-				t.cursorRow++
-				t.cursorCol = 0
-				t.emitChange(oldValue, t.GetValue())
-			}
-		case tcell.KeyRune:
-			r := event.Rune()
-			t.lines[t.cursorRow] = currentLine[:t.cursorCol] + string(r) + currentLine[t.cursorCol:]
+		}
+		return true
+	case tcell.KeyLeft:
+		if t.cursorCol > 0 {
+			t.cursorCol--
+		} else if t.cursorRow > 0 {
+			t.cursorRow--
+			t.cursorCol = len(t.lines[t.cursorRow])
+		}
+		return true
+	case tcell.KeyRight:
+		if t.cursorCol < len(currentLine) {
 			t.cursorCol++
+		} else if t.cursorRow < len(t.lines)-1 {
+			t.cursorRow++
+			t.cursorCol = 0
+		}
+		return true
+	case tcell.KeyHome:
+		t.cursorCol = 0
+		return true
+	case tcell.KeyEnd:
+		t.cursorCol = len(currentLine)
+		return true
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if t.cursorCol > 0 {
+			t.lines[t.cursorRow] = currentLine[:t.cursorCol-1] + currentLine[t.cursorCol:]
+			t.cursorCol--
+		} else if t.cursorRow > 0 {
+			prevLine := t.lines[t.cursorRow-1]
+			t.cursorCol = len(prevLine)
+			t.lines[t.cursorRow-1] = prevLine + currentLine
+			t.lines = append(t.lines[:t.cursorRow], t.lines[t.cursorRow+1:]...)
+			t.cursorRow--
+		}
+		t.emitChange(oldValue, t.GetValue())
+		return true
+	case tcell.KeyDelete:
+		if t.cursorCol < len(currentLine) {
+			t.lines[t.cursorRow] = currentLine[:t.cursorCol] + currentLine[t.cursorCol+1:]
+		} else if t.cursorRow < len(t.lines)-1 {
+			t.lines[t.cursorRow] = currentLine + t.lines[t.cursorRow+1]
+			t.lines = append(t.lines[:t.cursorRow+1], t.lines[t.cursorRow+2:]...)
+		}
+		t.emitChange(oldValue, t.GetValue())
+		return true
+	case tcell.KeyEnter:
+		if len(t.lines) < t.maxLines {
+			newLine := currentLine[t.cursorCol:]
+			t.lines[t.cursorRow] = currentLine[:t.cursorCol]
+			t.lines = append(t.lines[:t.cursorRow+1], append([]string{newLine}, t.lines[t.cursorRow+1:]...)...)
+			t.cursorRow++
+			t.cursorCol = 0
 			t.emitChange(oldValue, t.GetValue())
 		}
-	})
+		return true
+	case tcell.KeyRune:
+		r := ev.Rune()
+		t.lines[t.cursorRow] = currentLine[:t.cursorCol] + string(r) + currentLine[t.cursorCol:]
+		t.cursorCol++
+		t.emitChange(oldValue, t.GetValue())
+		return true
+	}
+	return false
 }
 
 // Focus handles focus.
-func (t *TextArea) Focus(delegate func(tview.Primitive)) {
+func (t *TextArea) Focus() {
 	t.focused = true
-	t.Box.Focus(delegate)
+	t.Box.Focus()
 }
 
 // Blur handles blur.

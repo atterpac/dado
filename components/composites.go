@@ -2,7 +2,6 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // =============================================================================
@@ -15,7 +14,7 @@ type StatusSection struct {
 	Icon     string
 	Color    tcell.Color // 0 = default
 	MinWidth int
-	Align    int // tview.AlignLeft, AlignCenter, AlignRight
+	Align    int // core.AlignLeft, AlignCenter, AlignRight
 }
 
 // StatusBar displays status information in a horizontal bar
@@ -39,7 +38,7 @@ func NewStatusBar() *StatusBar {
 	s := &StatusBar{
 		separator: '│',
 	}
-	s.initWidget(tview.NewBox())
+	s.initWidget()
 	return s
 }
 
@@ -146,7 +145,7 @@ func (s *StatusBar) renderSection(section StatusSection) string {
 
 // Draw renders the status bar
 func (s *StatusBar) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen)
 	x, y, width, height := s.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -330,7 +329,7 @@ func NewSearchBar() *SearchBar {
 		maxResults:  10,
 		selectedIdx: -1,
 	}
-	s.initWidget(tview.NewBox())
+	s.initWidget()
 	return s
 }
 
@@ -450,13 +449,9 @@ func (s *SearchBar) Clear() *SearchBar {
 }
 
 // Focus gives focus to the search bar
-func (s *SearchBar) Focus(delegate func(tview.Primitive)) {
-	s.Box.Focus(delegate)
-}
-
 // Draw renders the search bar
 func (s *SearchBar) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen)
 	x, y, width, height := s.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -577,149 +572,6 @@ func (s *SearchBar) Draw(screen tcell.Screen) {
 			}
 		}
 	}
-}
-
-// InputHandler handles keyboard input
-func (s *SearchBar) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return s.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		s.mu.Lock()
-
-		switch event.Key() {
-		case tcell.KeyEscape:
-			onCancel := s.onCancel
-			s.mu.Unlock()
-			if onCancel != nil {
-				onCancel()
-			}
-			return
-
-		case tcell.KeyEnter:
-			if s.selectedIdx >= 0 && s.selectedIdx < len(s.results) {
-				result := s.results[s.selectedIdx]
-				onSelect := s.onSelect
-				s.mu.Unlock()
-				if onSelect != nil {
-					onSelect(result)
-				}
-				return
-			} else if s.query != "" {
-				query := s.query
-				onSearch := s.onSearch
-				s.mu.Unlock()
-				if onSearch != nil {
-					onSearch(query)
-				}
-				return
-			}
-
-		case tcell.KeyDown:
-			if s.showResults && s.selectedIdx < len(s.results)-1 {
-				s.selectedIdx++
-			}
-
-		case tcell.KeyUp:
-			if s.showResults && s.selectedIdx > 0 {
-				s.selectedIdx--
-			}
-
-		case tcell.KeyLeft:
-			if s.cursorPos > 0 {
-				s.cursorPos--
-			}
-
-		case tcell.KeyRight:
-			if s.cursorPos < len(s.query) {
-				s.cursorPos++
-			}
-
-		case tcell.KeyHome:
-			s.cursorPos = 0
-
-		case tcell.KeyEnd:
-			s.cursorPos = len(s.query)
-
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if s.cursorPos > 0 {
-				s.query = s.query[:s.cursorPos-1] + s.query[s.cursorPos:]
-				s.cursorPos--
-				onChange := s.onChange
-				query := s.query
-				s.mu.Unlock()
-				if onChange != nil {
-					onChange(query)
-				}
-				return
-			}
-
-		case tcell.KeyDelete:
-			if s.cursorPos < len(s.query) {
-				s.query = s.query[:s.cursorPos] + s.query[s.cursorPos+1:]
-				onChange := s.onChange
-				query := s.query
-				s.mu.Unlock()
-				if onChange != nil {
-					onChange(query)
-				}
-				return
-			}
-
-		case tcell.KeyRune:
-			r := event.Rune()
-			s.query = s.query[:s.cursorPos] + string(r) + s.query[s.cursorPos:]
-			s.cursorPos++
-			onChange := s.onChange
-			query := s.query
-			s.mu.Unlock()
-			if onChange != nil {
-				onChange(query)
-			}
-			return
-
-		case tcell.KeyCtrlU:
-			s.query = s.query[s.cursorPos:]
-			s.cursorPos = 0
-			onChange := s.onChange
-			query := s.query
-			s.mu.Unlock()
-			if onChange != nil {
-				onChange(query)
-			}
-			return
-
-		case tcell.KeyCtrlK:
-			s.query = s.query[:s.cursorPos]
-			onChange := s.onChange
-			query := s.query
-			s.mu.Unlock()
-			if onChange != nil {
-				onChange(query)
-			}
-			return
-
-		case tcell.KeyCtrlW:
-			// Delete word backward
-			if s.cursorPos > 0 {
-				pos := s.cursorPos - 1
-				for pos > 0 && s.query[pos] == ' ' {
-					pos--
-				}
-				for pos > 0 && s.query[pos-1] != ' ' {
-					pos--
-				}
-				s.query = s.query[:pos] + s.query[s.cursorPos:]
-				s.cursorPos = pos
-				onChange := s.onChange
-				query := s.query
-				s.mu.Unlock()
-				if onChange != nil {
-					onChange(query)
-				}
-				return
-			}
-		}
-
-		s.mu.Unlock()
-	})
 }
 
 // GetFieldHeight returns preferred height

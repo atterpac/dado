@@ -2,10 +2,11 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
-// MenuItem represents a single menu item
+// MenuItem represents a single context menu item. Set Submenu to add a nested
+// menu; set Handler to nil and isDivider (via AddDivider) for a separator line.
+// Danger colors the item red; Checked renders a checkmark icon.
 type MenuItem struct {
 	ID       string
 	Label    string
@@ -21,13 +22,16 @@ type MenuItem struct {
 	isDivider bool
 }
 
-// MenuSection groups items with optional header
+// MenuSection groups items under an optional header label for visual separation.
 type MenuSection struct {
 	Header string // Optional section header
 	Items  []MenuItem
 }
 
-// ContextMenu is the popup menu component
+// ContextMenu is a popup menu that supports nested submenus, sections, and
+// dividers. Show it at a terminal coordinate with ShowAt or centered with
+// ShowCentered. Esc closes it; navigating left from a submenu returns to
+// the parent.
 type ContextMenu struct {
 	widgetBase
 
@@ -57,7 +61,7 @@ func NewContextMenu() *ContextMenu {
 		selectedIndex: 0,
 		menuWidth:     20,
 	}
-	m.initWidget(tview.NewBox())
+	m.initWidget()
 	m.SetBorder(true)
 	return m
 }
@@ -525,66 +529,65 @@ func (m *ContextMenu) drawItem(screen tcell.Screen, x, y, width int, item MenuIt
 	}
 }
 
-// InputHandler handles keyboard input
-func (m *ContextMenu) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		m.mu.Lock()
-		defer m.mu.Unlock()
+// HandleKey handles keyboard input
+func (m *ContextMenu) HandleKey(ev *tcell.EventKey) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-		if !m.visible {
-			return
+	if !m.visible {
+		return false
+	}
+
+	key := ev.Key()
+	switch key {
+	case tcell.KeyDown:
+		m.moveDown()
+	case tcell.KeyUp:
+		m.moveUp()
+	case tcell.KeyRight:
+		// Open submenu if available
+		if m.selectedIndex >= 0 && m.selectedIndex < len(m.flatItems) {
+			item := m.flatItems[m.selectedIndex]
+			if len(item.Submenu) > 0 {
+				m.openSubmenu(item)
+			}
 		}
-
-		key := event.Key()
-		switch key {
-		case tcell.KeyDown:
+	case tcell.KeyLeft:
+		if m.parent != nil {
+			m.visible = false
+		}
+	case tcell.KeyHome:
+		m.selectedIndex = m.findNextSelectable(-1)
+	case tcell.KeyEnd:
+		m.selectedIndex = m.findPrevSelectable(len(m.flatItems))
+	case tcell.KeyEnter:
+		m.selectCurrent()
+	case tcell.KeyEsc:
+		m.visible = false
+		if m.onClose != nil {
+			go m.onClose()
+		}
+	case tcell.KeyRune:
+		// Handle vim-style navigation
+		switch ev.Rune() {
+		case 'j':
 			m.moveDown()
-		case tcell.KeyUp:
+		case 'k':
 			m.moveUp()
-		case tcell.KeyRight:
-			// Open submenu if available
+		case 'h':
+			if m.parent != nil {
+				m.visible = false
+			}
+		case 'l':
 			if m.selectedIndex >= 0 && m.selectedIndex < len(m.flatItems) {
 				item := m.flatItems[m.selectedIndex]
 				if len(item.Submenu) > 0 {
 					m.openSubmenu(item)
 				}
 			}
-		case tcell.KeyLeft:
-			if m.parent != nil {
-				m.visible = false
-			}
-		case tcell.KeyHome:
-			m.selectedIndex = m.findNextSelectable(-1)
-		case tcell.KeyEnd:
-			m.selectedIndex = m.findPrevSelectable(len(m.flatItems))
-		case tcell.KeyEnter:
-			m.selectCurrent()
-		case tcell.KeyEsc:
-			m.visible = false
-			if m.onClose != nil {
-				go m.onClose()
-			}
-		case tcell.KeyRune:
-			// Handle vim-style navigation
-			switch event.Rune() {
-			case 'j':
-				m.moveDown()
-			case 'k':
-				m.moveUp()
-			case 'h':
-				if m.parent != nil {
-					m.visible = false
-				}
-			case 'l':
-				if m.selectedIndex >= 0 && m.selectedIndex < len(m.flatItems) {
-					item := m.flatItems[m.selectedIndex]
-					if len(item.Submenu) > 0 {
-						m.openSubmenu(item)
-					}
-				}
-			}
 		}
-	})
+	}
+	return false
 }
 
 func (m *ContextMenu) moveDown() {
@@ -650,54 +653,7 @@ func (m *ContextMenu) openSubmenu(item MenuItem) {
 	m.activeSubmenu = submenu
 }
 
-// MouseHandler handles mouse events
-func (m *ContextMenu) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-	return m.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		if !m.visible {
-			return false, nil
-		}
-
-		mx, my := event.Position()
-
-		// Check if click is within menu bounds
-		menuHeight := len(m.flatItems) + 2
-		if mx >= m.position.x && mx < m.position.x+m.menuWidth &&
-			my >= m.position.y && my < m.position.y+menuHeight {
-
-			itemIndex := my - m.position.y - 1
-			if itemIndex >= 0 && itemIndex < len(m.flatItems) {
-				item := m.flatItems[itemIndex]
-				if !item.isDivider && !item.Disabled {
-					m.selectedIndex = itemIndex
-
-					if action == tview.MouseLeftClick {
-						m.selectCurrent()
-					}
-				}
-			}
-			return true, nil
-		}
-
-		// Click outside menu - close it
-		if action == tview.MouseLeftClick {
-			m.visible = false
-			if m.onClose != nil {
-				go m.onClose()
-			}
-		}
-
-		return true, nil
-	})
-}
-
 // Focus is called when the menu receives focus
-func (m *ContextMenu) Focus(delegate func(p tview.Primitive)) {
-	m.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the menu has focus
 func (m *ContextMenu) HasFocus() bool {
 	return m.Box.HasFocus()

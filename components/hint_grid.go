@@ -2,7 +2,6 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // HintGrid renders a collection of KeyHint items in a multi-row pill layout.
@@ -19,7 +18,7 @@ func NewHintGrid() *HintGrid {
 	g := &HintGrid{
 		hints: make([]KeyHint, 0),
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
@@ -91,7 +90,7 @@ func (g *HintGrid) GetPreferredHeight(width int) int {
 
 // Draw renders the hint grid with multi-row pill layout.
 func (g *HintGrid) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 
 	x, y, width, height := g.GetInnerRect()
 	if width < 1 || height < 1 || len(g.hints) == 0 {

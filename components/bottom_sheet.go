@@ -2,8 +2,8 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -19,11 +19,11 @@ type BottomSheetConfig struct {
 // and spans the full width (with small horizontal margins).
 // BottomSheet implements the nav.ModalComponent interface for automatic lifecycle management.
 type BottomSheet struct {
-	*tview.Flex
+	*core.Flex
 	panel       *Panel
 	hintBar     *KeyHintBar
-	content     tview.Primitive
-	focusTarget tview.Primitive
+	content     core.Widget
+	focusTarget core.Widget
 	config      BottomSheetConfig
 	behavior    ModalBehavior
 	onClose     func()
@@ -36,8 +36,8 @@ func (b *BottomSheet) Subs() *Subscriptions { return &b.subs }
 
 // NewBottomSheet creates a new bottom sheet with the given configuration.
 func NewBottomSheet(config BottomSheetConfig) *BottomSheet {
-	flex := tview.NewFlex()
-	flex.SetBackgroundColor(tcell.ColorDefault)
+	flex := core.NewFlex()
+	flex.Box.SetBackgroundColor(tcell.ColorDefault)
 
 	// Default height
 	height := config.Height
@@ -66,7 +66,7 @@ func NewBottomSheet(config BottomSheetConfig) *BottomSheet {
 		b.panel.SetTitle(config.Title)
 	}
 
-	b.subs.Add(theme.Register(flex))
+	b.subs.Add(theme.RegisterFn(func(c tcell.Color) { flex.Box.SetBackgroundColor(c) }))
 	b.setupLayout()
 
 	return b
@@ -75,23 +75,23 @@ func NewBottomSheet(config BottomSheetConfig) *BottomSheet {
 // setupLayout builds the bottom sheet's internal structure.
 func (b *BottomSheet) setupLayout() {
 	// Inner content area with hint bar at bottom
-	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	contentBox := tview.NewBox()
+	innerFlex := core.NewFlex().SetDirection(core.Column)
+	contentBox := new(core.Box)
 	innerFlex.AddItem(contentBox, 0, 1, true)
 	innerFlex.AddItem(b.hintBar, 1, 0, false)
 	b.panel.SetContent(innerFlex)
 
 	// Build bottom-anchored layout: top spacer (fills) | panel at bottom
-	b.Flex.SetDirection(tview.FlexRow)
-	b.Flex.AddItem(nil, 0, 1, false)                  // Top spacer (transparent)
+	b.Flex.SetDirection(core.Column)
+	b.Flex.AddItem(new(core.Box), 0, 1, false)        // Top spacer (transparent)
 	b.Flex.AddItem(b.panel, b.config.Height, 0, true) // Panel at bottom
 }
 
 // SetContent sets the bottom sheet's main content.
-func (b *BottomSheet) SetContent(content tview.Primitive) *BottomSheet {
+func (b *BottomSheet) SetContent(content core.Widget) *BottomSheet {
 	b.content = content
 
-	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	innerFlex := core.NewFlex().SetDirection(core.Column)
 	innerFlex.AddItem(content, 0, 1, true)
 	innerFlex.AddItem(b.hintBar, 1, 0, false)
 	b.panel.SetContent(innerFlex)
@@ -105,8 +105,8 @@ func (b *BottomSheet) SetHeight(height int) *BottomSheet {
 
 	// Rebuild flex layout with new height
 	b.Flex.Clear()
-	b.Flex.SetDirection(tview.FlexRow)
-	b.Flex.AddItem(nil, 0, 1, false)
+	b.Flex.SetDirection(core.Column)
+	b.Flex.AddItem(new(core.Box), 0, 1, false)
 	b.Flex.AddItem(b.panel, height, 0, true)
 
 	return b
@@ -133,7 +133,7 @@ func (b *BottomSheet) Close() {
 
 // Draw renders the bottom sheet, optionally with backdrop.
 func (b *BottomSheet) Draw(screen tcell.Screen) {
-	b.Flex.SetBackgroundColor(theme.Bg())
+	b.Flex.Box.SetBackgroundColor(theme.Bg())
 	b.hintBar.SetBackgroundColor(theme.Bg())
 
 	if b.config.Backdrop {
@@ -160,21 +160,6 @@ func (b *BottomSheet) drawBackdrop(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles input with bottom sheet behavior.
-func (b *BottomSheet) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return b.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if b.handleBaseInput(event) {
-			return
-		}
-
-		if b.content != nil {
-			if handler := b.content.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
-		}
-	})
-}
-
 // handleBaseInput handles Escape for close.
 func (b *BottomSheet) handleBaseInput(event *tcell.EventKey) bool {
 	if event.Key() == tcell.KeyEscape {
@@ -184,29 +169,13 @@ func (b *BottomSheet) handleBaseInput(event *tcell.EventKey) bool {
 	return false
 }
 
-// WrapInputHandler wraps a custom handler with the bottom sheet's base handler.
-func (b *BottomSheet) WrapInputHandler(handler func(*tcell.EventKey, func(tview.Primitive))) func(*tcell.EventKey, func(tview.Primitive)) {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if b.handleBaseInput(event) {
-			return
-		}
-		handler(event, setFocus)
-	}
+// Focus delegates focus to the box.
+func (b *BottomSheet) Focus() {
+	b.Flex.Box.Focus()
 }
 
-// Focus delegates to focusTarget, content, or panel.
-func (b *BottomSheet) Focus(delegate func(tview.Primitive)) {
-	if b.focusTarget != nil {
-		delegate(b.focusTarget)
-	} else if b.content != nil {
-		delegate(b.content)
-	} else {
-		delegate(b.panel)
-	}
-}
-
-// SetFocusOnShow sets a specific primitive to focus when the bottom sheet is shown.
-func (b *BottomSheet) SetFocusOnShow(p tview.Primitive) *BottomSheet {
+// SetFocusOnShow sets a specific widget to focus when the bottom sheet is shown.
+func (b *BottomSheet) SetFocusOnShow(p core.Widget) *BottomSheet {
 	b.focusTarget = p
 	return b
 }

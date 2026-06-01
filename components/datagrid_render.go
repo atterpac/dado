@@ -22,6 +22,7 @@ type drawSnapshot struct {
 	fgDim        tcell.Color
 	accent       tcell.Color
 	warning      tcell.Color
+	error        tcell.Color
 	header       tcell.Color
 }
 
@@ -30,7 +31,7 @@ type drawSnapshot struct {
 // dg.mu is held — concurrency semantics are unchanged from the prior
 // monolithic implementation.
 func (dg *DataGrid) Draw(screen tcell.Screen) {
-	dg.Box.DrawForSubclass(screen, dg)
+	dg.Box.DrawForSubclass(screen)
 	x, y, width, height := dg.GetInnerRect()
 	if width <= 0 || height <= 0 {
 		return
@@ -64,6 +65,7 @@ func (dg *DataGrid) prepareDrawLocked(width, height int) (drawSnapshot, bool) {
 		fgDim:   th.FgDim(),
 		accent:  th.Accent(),
 		warning: th.Warning(),
+		error:   th.Error(),
 		header:  th.TableHeader(),
 	}
 
@@ -144,19 +146,27 @@ func (dg *DataGrid) paintLocked(screen tcell.Screen, x, y, width, height int, sn
 		isCursorRow := rowIdx == dg.cursor.Row
 		isSelectedRow := dg.selectedRows[rowIdx]
 
+		isDeletedRow := dg.deletedRows[rowIdx]
+
 		rowBg := snap.bg
-		if isSelectedRow {
+		switch {
+		case isDeletedRow:
+			rowBg = snap.error
+		case isSelectedRow:
 			rowBg = snap.accent
 		}
 		clearStyle := tcell.StyleDefault.Background(rowBg).Foreground(snap.fg)
-		if isSelectedRow {
+		if isSelectedRow || isDeletedRow {
 			clearStyle = clearStyle.Foreground(snap.bg)
 		}
 		fillLine(screen, x, screenY, width, clearStyle)
 
 		if dg.showRowNumbers {
 			gutterStyle := tcell.StyleDefault.Background(snap.bg).Foreground(snap.fgDim)
-			if isSelectedRow {
+			switch {
+			case isDeletedRow:
+				gutterStyle = tcell.StyleDefault.Background(snap.error).Foreground(snap.bg)
+			case isSelectedRow:
 				gutterStyle = tcell.StyleDefault.Background(snap.accent).Foreground(snap.bg)
 			}
 			numStr := padLeft(itoa(rowIdx+1), snap.gutterWidth-1) + " "
@@ -172,7 +182,7 @@ func (dg *DataGrid) paintLocked(screen tcell.Screen, x, y, width, height int, sn
 		drawX := x + snap.gutterWidth
 		dg.drawDataCells(screen, drawX, screenY, snap.contentWidth, rowIdx, snap.cols,
 			isCursorRow, isSelectedRow, baseStyle,
-			snap.bg, snap.fg, snap.accent, snap.warning, snap.fgDim)
+			snap.bg, snap.fg, snap.accent, snap.warning, snap.error, snap.fgDim)
 	}
 
 	emptyStartY := y + snap.headerHeight + (snap.endRow - snap.startRow)
@@ -233,7 +243,7 @@ func (dg *DataGrid) drawHeaderCells(screen tcell.Screen, startX, y, maxWidth int
 // drawDataCells renders cells for a single data row.
 func (dg *DataGrid) drawDataCells(screen tcell.Screen, startX, y, maxWidth, rowIdx int, cols []GridColumn,
 	isCursorRow, isSelectedRow bool, baseStyle tcell.Style,
-	bgColor, fgColor, accentColor, warningColor, fgDimColor tcell.Color) {
+	bgColor, fgColor, accentColor, warningColor, errorColor, fgDimColor tcell.Color) {
 
 	drawX := startX
 
@@ -249,7 +259,7 @@ func (dg *DataGrid) drawDataCells(screen tcell.Screen, startX, y, maxWidth, rowI
 		avail := maxWidth - (drawX - startX)
 
 		cellStyle := dg.getCellStyle(rowIdx, colIdx, isCursorRow, isSelectedRow,
-			baseStyle, bgColor, fgColor, accentColor, warningColor)
+			baseStyle, bgColor, fgColor, accentColor, warningColor, errorColor)
 		value := dg.getCellDisplayValue(rowIdx, colIdx)
 
 		dg.drawCellText(screen, drawX, y, colW, avail, value, col.Align, cellStyle, isCursorRow && colIdx == dg.cursor.Col)
@@ -280,7 +290,7 @@ func (dg *DataGrid) drawDataCells(screen tcell.Screen, startX, y, maxWidth, rowI
 		avail := maxWidth - (drawX - startX)
 
 		cellStyle := dg.getCellStyle(rowIdx, colIdx, isCursorRow, isSelectedRow,
-			baseStyle, bgColor, fgColor, accentColor, warningColor)
+			baseStyle, bgColor, fgColor, accentColor, warningColor, errorColor)
 		value := dg.getCellDisplayValue(rowIdx, colIdx)
 
 		dg.drawCellText(screen, drawX, y, colW, avail, value, col.Align, cellStyle, isCursorRow && colIdx == dg.cursor.Col)
@@ -298,11 +308,12 @@ func (dg *DataGrid) drawDataCells(screen tcell.Screen, startX, y, maxWidth, rowI
 
 // getCellStyle determines the style for a specific cell.
 func (dg *DataGrid) getCellStyle(rowIdx, colIdx int, isCursorRow, isSelectedRow bool,
-	baseStyle tcell.Style, bgColor, fgColor, accentColor, warningColor tcell.Color) tcell.Style {
+	baseStyle tcell.Style, bgColor, fgColor, accentColor, warningColor, errorColor tcell.Color) tcell.Style {
 
 	pos := CellPosition{Row: rowIdx, Col: colIdx}
 	isCursorCell := isCursorRow && colIdx == dg.cursor.Col
 	isDirty := dg.changeset.IsDirty(pos)
+	isDeleted := dg.deletedRows[rowIdx]
 
 	// Status color from source
 	cell := dg.source.Cell(rowIdx, colIdx)
@@ -312,10 +323,22 @@ func (dg *DataGrid) getCellStyle(rowIdx, colIdx int, isCursorRow, isSelectedRow 
 	}
 
 	if isCursorCell {
-		if dg.mode == GridModeEdit {
-			return tcell.StyleDefault.Background(accentColor).Foreground(bgColor).Underline(true)
+		// Keep the cursor visible even on a row staged for deletion by tinting
+		// its background with the error color instead of the accent.
+		cursorBg := accentColor
+		if isDeleted {
+			cursorBg = errorColor
 		}
-		return tcell.StyleDefault.Background(accentColor).Foreground(bgColor)
+		if dg.mode == GridModeEdit {
+			return tcell.StyleDefault.Background(cursorBg).Foreground(bgColor).Underline(true)
+		}
+		return tcell.StyleDefault.Background(cursorBg).Foreground(bgColor)
+	}
+
+	// Rows staged for deletion take precedence over selection/dirty styling so
+	// the pending removal is always obvious.
+	if isDeleted {
+		return tcell.StyleDefault.Background(errorColor).Foreground(bgColor)
 	}
 
 	if isSelectedRow {

@@ -8,7 +8,7 @@ import (
 
 // Draw renders the ERD graph.
 func (g *ERDGraph) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 || g.data == nil || len(g.data.tables) == 0 {

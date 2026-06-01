@@ -5,7 +5,6 @@ import (
 	"unicode"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // Language defines supported syntax highlighting languages
@@ -88,7 +87,7 @@ func NewCodeView() *CodeView {
 		highlightLine:   -1,
 		tokenCache:      make(map[int][]Token),
 	}
-	c.initWidget(tview.NewBox())
+	c.initWidget()
 	return c
 }
 
@@ -514,7 +513,7 @@ func (c *CodeView) getTokenColor(tokenType TokenType) tcell.Color {
 
 // Draw renders the code view
 func (c *CodeView) Draw(screen tcell.Screen) {
-	c.Box.DrawForSubclass(screen, c)
+	c.Box.DrawForSubclass(screen)
 	x, y, width, height := c.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -607,75 +606,87 @@ func (c *CodeView) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input
-func (c *CodeView) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return c.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		c.mu.Lock()
-		defer c.mu.Unlock()
+func (c *CodeView) HandleKey(ev *tcell.EventKey) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-		_, _, _, height := c.GetInnerRect()
+	_, _, _, height := c.GetInnerRect()
 
-		switch event.Key() {
-		case tcell.KeyDown:
+	switch ev.Key() {
+	case tcell.KeyDown:
+		if c.offsetY < len(c.lines)-1 {
+			c.offsetY++
+		}
+		return true
+	case tcell.KeyUp:
+		if c.offsetY > 0 {
+			c.offsetY--
+		}
+		return true
+	case tcell.KeyPgDn:
+		c.offsetY += height
+		if c.offsetY > len(c.lines)-height {
+			c.offsetY = len(c.lines) - height
+		}
+		if c.offsetY < 0 {
+			c.offsetY = 0
+		}
+		return true
+	case tcell.KeyPgUp:
+		c.offsetY -= height
+		if c.offsetY < 0 {
+			c.offsetY = 0
+		}
+		return true
+	case tcell.KeyHome:
+		c.offsetY = 0
+		return true
+	case tcell.KeyEnd:
+		c.offsetY = len(c.lines) - height
+		if c.offsetY < 0 {
+			c.offsetY = 0
+		}
+		return true
+	case tcell.KeyLeft:
+		if c.offsetX > 0 {
+			c.offsetX--
+		}
+		return true
+	case tcell.KeyRight:
+		c.offsetX++
+		return true
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
 			if c.offsetY < len(c.lines)-1 {
 				c.offsetY++
 			}
-		case tcell.KeyUp:
+			return true
+		case 'k':
 			if c.offsetY > 0 {
 				c.offsetY--
 			}
-		case tcell.KeyPgDn:
-			c.offsetY += height
-			if c.offsetY > len(c.lines)-height {
-				c.offsetY = len(c.lines) - height
-			}
-			if c.offsetY < 0 {
-				c.offsetY = 0
-			}
-		case tcell.KeyPgUp:
-			c.offsetY -= height
-			if c.offsetY < 0 {
-				c.offsetY = 0
-			}
-		case tcell.KeyHome:
+			return true
+		case 'g':
 			c.offsetY = 0
-		case tcell.KeyEnd:
+			return true
+		case 'G':
 			c.offsetY = len(c.lines) - height
 			if c.offsetY < 0 {
 				c.offsetY = 0
 			}
-		case tcell.KeyLeft:
+			return true
+		case 'h':
 			if c.offsetX > 0 {
 				c.offsetX--
 			}
-		case tcell.KeyRight:
+			return true
+		case 'l':
 			c.offsetX++
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				if c.offsetY < len(c.lines)-1 {
-					c.offsetY++
-				}
-			case 'k':
-				if c.offsetY > 0 {
-					c.offsetY--
-				}
-			case 'g':
-				c.offsetY = 0
-			case 'G':
-				c.offsetY = len(c.lines) - height
-				if c.offsetY < 0 {
-					c.offsetY = 0
-				}
-			case 'h':
-				if c.offsetX > 0 {
-					c.offsetX--
-				}
-			case 'l':
-				c.offsetX++
-			}
+			return true
 		}
-	})
+	}
+	return false
 }
 
 // GetFieldHeight returns preferred height

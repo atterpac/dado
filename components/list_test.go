@@ -227,10 +227,9 @@ func TestList_OnSelect(t *testing.T) {
 		selectedItem = item
 	})
 
-	// Simulate selection via InputHandler (Enter key)
-	handler := list.InputHandler()
+	// Simulate selection via HandleKey (Enter key)
 	list.SetSelected(1)
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), nil)
+	list.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
 	assert.Equal(t, 1, selectedIndex)
 	assert.Equal(t, "B", selectedItem.Text)
@@ -248,12 +247,11 @@ func TestList_OnChange(t *testing.T) {
 	})
 
 	// Navigate using vim keys
-	handler := list.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), nil) // down
-	handler(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), nil) // down
+	list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone)) // down
+	list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone)) // down
 
-	// Changes should be recorded via the tview callback
-	// Note: The onChange is triggered by tview's SetChangedFunc
+	// Changes should be recorded via the change callback
+	// Note: The onChange is triggered by SetChangedFunc
 }
 
 // TestList_VimNavigation tests vim-style key bindings.
@@ -262,32 +260,30 @@ func TestList_VimNavigation(t *testing.T) {
 	list.AddItems("A", "B", "C", "D", "E")
 	list.SetSelected(2)
 
-	handler := list.InputHandler()
-
 	t.Run("j moves down", func(t *testing.T) {
 		list.SetSelected(2)
-		handler(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), nil)
+		list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
 		idx, _, _ := list.GetSelected()
 		assert.Equal(t, 3, idx)
 	})
 
 	t.Run("k moves up", func(t *testing.T) {
 		list.SetSelected(2)
-		handler(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone), nil)
+		list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone))
 		idx, _, _ := list.GetSelected()
 		assert.Equal(t, 1, idx)
 	})
 
 	t.Run("g moves to top", func(t *testing.T) {
 		list.SetSelected(3)
-		handler(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone), nil)
+		list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone))
 		idx, _, _ := list.GetSelected()
 		assert.Equal(t, 0, idx)
 	})
 
 	t.Run("G moves to bottom", func(t *testing.T) {
 		list.SetSelected(1)
-		handler(tcell.NewEventKey(tcell.KeyRune, 'G', tcell.ModNone), nil)
+		list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'G', tcell.ModNone))
 		idx, _, _ := list.GetSelected()
 		assert.Equal(t, 4, idx)
 	})
@@ -319,15 +315,6 @@ func TestList_SetHighlightFullLine(t *testing.T) {
 
 	result := list.SetHighlightFullLine(true)
 	assert.Same(t, list, result)
-}
-
-// TestList_Primitive tests getting the underlying tview.List.
-func TestList_Primitive(t *testing.T) {
-	list := NewList()
-
-	primitive := list.Primitive()
-	assert.NotNil(t, primitive)
-	assert.Same(t, list.List, primitive)
 }
 
 // TestList_FluentAPI tests method chaining.
@@ -365,7 +352,6 @@ func TestList_EmptyNavigation(t *testing.T) {
 	list.MoveToTop()
 	list.MoveToBottom()
 
-	handler := list.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone), nil)
-	handler(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone), nil)
+	list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone))
+	list.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone))
 }

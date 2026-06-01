@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // DiffLineType indicates the type of diff line
@@ -41,7 +40,8 @@ type DiffHunk struct {
 	Lines    []DiffLine // Lines in this hunk
 }
 
-// DiffResult contains the complete diff
+// DiffResult is the parsed output of a unified diff. Pass it to DiffViewer.SetResult
+// or let DiffViewer.SetDiff parse the raw diff string for you.
 type DiffResult struct {
 	OldName string     // Original file name
 	NewName string     // New file name
@@ -49,7 +49,8 @@ type DiffResult struct {
 	Binary  bool       // True if binary file
 }
 
-// DiffStats provides summary statistics
+// DiffStats is a summary count of additions, deletions, and affected files
+// across an entire diff. Returned by DiffViewer.GetStats.
 type DiffStats struct {
 	Additions int
 	Deletions int
@@ -86,7 +87,7 @@ func NewDiffViewer() *DiffViewer {
 		showLineNumbers: true,
 		contextLines:    3,
 	}
-	d.initWidget(tview.NewBox())
+	d.initWidget()
 	return d
 }
 
@@ -355,7 +356,7 @@ func (d *DiffViewer) ensureVisible() {
 
 // Draw renders the diff viewer
 func (d *DiffViewer) Draw(screen tcell.Screen) {
-	d.Box.DrawForSubclass(screen, d)
+	d.Box.DrawForSubclass(screen)
 	x, y, width, height := d.GetInnerRect()
 
 	if width <= 0 || height <= 0 || len(d.lines) == 0 {
@@ -486,85 +487,6 @@ func (d *DiffViewer) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input
-func (d *DiffViewer) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return d.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if len(d.lines) == 0 {
-			return
-		}
-
-		switch event.Key() {
-		case tcell.KeyDown:
-			d.moveDown()
-		case tcell.KeyUp:
-			d.moveUp()
-		case tcell.KeyHome:
-			d.selectedIndex = 0
-			d.ensureVisible()
-		case tcell.KeyEnd:
-			d.selectedIndex = len(d.lines) - 1
-			d.ensureVisible()
-		case tcell.KeyPgDn:
-			_, _, _, height := d.GetInnerRect()
-			d.selectedIndex += height
-			if d.selectedIndex >= len(d.lines) {
-				d.selectedIndex = len(d.lines) - 1
-			}
-			d.ensureVisible()
-		case tcell.KeyPgUp:
-			_, _, _, height := d.GetInnerRect()
-			d.selectedIndex -= height
-			if d.selectedIndex < 0 {
-				d.selectedIndex = 0
-			}
-			d.ensureVisible()
-		case tcell.KeyEnter:
-			if d.onLineSelect != nil && d.selectedIndex < len(d.lines) {
-				d.onLineSelect(d.lines[d.selectedIndex])
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				d.moveDown()
-			case 'k':
-				d.moveUp()
-			case 'g':
-				d.selectedIndex = 0
-				d.ensureVisible()
-			case 'G':
-				d.selectedIndex = len(d.lines) - 1
-				d.ensureVisible()
-			case 'n':
-				d.NextChange()
-			case 'N':
-				d.PrevChange()
-			case 'u':
-				d.sideBySide = false
-			case 's':
-				d.sideBySide = true
-			case 'l':
-				d.showLineNumbers = !d.showLineNumbers
-			case 'w':
-				d.wordDiff = !d.wordDiff
-			}
-		case tcell.KeyCtrlD:
-			_, _, _, height := d.GetInnerRect()
-			d.selectedIndex += height / 2
-			if d.selectedIndex >= len(d.lines) {
-				d.selectedIndex = len(d.lines) - 1
-			}
-			d.ensureVisible()
-		case tcell.KeyCtrlU:
-			_, _, _, height := d.GetInnerRect()
-			d.selectedIndex -= height / 2
-			if d.selectedIndex < 0 {
-				d.selectedIndex = 0
-			}
-			d.ensureVisible()
-		}
-	})
-}
-
 func (d *DiffViewer) moveDown() {
 	if d.selectedIndex < len(d.lines)-1 {
 		d.selectedIndex++
@@ -577,55 +499,6 @@ func (d *DiffViewer) moveUp() {
 		d.selectedIndex--
 		d.ensureVisible()
 	}
-}
-
-// MouseHandler handles mouse input
-func (d *DiffViewer) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return d.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		_, y, _, _ := d.GetInnerRect()
-		mx, my := event.Position()
-
-		if !d.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(d)
-			clickedIndex := d.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(d.lines) {
-				d.selectedIndex = clickedIndex
-				return true, d
-			}
-		case tview.MouseLeftDoubleClick:
-			clickedIndex := d.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < len(d.lines) {
-				d.selectedIndex = clickedIndex
-				if d.onLineSelect != nil {
-					d.onLineSelect(d.lines[clickedIndex])
-				}
-				return true, d
-			}
-		case tview.MouseScrollUp:
-			if d.offset > 0 {
-				d.offset--
-			}
-			return true, d
-		case tview.MouseScrollDown:
-			_, _, _, height := d.GetInnerRect()
-			if d.offset < len(d.lines)-height {
-				d.offset++
-			}
-			return true, d
-		}
-
-		return false, nil
-	})
-}
-
-// Focus handles focus
-func (d *DiffViewer) Focus(delegate func(tview.Primitive)) {
-	d.Box.Focus(delegate)
 }
 
 // HasFocus returns whether the component has focus

@@ -1,8 +1,7 @@
 package components
 
 import (
-	"github.com/rivo/tview"
-
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -27,11 +26,9 @@ func NewConfirmModal(title, message string) *Modal {
 	})
 
 	// Create message text view
-	messageView := tview.NewTextView()
+	messageView := core.NewTextView()
 	messageView.SetText(message)
-	messageView.SetTextAlign(tview.AlignCenter)
-	messageView.SetBackgroundColor(theme.Bg())
-	messageView.SetTextColor(theme.Fg())
+	messageView.Box.SetBackgroundColor(theme.Bg())
 	messageView.SetDynamicColors(true)
 
 	m.SetContent(messageView)
@@ -97,11 +94,9 @@ func NewAlertModal(title, message string) *Modal {
 		BlockUntilDismissed:   false,
 	})
 
-	messageView := tview.NewTextView()
+	messageView := core.NewTextView()
 	messageView.SetText(message)
-	messageView.SetTextAlign(tview.AlignCenter)
-	messageView.SetBackgroundColor(theme.Bg())
-	messageView.SetTextColor(theme.Fg())
+	messageView.Box.SetBackgroundColor(theme.Bg())
 	messageView.SetDynamicColors(true)
 
 	m.SetContent(messageView)
@@ -133,11 +128,9 @@ func NewBlockingModal(title, message string) *Modal {
 		BlockUntilDismissed:   true, // Blocks other navigation
 	})
 
-	messageView := tview.NewTextView()
+	messageView := core.NewTextView()
 	messageView.SetText(message)
-	messageView.SetTextAlign(tview.AlignCenter)
-	messageView.SetBackgroundColor(theme.Bg())
-	messageView.SetTextColor(theme.Fg())
+	messageView.Box.SetBackgroundColor(theme.Bg())
 	messageView.SetDynamicColors(true)
 
 	m.SetContent(messageView)
@@ -191,11 +184,9 @@ func NewLoadingModal(title, message string) *Modal {
 		BlockUntilDismissed:   true, // Block navigation while loading
 	})
 
-	messageView := tview.NewTextView()
+	messageView := core.NewTextView()
 	messageView.SetText(message)
-	messageView.SetTextAlign(tview.AlignCenter)
-	messageView.SetBackgroundColor(theme.Bg())
-	messageView.SetTextColor(theme.Fg())
+	messageView.Box.SetBackgroundColor(theme.Bg())
 	messageView.SetDynamicColors(true)
 
 	m.SetContent(messageView)

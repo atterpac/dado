@@ -239,8 +239,7 @@ func TestFormBuilder_OnChangeCallbacks(t *testing.T) {
 	field2, _ := form.GetCheckbox("field2")
 
 	// Trigger change on text field (via typing)
-	handler := field1.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone), nil)
+	field1.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 
 	// Toggle checkbox
 	field2.Toggle()

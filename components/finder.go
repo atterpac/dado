@@ -6,12 +6,13 @@ import (
 	"unicode"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/theme"
 )
 
-// FinderItem represents a searchable item
+// FinderItem is a single entry in the Finder list. Label and Description are
+// both searched; Keywords add extra match terms without appearing in the UI.
+// Matches is populated by the filter pass to drive character-level highlight.
 type FinderItem struct {
 	ID          string   // Unique identifier
 	Label       string   // Primary display text (searchable)
@@ -24,7 +25,8 @@ type FinderItem struct {
 	Matches     []int    // Character indices that matched (for highlighting)
 }
 
-// FinderCategory represents a group header
+// FinderCategory defines a named group header shown above its items.
+// Lower Priority values appear first in the grouped list.
 type FinderCategory struct {
 	Name     string
 	Icon     string
@@ -34,7 +36,9 @@ type FinderCategory struct {
 // PreviewFunc generates preview content for an item
 type PreviewFunc func(item FinderItem) string
 
-// Finder is a fuzzy search component
+// Finder is a fuzzy-search picker with live result filtering, optional grouped
+// categories, preview pane, and vim mode. Type to filter; Enter selects; Tab
+// toggles preview (when previewFunc is set); Esc cancels.
 type Finder struct {
 	widgetBase
 
@@ -90,7 +94,7 @@ func NewFinder() *Finder {
 		previewRatio:    0.4,
 		recentIDs:       make([]string, 0),
 	}
-	f.initWidget(tview.NewBox())
+	f.initWidget()
 	f.SetBorder(true)
 	return f
 }
@@ -518,7 +522,7 @@ func (f *Finder) Draw(screen tcell.Screen) {
 	th := f.th()
 	// Set background color from theme
 	f.Box.SetBackgroundColor(th.Bg())
-	f.Box.DrawForSubclass(screen, f)
+	f.Box.DrawForSubclass(screen)
 	x, y, width, height := f.GetInnerRect()
 
 	if width < 10 || height < 3 {
@@ -790,18 +794,17 @@ func (f *Finder) drawItem(screen tcell.Screen, x, y, width int, item FinderItem,
 	}
 }
 
-// InputHandler handles keyboard input
-func (f *Finder) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return f.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
+// HandleKey handles keyboard input
+func (f *Finder) HandleKey(ev *tcell.EventKey) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-		if f.vimMode {
-			f.handleVimInput(event)
-		} else {
-			f.handleDefaultInput(event)
-		}
-	})
+	if f.vimMode {
+		f.handleVimInput(ev)
+	} else {
+		f.handleDefaultInput(ev)
+	}
+	return false
 }
 
 func (f *Finder) handleDefaultInput(event *tcell.EventKey) {
@@ -984,10 +987,6 @@ func (f *Finder) notifyChange() {
 }
 
 // Focus is called when the finder receives focus
-func (f *Finder) Focus(delegate func(p tview.Primitive)) {
-	f.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the finder has focus
 func (f *Finder) HasFocus() bool {
 	return f.Box.HasFocus()

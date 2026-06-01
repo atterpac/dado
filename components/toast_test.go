@@ -28,7 +28,7 @@ func TestToast_Icon(t *testing.T) {
 
 // TestToastManager_NewToastManager tests ToastManager creation.
 func TestToastManager_NewToastManager(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	assert.NotNil(t, manager)
 	assert.False(t, manager.HasActive())
@@ -37,7 +37,7 @@ func TestToastManager_NewToastManager(t *testing.T) {
 
 // TestToastManager_SetPosition tests position setting.
 func TestToastManager_SetPosition(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	positions := []ToastPosition{
 		ToastTopRight,
@@ -56,7 +56,7 @@ func TestToastManager_SetPosition(t *testing.T) {
 
 // TestToastManager_SetMaxVisible tests max visible setting.
 func TestToastManager_SetMaxVisible(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	result := manager.SetMaxVisible(3)
 
@@ -65,7 +65,7 @@ func TestToastManager_SetMaxVisible(t *testing.T) {
 
 // TestToastManager_SetMaxWidth tests max width setting.
 func TestToastManager_SetMaxWidth(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	result := manager.SetMaxWidth(50)
 
@@ -74,7 +74,7 @@ func TestToastManager_SetMaxWidth(t *testing.T) {
 
 // TestToastManager_SetDefaultDuration tests default duration setting.
 func TestToastManager_SetDefaultDuration(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	result := manager.SetDefaultDuration(5 * time.Second)
 
@@ -83,7 +83,7 @@ func TestToastManager_SetDefaultDuration(t *testing.T) {
 
 // TestToastManager_Show tests showing a basic toast.
 func TestToastManager_Show(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	toast := manager.Show("Test message", ToastInfo)
 
@@ -97,7 +97,7 @@ func TestToastManager_Show(t *testing.T) {
 
 // TestToastManager_ShowWithDuration tests showing with custom duration.
 func TestToastManager_ShowWithDuration(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	toast := manager.ShowWithDuration("Test", ToastWarning, 10*time.Second)
 
@@ -108,7 +108,7 @@ func TestToastManager_ShowWithDuration(t *testing.T) {
 
 // TestToastManager_ShowPersistent tests persistent toasts.
 func TestToastManager_ShowPersistent(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	toast := manager.ShowPersistent("Important!", ToastError)
 
@@ -118,7 +118,7 @@ func TestToastManager_ShowPersistent(t *testing.T) {
 
 // TestToastManager_ShowWithAction tests toasts with actions.
 func TestToastManager_ShowWithAction(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	var actionCalled bool
 	toast := manager.ShowWithAction("Action toast", ToastSuccess,
@@ -138,7 +138,7 @@ func TestToastManager_ShowWithAction(t *testing.T) {
 
 // TestToastManager_ShowWithUndo tests undo toast helper.
 func TestToastManager_ShowWithUndo(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	var undoCalled bool
 	toast := manager.ShowWithUndo("Item deleted", func() { undoCalled = true })
@@ -154,7 +154,7 @@ func TestToastManager_ShowWithUndo(t *testing.T) {
 
 // TestToastManager_ConvenienceMethods tests Info/Success/Warning/Error methods.
 func TestToastManager_ConvenienceMethods(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	t.Run("Info", func(t *testing.T) {
 		toast := manager.Info("Info message")
@@ -179,7 +179,7 @@ func TestToastManager_ConvenienceMethods(t *testing.T) {
 
 // TestToastManager_Dismiss tests dismissing a toast.
 func TestToastManager_Dismiss(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	toast := manager.Show("Test", ToastInfo)
 	require.True(t, manager.HasActive())
@@ -192,7 +192,7 @@ func TestToastManager_Dismiss(t *testing.T) {
 
 // TestToastManager_DismissAll tests dismissing all toasts.
 func TestToastManager_DismissAll(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	manager.Show("Toast 1", ToastInfo)
 	manager.Show("Toast 2", ToastWarning)
@@ -207,7 +207,7 @@ func TestToastManager_DismissAll(t *testing.T) {
 
 // TestToastManager_GetActive tests getting active toasts.
 func TestToastManager_GetActive(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	manager.Show("Toast 1", ToastInfo)
 	manager.Show("Toast 2", ToastWarning)
@@ -221,7 +221,7 @@ func TestToastManager_GetActive(t *testing.T) {
 
 // TestToastManager_SetOnShow tests show callback.
 func TestToastManager_SetOnShow(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	var shownToast *Toast
 	result := manager.SetOnShow(func(toast *Toast) {
@@ -237,7 +237,7 @@ func TestToastManager_SetOnShow(t *testing.T) {
 
 // TestToastManager_SetOnDismiss tests dismiss callback.
 func TestToastManager_SetOnDismiss(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	var dismissedToast *Toast
 	manager.SetOnDismiss(func(toast *Toast) {
@@ -253,7 +253,7 @@ func TestToastManager_SetOnDismiss(t *testing.T) {
 // TestToastManager_HandleAction tests action handling.
 func TestToastManager_HandleAction(t *testing.T) {
 	t.Run("valid action", func(t *testing.T) {
-		manager := NewToastManager(nil)
+		manager := NewToastManager()
 
 		var actionCalled bool
 		manager.ShowWithAction("Test", ToastInfo,
@@ -268,7 +268,7 @@ func TestToastManager_HandleAction(t *testing.T) {
 	})
 
 	t.Run("invalid action index", func(t *testing.T) {
-		manager := NewToastManager(nil)
+		manager := NewToastManager()
 		manager.ShowWithAction("Test", ToastInfo,
 			ToastAction{Label: "Action", Handler: func() {}},
 		)
@@ -280,7 +280,7 @@ func TestToastManager_HandleAction(t *testing.T) {
 	})
 
 	t.Run("no toasts", func(t *testing.T) {
-		manager := NewToastManager(nil)
+		manager := NewToastManager()
 
 		result := manager.HandleAction(0)
 
@@ -292,7 +292,7 @@ func TestToastManager_HandleAction(t *testing.T) {
 func TestToastManager_FluentAPI(t *testing.T) {
 	var showCalled, dismissCalled bool
 
-	manager := NewToastManager(nil).
+	manager := NewToastManager().
 		SetPosition(ToastBottomRight).
 		SetMaxVisible(3).
 		SetMaxWidth(50).
@@ -309,7 +309,7 @@ func TestToastManager_FluentAPI(t *testing.T) {
 
 // TestToastManager_UniqueIDs tests that toast IDs are unique.
 func TestToastManager_UniqueIDs(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	ids := make(map[string]bool)
 	for i := 0; i < 100; i++ {
@@ -321,7 +321,7 @@ func TestToastManager_UniqueIDs(t *testing.T) {
 
 // TestToastManager_ThreadSafety tests concurrent access.
 func TestToastManager_ThreadSafety(t *testing.T) {
-	manager := NewToastManager(nil)
+	manager := NewToastManager()
 
 	done := make(chan bool)
 

@@ -2,7 +2,6 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // ButtonVariant defines the visual style of a button.
@@ -40,7 +39,7 @@ func NewButton(label string) *Button {
 		label:   label,
 		variant: ButtonDefault,
 	}
-	b.initWidget(tview.NewBox())
+	b.initWidget()
 	return b
 }
 
@@ -82,7 +81,7 @@ func (b *Button) Click() {
 
 // Draw renders the button.
 func (b *Button) Draw(screen tcell.Screen) {
-	b.Box.DrawForSubclass(screen, b)
+	b.Box.DrawForSubclass(screen)
 
 	x, y, width, height := b.GetInnerRect()
 	if width <= 0 || height <= 0 {
@@ -157,52 +156,30 @@ func (b *Button) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (b *Button) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return b.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if b.disabled {
-			return
-		}
+func (b *Button) HandleKey(ev *tcell.EventKey) bool {
+	if b.disabled {
+		return false
+	}
 
-		switch event.Key() {
-		case tcell.KeyEnter:
-			b.Click()
-		}
+	switch ev.Key() {
+	case tcell.KeyEnter:
+		b.Click()
+		return true
+	}
 
-		switch event.Rune() {
-		case ' ':
-			b.Click()
-		}
-	})
-}
+	switch ev.Rune() {
+	case ' ':
+		b.Click()
+		return true
+	}
 
-// MouseHandler handles mouse input.
-func (b *Button) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return b.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if b.disabled {
-			return false, nil
-		}
-
-		x, y := event.Position()
-		bx, by, bw, bh := b.GetInnerRect()
-
-		// Check if click is within button bounds
-		if x >= bx && x < bx+bw && y >= by && y < by+bh {
-			if action == tview.MouseLeftClick {
-				setFocus(b)
-				b.Click()
-				return true, b
-			}
-		}
-
-		return false, nil
-	})
+	return false
 }
 
 // Focus handles focus.
-func (b *Button) Focus(delegate func(tview.Primitive)) {
+func (b *Button) Focus() {
 	b.focused = true
-	b.Box.Focus(delegate)
+	b.Box.Focus()
 }
 
 // Blur handles blur.
@@ -214,11 +191,6 @@ func (b *Button) Blur() {
 // HasFocus returns whether the button has focus.
 func (b *Button) HasFocus() bool {
 	return b.focused
-}
-
-// Primitive returns the underlying tview.Box for advanced usage.
-func (b *Button) Primitive() *tview.Box {
-	return b.Box
 }
 
 // GetFieldHeight returns the preferred height for this button.

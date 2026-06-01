@@ -2,10 +2,10 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
-// Trend indicates value direction
+// Trend indicates the direction of a metric change. Use TrendUp/TrendDown for
+// positive/negative change and TrendNeutral when there is no meaningful direction.
 type Trend int
 
 const (
@@ -26,7 +26,8 @@ func (t Trend) Icon() string {
 	}
 }
 
-// MetricCard displays a metric with optional sparkline and trend
+// MetricCard is a dashboard tile that shows a primary value, label, trend
+// indicator, and an optional sparkline in the lower portion of the card.
 type MetricCard struct {
 	widgetBase
 
@@ -62,7 +63,7 @@ func NewMetricCard() *MetricCard {
 		showBorder: true,
 		trend:      TrendNeutral,
 	}
-	m.initWidget(tview.NewBox())
+	m.initWidget()
 	return m
 }
 
@@ -206,7 +207,7 @@ func (m *MetricCard) GetTrend() Trend {
 
 // Draw renders the metric card
 func (m *MetricCard) Draw(screen tcell.Screen) {
-	m.Box.DrawForSubclass(screen, m)
+	m.Box.DrawForSubclass(screen)
 	x, y, width, height := m.GetInnerRect()
 
 	if width <= 0 || height <= 0 {

@@ -2,18 +2,21 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
-// Tab represents a single tab with content.
+// Tab holds the display metadata and content primitive for a single tab.
+// Badge renders a numeric count badge on the tab header when > 0.
 type Tab struct {
 	Name    string
 	Icon    string
 	Badge   int
-	Content tview.Primitive
+	Content core.Widget
 }
 
-// Tabs is a tabbed container component.
+// Tabs is a tabbed container. Tab/Shift+Tab and H/L cycle tabs; 1–9 jump
+// directly; x closes the active tab when SetClosable(true) is set.
 type Tabs struct {
 	widgetBase
 
@@ -36,12 +39,12 @@ func NewTabs() *Tabs {
 		showIcons:  true,
 		showBadges: true,
 	}
-	t.initWidget(tview.NewBox())
+	t.initWidget()
 	return t
 }
 
 // AddTab adds a new tab.
-func (t *Tabs) AddTab(name string, content tview.Primitive) *Tabs {
+func (t *Tabs) AddTab(name string, content core.Widget) *Tabs {
 	t.tabs = append(t.tabs, &Tab{
 		Name:    name,
 		Content: content,
@@ -50,7 +53,7 @@ func (t *Tabs) AddTab(name string, content tview.Primitive) *Tabs {
 }
 
 // AddTabWithIcon adds a new tab with an icon.
-func (t *Tabs) AddTabWithIcon(name, icon string, content tview.Primitive) *Tabs {
+func (t *Tabs) AddTabWithIcon(name, icon string, content core.Widget) *Tabs {
 	t.tabs = append(t.tabs, &Tab{
 		Name:    name,
 		Icon:    icon,
@@ -161,7 +164,7 @@ func (t *Tabs) TabCount() int {
 
 // Draw renders the tabs.
 func (t *Tabs) Draw(screen tcell.Screen) {
-	t.Box.DrawForSubclass(screen, t)
+	t.Box.DrawForSubclass(screen)
 	x, y, width, height := t.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -260,46 +263,45 @@ func (t *Tabs) Draw(screen tcell.Screen) {
 	_ = errorColor // Available for badge highlight if needed
 }
 
-// InputHandler handles keyboard input.
-func (t *Tabs) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// First, try to pass to active content
-		if t.activeIndex >= 0 && t.activeIndex < len(t.tabs) {
-			content := t.tabs[t.activeIndex].Content
-			if content != nil {
-				if handler := content.InputHandler(); handler != nil {
-					// Check if this is a tab-specific key first
-					if !t.isTabKey(event) {
-						handler(event, setFocus)
-						return
-					}
+// HandleKey processes a key event for the Tabs.
+func (t *Tabs) HandleKey(ev *tcell.EventKey) bool {
+	// First, try to pass to active content
+	if t.activeIndex >= 0 && t.activeIndex < len(t.tabs) {
+		content := t.tabs[t.activeIndex].Content
+		if content != nil {
+			if kh, ok := content.(core.KeyHandler); ok {
+				// Check if this is a tab-specific key first
+				if !t.isTabKey(ev) {
+					kh.HandleKey(ev)
+					return false
 				}
 			}
 		}
+	}
 
-		switch event.Key() {
-		case tcell.KeyTab:
-			t.nextTab()
-		case tcell.KeyBacktab:
+	switch ev.Key() {
+	case tcell.KeyTab:
+		t.nextTab()
+	case tcell.KeyBacktab:
+		t.prevTab()
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			idx := int(ev.Rune() - '1')
+			if idx < len(t.tabs) {
+				t.SetActive(idx)
+			}
+		case 'H':
 			t.prevTab()
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-				idx := int(event.Rune() - '1')
-				if idx < len(t.tabs) {
-					t.SetActive(idx)
-				}
-			case 'H':
-				t.prevTab()
-			case 'L':
-				t.nextTab()
-			case 'x':
-				if t.closable {
-					t.closeCurrentTab()
-				}
+		case 'L':
+			t.nextTab()
+		case 'x':
+			if t.closable {
+				t.closeCurrentTab()
 			}
 		}
-	})
+	}
+	return false
 }
 
 func (t *Tabs) isTabKey(event *tcell.EventKey) bool {
@@ -345,55 +347,6 @@ func (t *Tabs) closeCurrentTab() {
 	t.RemoveTab(t.activeIndex)
 }
 
-// MouseHandler handles mouse input.
-func (t *Tabs) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return t.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		x, y, _, _ := t.GetInnerRect()
-		mx, my := event.Position()
-
-		if !t.InRect(mx, my) {
-			return false, nil
-		}
-
-		// Check if click is on tab bar
-		if my == y {
-			if action == tview.MouseLeftClick {
-				setFocus(t)
-				// Find which tab was clicked
-				col := x
-				for i, tab := range t.tabs {
-					tabWidth := t.calcTabWidth(tab)
-					if mx >= col && mx < col+tabWidth {
-						// Check if close button was clicked
-						if t.closable && mx == col+tabWidth-2 {
-							if t.onClose == nil || t.onClose(i) {
-								t.RemoveTab(i)
-							}
-						} else {
-							t.SetActive(i)
-						}
-						return true, t
-					}
-					col += tabWidth + 1 // +1 for separator
-				}
-				return true, t
-			}
-		}
-
-		// Pass to content
-		if t.activeIndex >= 0 && t.activeIndex < len(t.tabs) {
-			content := t.tabs[t.activeIndex].Content
-			if content != nil {
-				if handler := content.MouseHandler(); handler != nil {
-					return handler(action, event, setFocus)
-				}
-			}
-		}
-
-		return false, nil
-	})
-}
-
 func (t *Tabs) calcTabWidth(tab *Tab) int {
 	width := 2 // padding
 	if t.showIcons && tab.Icon != "" {
@@ -410,15 +363,15 @@ func (t *Tabs) calcTabWidth(tab *Tab) int {
 }
 
 // Focus handles focus.
-func (t *Tabs) Focus(delegate func(tview.Primitive)) {
+func (t *Tabs) Focus() {
 	if t.activeIndex >= 0 && t.activeIndex < len(t.tabs) {
 		content := t.tabs[t.activeIndex].Content
 		if content != nil {
-			delegate(content)
+			content.Focus()
 			return
 		}
 	}
-	t.Box.Focus(delegate)
+	t.Box.Focus()
 }
 
 // HasFocus returns whether the tabs or content has focus.

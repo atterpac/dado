@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -15,7 +15,7 @@ type TableCell struct {
 	Text       string
 	Color      tcell.Color   // Explicit color (0 = use Status color or default Fg)
 	Status     *theme.Status // Typed status for color/icon (takes precedence over Color if set)
-	Align      int           // tview.AlignLeft, AlignCenter, AlignRight
+	Align      int           // core.AlignLeft, AlignCenter, AlignRight
 	Expansion  int           // Column expansion factor
 	MaxWidth   int           // Maximum width (0 = no limit)
 	Selectable bool          // Whether this cell is selectable
@@ -23,7 +23,7 @@ type TableCell struct {
 
 // Table is an enhanced table wrapper with header support and selection.
 type Table struct {
-	*tview.Table
+	*core.Table
 	headers           []string
 	hasHeader         bool
 	multiSelect       bool
@@ -51,7 +51,7 @@ func (t *Table) Subs() *Subscriptions { return &t.subs }
 // NewTable creates a new enhanced table.
 func NewTable() *Table {
 	t := &Table{
-		Table:         tview.NewTable(),
+		Table:         core.NewTable(),
 		selectedRows:  make(map[int]bool),
 		selectedKeys:  make(map[string]bool),
 		rowKeyToIndex: make(map[string]int),
@@ -63,7 +63,7 @@ func NewTable() *Table {
 	t.Table.SetSeparator(' ')
 	t.Table.SetBackgroundColor(theme.Bg())
 
-	t.subs.Add(theme.Register(t.Table))
+	t.subs.Add(theme.RegisterFn(func(c tcell.Color) { t.Table.SetBackgroundColor(c) }))
 
 	return t
 }
@@ -75,9 +75,9 @@ func (t *Table) SetHeaders(headers ...string) *Table {
 	t.Table.SetFixed(1, 0)
 
 	for col, header := range headers {
-		cell := tview.NewTableCell(header).
+		cell := core.NewTableCell(header).
 			SetSelectable(false).
-			SetAlign(tview.AlignLeft).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1)
 		t.Table.SetCell(0, col, cell)
 	}
@@ -85,15 +85,15 @@ func (t *Table) SetHeaders(headers ...string) *Table {
 	return t
 }
 
-// AddRow adds a data row with default foreground color.
+// AddRow adds a data row with theme-following foreground color.
+// Cell color is left as ColorDefault so it tracks theme.Fg() on every draw.
 func (t *Table) AddRow(cells ...string) *Table {
 	row := t.Table.GetRowCount()
-	fg := theme.Fg()
 
 	for col, text := range cells {
-		cell := tview.NewTableCell(text).
-			SetTextColor(fg).
-			SetAlign(tview.AlignLeft).
+		cell := core.NewTableCell(text).
+			// Leave Color as ColorDefault — components.Table.Draw refreshes it to theme.Fg()
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(row, col, cell)
@@ -111,9 +111,9 @@ func (t *Table) AddColoredRow(cells []string, colors []tcell.Color) *Table {
 		if col < len(colors) && colors[col] != 0 {
 			color = colors[col]
 		}
-		cell := tview.NewTableCell(text).
+		cell := core.NewTableCell(text).
 			SetTextColor(color).
-			SetAlign(tview.AlignLeft).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(row, col, cell)
@@ -141,7 +141,7 @@ func (t *Table) AddStyledRow(cells []TableCell) *Table {
 			color = theme.Fg()
 		}
 
-		cell := tview.NewTableCell(text).
+		cell := core.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tc.Align).
 			SetExpansion(tc.Expansion).
@@ -310,7 +310,7 @@ func (t *Table) Draw(screen tcell.Screen) {
 	// If empty state is configured and there are no data rows, render it instead
 	if t.emptyState != nil && t.GetDataRowCount() == 0 {
 		t.Table.SetBackgroundColor(theme.Bg())
-		t.Table.DrawForSubclass(screen, t)
+		t.Table.DrawForSubclass(screen, t.Table)
 		x, y, w, h := t.Table.GetInnerRect()
 		t.emptyState.SetRect(x, y, w, h)
 		t.emptyState.Draw(screen)
@@ -353,12 +353,14 @@ func (t *Table) Draw(screen tcell.Screen) {
 			cell := t.Table.GetCell(row, col)
 			if cell != nil {
 				cell.SetBackgroundColor(bg)
-				// Refresh color for cells with a typed Status reference
 				if status, ok := cell.GetReference().(*theme.Status); ok && status != nil {
+					// Typed status: use status-specific color
 					cell.SetTextColor(status.Color())
+				} else if cell.Color == tcell.ColorDefault {
+					// Theme-following cell (added via AddRow): refresh to current fg
+					cell.SetTextColor(theme.Fg())
 				}
-				// Note: We intentionally don't set fg for cells without a reference,
-				// as that would overwrite custom colors set via AddRowWithColor().
+				// Cells with explicit non-default colors (AddColoredRow/AddRowWithColor) are unchanged
 			}
 		}
 	}
@@ -381,31 +383,6 @@ func (t *Table) Draw(screen tcell.Screen) {
 	}
 
 	t.Table.Draw(screen)
-}
-
-// InputHandler handles table input including multi-select.
-func (t *Table) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return t.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Handle multi-select keys
-		if t.multiSelect {
-			switch event.Key() {
-			case tcell.KeyRune:
-				switch event.Rune() {
-				case ' ':
-					t.ToggleSelection()
-					return
-				}
-			case tcell.KeyCtrlA:
-				t.SelectAll()
-				return
-			}
-		}
-
-		// Default table handling
-		if handler := t.Table.InputHandler(); handler != nil {
-			handler(event, setFocus)
-		}
-	})
 }
 
 // notifySelectionChange calls the selection change callback.
@@ -436,7 +413,7 @@ func (t *Table) ScrollToRow(row int) {
 // Index Conversion Helpers
 // =============================================================================
 
-// dataIndexToTableRow converts a 0-based data row index to tview table row.
+// dataIndexToTableRow converts a 0-based data row index to a table row.
 // Data index 0 = first data row (after header if present).
 func (t *Table) dataIndexToTableRow(dataIndex int) int {
 	if t.hasHeader {
@@ -445,7 +422,7 @@ func (t *Table) dataIndexToTableRow(dataIndex int) int {
 	return dataIndex
 }
 
-// tableRowToDataIndex converts a tview table row to 0-based data index.
+// tableRowToDataIndex converts a table row to a 0-based data index.
 func (t *Table) tableRowToDataIndex(tableRow int) int {
 	if t.hasHeader {
 		return tableRow - 1
@@ -469,11 +446,9 @@ func (t *Table) UpdateRow(index int, cells ...string) error {
 		return fmt.Errorf("cannot update header row via UpdateRow")
 	}
 
-	fg := theme.Fg()
 	for col, text := range cells {
-		cell := tview.NewTableCell(text).
-			SetTextColor(fg).
-			SetAlign(tview.AlignLeft).
+		cell := core.NewTableCell(text).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
@@ -498,9 +473,9 @@ func (t *Table) UpdateColoredRow(index int, cells []string, colors []tcell.Color
 		if col < len(colors) && colors[col] != 0 {
 			color = colors[col]
 		}
-		cell := tview.NewTableCell(text).
+		cell := core.NewTableCell(text).
 			SetTextColor(color).
-			SetAlign(tview.AlignLeft).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
@@ -534,7 +509,7 @@ func (t *Table) UpdateStyledRow(index int, cells []TableCell) error {
 			color = theme.Fg()
 		}
 
-		cell := tview.NewTableCell(text).
+		cell := core.NewTableCell(text).
 			SetTextColor(color).
 			SetAlign(tc.Align).
 			SetExpansion(tc.Expansion).
@@ -609,15 +584,13 @@ func (t *Table) InsertRowAt(index int, cells ...string) error {
 		return fmt.Errorf("cannot insert before header row")
 	}
 
-	// Use tview's InsertRow to shift existing rows
+	// Use the table's InsertRow to shift existing rows
 	t.Table.InsertRow(tableRow)
 
 	// Populate the new row
-	fg := theme.Fg()
 	for col, text := range cells {
-		cell := tview.NewTableCell(text).
-			SetTextColor(fg).
-			SetAlign(tview.AlignLeft).
+		cell := core.NewTableCell(text).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
@@ -651,9 +624,9 @@ func (t *Table) InsertColoredRowAt(index int, cells []string, colors []tcell.Col
 		if col < len(colors) && colors[col] != 0 {
 			color = colors[col]
 		}
-		cell := tview.NewTableCell(text).
+		cell := core.NewTableCell(text).
 			SetTextColor(color).
-			SetAlign(tview.AlignLeft).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(tableRow, col, cell)
@@ -683,7 +656,7 @@ func (t *Table) RemoveRowAt(index int) error {
 	}
 	delete(t.rowIndexToKey, index)
 
-	// Remove from tview
+	// Remove from the table
 	t.Table.RemoveRow(tableRow)
 
 	// Update key mappings for shifted rows
@@ -912,9 +885,9 @@ func (t *Table) AddRowWithColor(color tcell.Color, cells ...string) int {
 	row := t.Table.GetRowCount()
 
 	for col, text := range cells {
-		cell := tview.NewTableCell(text).
+		cell := core.NewTableCell(text).
 			SetTextColor(color).
-			SetAlign(tview.AlignLeft).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true)
 		t.Table.SetCell(row, col, cell)
@@ -947,9 +920,9 @@ func (t *Table) AddRowWithStatus(status *theme.Status, statusCol int, cells ...s
 			cellRef = status
 		}
 
-		cell := tview.NewTableCell(displayText).
+		cell := core.NewTableCell(displayText).
 			SetTextColor(cellColor).
-			SetAlign(tview.AlignLeft).
+			SetAlign(core.AlignLeft).
 			SetExpansion(1).
 			SetSelectable(true).
 			SetReference(cellRef)
@@ -961,7 +934,7 @@ func (t *Table) AddRowWithStatus(status *theme.Status, statusCol int, cells ...s
 
 // GetCell returns the cell at the specified table row and column.
 // Note: row is the table row (including header), not data index.
-func (t *Table) GetCell(row, col int) *tview.TableCell {
+func (t *Table) GetCell(row, col int) *core.TableCell {
 	return t.Table.GetCell(row, col)
 }
 
@@ -975,4 +948,39 @@ func (t *Table) SetSelectionChangedFunc(fn func(row, col int)) *Table {
 func (t *Table) SetSelectedFunc(fn func(row, col int)) *Table {
 	t.Table.SetSelectedFunc(fn)
 	return t
+}
+
+// Focus implements core.Widget.
+func (t *Table) Focus() {
+	t.Table.Focus()
+}
+
+// Blur implements core.Widget.
+func (t *Table) Blur() {
+	t.Table.Blur()
+}
+
+// Rect implements core.Widget.
+func (t *Table) Rect() (x, y, w, h int) {
+	x, y, w, h = t.Table.GetRect()
+	return
+}
+
+// HandleKey processes a key event for the Table.
+// Multi-select keys (Space, Ctrl+A) are handled directly; all other keys
+// are delegated to the table's built-in input handler (arrows, Enter, etc.).
+func (t *Table) HandleKey(ev *tcell.EventKey) bool {
+	if t.multiSelect {
+		switch ev.Key() {
+		case tcell.KeyRune:
+			if ev.Rune() == ' ' {
+				t.ToggleSelection()
+				return true
+			}
+		case tcell.KeyCtrlA:
+			t.SelectAll()
+			return true
+		}
+	}
+	return t.Table.HandleKey(ev)
 }

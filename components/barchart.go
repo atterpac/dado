@@ -2,10 +2,10 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
-// BarOrientation defines bar direction
+// BarOrientation controls whether bars are drawn horizontally (left-to-right)
+// or vertically (bottom-to-top). Horizontal works better for long labels.
 type BarOrientation int
 
 const (
@@ -13,14 +13,15 @@ const (
 	BarVertical
 )
 
-// BarItem represents a single bar in the chart
+// BarItem is a single bar entry. Color 0 falls back to the theme accent color.
 type BarItem struct {
 	Label string
 	Value float64
 	Color tcell.Color // 0 = use theme accent
 }
 
-// BarChart renders horizontal or vertical bar charts
+// BarChart renders read-only horizontal or vertical bar charts. Update data
+// with SetItems; the component redraws on the next draw cycle.
 type BarChart struct {
 	widgetBase
 
@@ -59,7 +60,7 @@ func NewBarChart() *BarChart {
 		filledChar:  '█',
 		emptyChar:   '░',
 	}
-	c.initWidget(tview.NewBox())
+	c.initWidget()
 	return c
 }
 
@@ -237,7 +238,7 @@ func (c *BarChart) recalculateRange() {
 
 // Draw renders the bar chart
 func (c *BarChart) Draw(screen tcell.Screen) {
-	c.Box.DrawForSubclass(screen, c)
+	c.Box.DrawForSubclass(screen)
 	x, y, width, height := c.GetInnerRect()
 
 	if width <= 0 || height <= 0 {

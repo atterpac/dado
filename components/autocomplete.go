@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/theme"
 )
@@ -26,7 +25,12 @@ type SuggestionProvider func(text string, cursorPos int) []Suggestion
 // Returns the history entry string, or empty string if none.
 type HistoryProvider func(direction int) string
 
-// AutocompleteInput is an input field with autocomplete support.
+// AutocompleteInput is an input field with a suggestion dropdown. The
+// SuggestionProvider is called on every keystroke; the dropdown appears when
+// it returns at least one result. Tab or Enter accepts the highlighted
+// suggestion, replacing the current token (word ending at cursor, split on
+// spaces and parentheses). Up/Down navigate the list; Esc closes it without
+// accepting. Up/Down also navigate history when the dropdown is closed.
 type AutocompleteInput struct {
 	widgetBase
 	text           string
@@ -59,7 +63,7 @@ func NewAutocompleteInput() *AutocompleteInput {
 		prompt:         "> ",
 		placeholder:    "Type to search...",
 	}
-	ai.initWidget(tview.NewBox())
+	ai.initWidget()
 	return ai
 }
 
@@ -142,6 +146,7 @@ func (ai *AutocompleteInput) SetOnSelect(fn func(suggestion Suggestion)) *Autoco
 // SetSuggestionProvider sets a function to provide suggestions.
 func (ai *AutocompleteInput) SetSuggestionProvider(fn SuggestionProvider) *AutocompleteInput {
 	ai.suggestionFn = fn
+	ai.updateSuggestions()
 	return ai
 }
 
@@ -224,7 +229,7 @@ func (ai *AutocompleteInput) acceptSuggestion() {
 
 // Draw renders the autocomplete input.
 func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
-	ai.Box.DrawForSubclass(screen, ai)
+	ai.Box.DrawForSubclass(screen)
 
 	x, y, width, height := ai.GetInnerRect()
 	if width <= 0 || height < 1 {
@@ -242,6 +247,7 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 	suggestionStyle := tcell.StyleDefault.Foreground(th.Fg()).Background(th.BgLight())
 	selectedStyle := tcell.StyleDefault.Foreground(th.Bg()).Background(th.Accent())
 	categoryStyle := tcell.StyleDefault.Foreground(th.FgDim()).Background(th.BgLight())
+	suggestionHintStyle := tcell.StyleDefault.Foreground(th.FgDim()).Background(th.BgLight())
 
 	// Calculate content area (inside border)
 	inputRows := 3
@@ -359,7 +365,7 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 					descOffset := textOffset + len([]rune(sugg.Text)) + 2
 					if descOffset < suggX+suggWidth-10 {
 						desc := "- " + sugg.Description
-						descStyle := hintStyle
+						descStyle := suggestionHintStyle
 						if i == ai.selectedIndex {
 							descStyle = selectedStyle
 						}
@@ -384,60 +390,41 @@ func (ai *AutocompleteInput) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (ai *AutocompleteInput) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return ai.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyEnter:
-			if ai.showSuggestion && ai.selectedIndex >= 0 && ai.selectedIndex < len(ai.filteredSuggs) {
-				// Accept suggestion on Enter if dropdown is visible
-				ai.acceptSuggestion()
-			} else if ai.onSubmit != nil {
-				ai.onSubmit(ai.text)
-			}
+// HandleKey handles keyboard input.
+func (ai *AutocompleteInput) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyEnter:
+		if ai.showSuggestion && ai.selectedIndex >= 0 && ai.selectedIndex < len(ai.filteredSuggs) {
+			// Accept suggestion on Enter if dropdown is visible
+			ai.acceptSuggestion()
+		} else if ai.onSubmit != nil {
+			ai.onSubmit(ai.text)
+		}
 
-		case tcell.KeyEscape:
-			if ai.showSuggestion {
-				// Close suggestions first
-				ai.showSuggestion = false
-			} else if ai.onCancel != nil {
-				ai.onCancel()
-			}
+	case tcell.KeyEscape:
+		if ai.showSuggestion {
+			// Close suggestions first
+			ai.showSuggestion = false
+		} else if ai.onCancel != nil {
+			ai.onCancel()
+		}
 
-		case tcell.KeyTab:
-			// Accept current suggestion
-			if ai.showSuggestion && len(ai.filteredSuggs) > 0 {
-				ai.acceptSuggestion()
-				ai.updateSuggestions() // Show new suggestions
-			}
+	case tcell.KeyTab:
+		// Accept current suggestion
+		if ai.showSuggestion && len(ai.filteredSuggs) > 0 {
+			ai.acceptSuggestion()
+			ai.updateSuggestions() // Show new suggestions
+		}
 
-		case tcell.KeyUp:
-			if ai.showSuggestion && len(ai.filteredSuggs) > 0 {
-				ai.selectedIndex--
-				if ai.selectedIndex < 0 {
-					ai.selectedIndex = len(ai.filteredSuggs) - 1
-				}
-			} else if ai.historyFn != nil {
-				// Navigate to previous history entry
-				if historyEntry := ai.historyFn(-1); historyEntry != "" {
-					ai.text = historyEntry
-					ai.cursorPos = len(historyEntry)
-					ai.updateSuggestions()
-					if ai.onChange != nil {
-						ai.onChange(ai.text)
-					}
-				}
+	case tcell.KeyUp:
+		if ai.showSuggestion && len(ai.filteredSuggs) > 0 {
+			ai.selectedIndex--
+			if ai.selectedIndex < 0 {
+				ai.selectedIndex = len(ai.filteredSuggs) - 1
 			}
-
-		case tcell.KeyDown:
-			if ai.showSuggestion && len(ai.filteredSuggs) > 0 {
-				ai.selectedIndex++
-				if ai.selectedIndex >= len(ai.filteredSuggs) {
-					ai.selectedIndex = 0
-				}
-			} else if ai.historyFn != nil {
-				// Navigate to next history entry
-				historyEntry := ai.historyFn(+1)
+		} else if ai.historyFn != nil {
+			// Navigate to previous history entry
+			if historyEntry := ai.historyFn(-1); historyEntry != "" {
 				ai.text = historyEntry
 				ai.cursorPos = len(historyEntry)
 				ai.updateSuggestions()
@@ -445,92 +432,106 @@ func (ai *AutocompleteInput) InputHandler() func(event *tcell.EventKey, setFocus
 					ai.onChange(ai.text)
 				}
 			}
+		}
 
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if ai.cursorPos > 0 {
-				runes := []rune(ai.text)
-				ai.text = string(runes[:ai.cursorPos-1]) + string(runes[ai.cursorPos:])
-				ai.cursorPos--
-				ai.updateSuggestions()
-				if ai.onChange != nil {
-					ai.onChange(ai.text)
-				}
+	case tcell.KeyDown:
+		if ai.showSuggestion && len(ai.filteredSuggs) > 0 {
+			ai.selectedIndex++
+			if ai.selectedIndex >= len(ai.filteredSuggs) {
+				ai.selectedIndex = 0
 			}
-
-		case tcell.KeyDelete:
-			runes := []rune(ai.text)
-			if ai.cursorPos < len(runes) {
-				ai.text = string(runes[:ai.cursorPos]) + string(runes[ai.cursorPos+1:])
-				ai.updateSuggestions()
-				if ai.onChange != nil {
-					ai.onChange(ai.text)
-				}
-			}
-
-		case tcell.KeyLeft:
-			if ai.cursorPos > 0 {
-				ai.cursorPos--
-			}
-
-		case tcell.KeyRight:
-			if ai.cursorPos < len(ai.text) {
-				ai.cursorPos++
-			}
-
-		case tcell.KeyHome, tcell.KeyCtrlA:
-			ai.cursorPos = 0
-
-		case tcell.KeyEnd, tcell.KeyCtrlE:
-			ai.cursorPos = len(ai.text)
-
-		case tcell.KeyCtrlU:
-			// Clear line
-			ai.text = ""
-			ai.cursorPos = 0
-			ai.updateSuggestions()
-			if ai.onChange != nil {
-				ai.onChange(ai.text)
-			}
-
-		case tcell.KeyCtrlW:
-			// Delete word backward
-			if ai.cursorPos > 0 {
-				runes := []rune(ai.text)
-				pos := ai.cursorPos - 1
-				// Skip trailing spaces
-				for pos > 0 && runes[pos] == ' ' {
-					pos--
-				}
-				// Skip word
-				for pos > 0 && runes[pos-1] != ' ' {
-					pos--
-				}
-				ai.text = string(runes[:pos]) + string(runes[ai.cursorPos:])
-				ai.cursorPos = pos
-				ai.updateSuggestions()
-				if ai.onChange != nil {
-					ai.onChange(ai.text)
-				}
-			}
-
-		case tcell.KeyRune:
-			r := event.Rune()
-			runes := []rune(ai.text)
-			ai.text = string(runes[:ai.cursorPos]) + string(r) + string(runes[ai.cursorPos:])
-			ai.cursorPos++
+		} else if ai.historyFn != nil {
+			// Navigate to next history entry
+			historyEntry := ai.historyFn(+1)
+			ai.text = historyEntry
+			ai.cursorPos = len(historyEntry)
 			ai.updateSuggestions()
 			if ai.onChange != nil {
 				ai.onChange(ai.text)
 			}
 		}
-	})
+
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if ai.cursorPos > 0 {
+			runes := []rune(ai.text)
+			ai.text = string(runes[:ai.cursorPos-1]) + string(runes[ai.cursorPos:])
+			ai.cursorPos--
+			ai.updateSuggestions()
+			if ai.onChange != nil {
+				ai.onChange(ai.text)
+			}
+		}
+
+	case tcell.KeyDelete:
+		runes := []rune(ai.text)
+		if ai.cursorPos < len(runes) {
+			ai.text = string(runes[:ai.cursorPos]) + string(runes[ai.cursorPos+1:])
+			ai.updateSuggestions()
+			if ai.onChange != nil {
+				ai.onChange(ai.text)
+			}
+		}
+
+	case tcell.KeyLeft:
+		if ai.cursorPos > 0 {
+			ai.cursorPos--
+		}
+
+	case tcell.KeyRight:
+		if ai.cursorPos < len(ai.text) {
+			ai.cursorPos++
+		}
+
+	case tcell.KeyHome, tcell.KeyCtrlA:
+		ai.cursorPos = 0
+
+	case tcell.KeyEnd, tcell.KeyCtrlE:
+		ai.cursorPos = len(ai.text)
+
+	case tcell.KeyCtrlU:
+		// Clear line
+		ai.text = ""
+		ai.cursorPos = 0
+		ai.updateSuggestions()
+		if ai.onChange != nil {
+			ai.onChange(ai.text)
+		}
+
+	case tcell.KeyCtrlW:
+		// Delete word backward
+		if ai.cursorPos > 0 {
+			runes := []rune(ai.text)
+			pos := ai.cursorPos - 1
+			// Skip trailing spaces
+			for pos > 0 && runes[pos] == ' ' {
+				pos--
+			}
+			// Skip word
+			for pos > 0 && runes[pos-1] != ' ' {
+				pos--
+			}
+			ai.text = string(runes[:pos]) + string(runes[ai.cursorPos:])
+			ai.cursorPos = pos
+			ai.updateSuggestions()
+			if ai.onChange != nil {
+				ai.onChange(ai.text)
+			}
+		}
+
+	case tcell.KeyRune:
+		r := ev.Rune()
+		runes := []rune(ai.text)
+		ai.text = string(runes[:ai.cursorPos]) + string(r) + string(runes[ai.cursorPos:])
+		ai.cursorPos++
+		ai.updateSuggestions()
+		if ai.onChange != nil {
+			ai.onChange(ai.text)
+		}
+	}
+	return false
 }
 
 // Focus sets focus to this input.
-func (ai *AutocompleteInput) Focus(delegate func(p tview.Primitive)) {
-	ai.Box.Focus(delegate)
-}
-
 // HasFocus returns whether this input has focus.
 func (ai *AutocompleteInput) HasFocus() bool {
 	return ai.Box.HasFocus()
@@ -548,7 +549,8 @@ func (ai *AutocompleteInput) GetPreferredHeight() int {
 // Helper Functions for Common Suggestion Patterns
 // =============================================================================
 
-// PrefixMatcher creates a suggestion provider that filters by prefix.
+// PrefixMatcher returns a provider that filters suggestions by the prefix of
+// the current token (the word ending at the cursor position).
 func PrefixMatcher(suggestions []Suggestion) SuggestionProvider {
 	return func(text string, cursorPos int) []Suggestion {
 		if text == "" {
@@ -581,7 +583,8 @@ func PrefixMatcher(suggestions []Suggestion) SuggestionProvider {
 	}
 }
 
-// FuzzyMatcher creates a suggestion provider that does fuzzy matching.
+// FuzzyMatcher returns a provider that filters suggestions by fuzzy substring
+// match — all characters of the token appear in the suggestion in order.
 func FuzzyMatcher(suggestions []Suggestion) SuggestionProvider {
 	return func(text string, cursorPos int) []Suggestion {
 		if text == "" {
@@ -632,7 +635,8 @@ func StaticSuggestions(suggestions []Suggestion) SuggestionProvider {
 	}
 }
 
-// ChainedProvider chains multiple suggestion providers together.
+// ChainedProvider merges results from multiple providers. Results are
+// concatenated in order; duplicates are not removed.
 func ChainedProvider(providers ...SuggestionProvider) SuggestionProvider {
 	return func(text string, cursorPos int) []Suggestion {
 		var all []Suggestion

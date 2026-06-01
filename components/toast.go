@@ -8,7 +8,6 @@ import (
 
 	"github.com/atterpac/dado/theme"
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // ToastLevel indicates the severity/type of notification
@@ -27,7 +26,9 @@ type ToastAction struct {
 	Handler func()
 }
 
-// Toast represents a single notification
+// Toast is a single notification managed by ToastManager. Duration 0 makes
+// it persistent — it stays visible until explicitly dismissed. Actions add
+// inline buttons (e.g., "Undo"); see ShowWithAction and ShowWithUndo.
 type Toast struct {
 	ID        string
 	Message   string
@@ -56,7 +57,7 @@ func (t *Toast) Icon() string {
 	return ""
 }
 
-// ToastPosition determines where toasts appear
+// ToastPosition determines which screen corner the toast stack appears in.
 type ToastPosition int
 
 const (
@@ -76,7 +77,6 @@ type ToastManager struct {
 	maxWidth        int // Max toast width
 	defaultDuration time.Duration
 
-	app *tview.Application // For QueueUpdateDraw
 
 	// Callbacks
 	onShow    func(toast *Toast)
@@ -86,14 +86,13 @@ type ToastManager struct {
 }
 
 // NewToastManager creates a new toast manager
-func NewToastManager(app *tview.Application) *ToastManager {
+func NewToastManager() *ToastManager {
 	return &ToastManager{
 		toasts:          make([]*Toast, 0),
 		position:        ToastTopRight,
 		maxVisible:      5,
 		maxWidth:        40,
 		defaultDuration: 3 * time.Second,
-		app:             app,
 	}
 }
 
@@ -169,9 +168,9 @@ func (m *ToastManager) ShowWithDuration(message string, level ToastLevel, durati
 		onShow(toast)
 	}
 
-	if duration > 0 && m.app != nil {
+	if duration > 0 {
 		toast.timer = time.AfterFunc(duration, func() {
-			m.app.QueueUpdateDraw(func() {
+			theme.QueueUpdateDraw(func() {
 				m.Dismiss(toast.ID)
 			})
 		})

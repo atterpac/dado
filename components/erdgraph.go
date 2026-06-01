@@ -1,8 +1,5 @@
 package components
 
-import (
-	"github.com/rivo/tview"
-)
 
 // ERDCardinality describes the cardinality of a relationship.
 type ERDCardinality int
@@ -92,7 +89,7 @@ func NewERDGraph() *ERDGraph {
 		hSpacing:  4,
 		vSpacing:  2,
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
@@ -174,19 +171,19 @@ func (g *ERDGraph) SetFocusedTable(id string) {
 	g.centerOnFocused()
 }
 
-// Focus implements tview.Primitive.
-func (g *ERDGraph) Focus(delegate func(tview.Primitive)) {
+// Focus implements core.Widget.
+func (g *ERDGraph) Focus() {
 	g.focused = true
-	g.Box.Focus(delegate)
+	g.Box.Focus()
 }
 
-// Blur implements tview.Primitive.
+// Blur implements core.Widget.
 func (g *ERDGraph) Blur() {
 	g.focused = false
 	g.Box.Blur()
 }
 
-// HasFocus implements tview.Primitive.
+// HasFocus implements core.Widget.
 func (g *ERDGraph) HasFocus() bool {
 	return g.focused
 }

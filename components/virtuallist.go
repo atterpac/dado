@@ -4,10 +4,12 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/core"
 )
 
-// VirtualListItem represents a single item in the list
+// VirtualListItem is a single row in a VirtualList. Height > 1 lets an item
+// span multiple terminal rows; the RenderFunc receives the same width for all rows.
 type VirtualListItem struct {
 	ID     string // Unique identifier
 	Data   any    // User data
@@ -28,7 +30,9 @@ type FetchFunc func(start, count int) (items []VirtualListItem, total int)
 // Returns the string to display
 type RenderFunc func(index int, item VirtualListItem, width int, selected bool) string
 
-// VirtualList efficiently renders large lists using virtualization
+// VirtualList renders large lists efficiently by drawing only the rows in the
+// visible viewport. Supply items up-front via SetItems or on-demand via
+// SetFetchFunc for paginated or lazy-loaded data.
 type VirtualList struct {
 	widgetBase
 
@@ -69,7 +73,7 @@ func NewVirtualList() *VirtualList {
 		showScrollbar:     true,
 		defaultItemHeight: 1,
 	}
-	v.initWidget(tview.NewBox())
+	v.initWidget()
 	return v
 }
 
@@ -351,7 +355,7 @@ type vlSnapshot struct {
 // Draw renders the virtual list. State mutation (ensureVisible,
 // prefetch) is contained in prepareDraw; paint writes only to screen.
 func (v *VirtualList) Draw(screen tcell.Screen) {
-	v.Box.DrawForSubclass(screen, v)
+	v.Box.DrawForSubclass(screen)
 	x, y, width, height := v.GetInnerRect()
 	if width <= 0 || height <= 0 || v.totalCount == 0 {
 		return
@@ -444,12 +448,7 @@ func (v *VirtualList) paint(screen tcell.Screen, x, y, width, height int, snap v
 				text = toString(item.Data)
 			}
 
-			for _, ch := range text {
-				if col < x+snap.contentWidth {
-					screen.SetContent(col, rowY, ch, nil, rowStyle)
-					col++
-				}
-			}
+			col += core.PrintTagged(screen, text, col, rowY, x+snap.contentWidth-col, rowStyle)
 		}
 	}
 
@@ -492,60 +491,59 @@ func (v *VirtualList) drawScrollbar(screen tcell.Screen, x, y, height int) {
 	}
 }
 
-// InputHandler handles keyboard input
-func (v *VirtualList) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return v.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if v.totalCount == 0 {
-			return
+// HandleKey processes a key event for the VirtualList.
+func (v *VirtualList) HandleKey(ev *tcell.EventKey) bool {
+	if v.totalCount == 0 {
+		return false
+	}
+
+	prevIndex := v.selectedIndex
+
+	switch ev.Key() {
+	case tcell.KeyDown:
+		v.moveDown()
+	case tcell.KeyUp:
+		v.moveUp()
+	case tcell.KeyHome:
+		v.selectedIndex = 0
+		v.ensureVisible()
+	case tcell.KeyEnd:
+		v.selectedIndex = v.totalCount - 1
+		v.ensureVisible()
+	case tcell.KeyPgDn:
+		v.pageDown()
+	case tcell.KeyPgUp:
+		v.pageUp()
+	case tcell.KeyEnter:
+		if v.onSelect != nil {
+			item := v.getItem(v.selectedIndex)
+			if item != nil {
+				v.onSelect(v.selectedIndex, *item)
+			}
 		}
-
-		prevIndex := v.selectedIndex
-
-		switch event.Key() {
-		case tcell.KeyDown:
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'j':
 			v.moveDown()
-		case tcell.KeyUp:
+		case 'k':
 			v.moveUp()
-		case tcell.KeyHome:
+		case 'g':
 			v.selectedIndex = 0
 			v.ensureVisible()
-		case tcell.KeyEnd:
+		case 'G':
 			v.selectedIndex = v.totalCount - 1
 			v.ensureVisible()
-		case tcell.KeyPgDn:
-			v.pageDown()
-		case tcell.KeyPgUp:
-			v.pageUp()
-		case tcell.KeyEnter:
-			if v.onSelect != nil {
-				item := v.getItem(v.selectedIndex)
-				if item != nil {
-					v.onSelect(v.selectedIndex, *item)
-				}
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				v.moveDown()
-			case 'k':
-				v.moveUp()
-			case 'g':
-				v.selectedIndex = 0
-				v.ensureVisible()
-			case 'G':
-				v.selectedIndex = v.totalCount - 1
-				v.ensureVisible()
-			}
-		case tcell.KeyCtrlD:
-			v.halfPageDown()
-		case tcell.KeyCtrlU:
-			v.halfPageUp()
 		}
+	case tcell.KeyCtrlD:
+		v.halfPageDown()
+	case tcell.KeyCtrlU:
+		v.halfPageUp()
+	}
 
-		if v.selectedIndex != prevIndex {
-			v.triggerOnChange()
-		}
-	})
+	if v.selectedIndex != prevIndex {
+		v.triggerOnChange()
+	}
+	return false
 }
 
 func (v *VirtualList) moveDown() {
@@ -606,62 +604,7 @@ func (v *VirtualList) halfPageUp() {
 	v.ensureVisible()
 }
 
-// MouseHandler handles mouse input
-func (v *VirtualList) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return v.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		_, y, _, _ := v.GetInnerRect()
-		mx, my := event.Position()
-
-		if !v.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(v)
-			clickedIndex := v.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < v.totalCount {
-				prevIndex := v.selectedIndex
-				v.selectedIndex = clickedIndex
-				if v.selectedIndex != prevIndex {
-					v.triggerOnChange()
-				}
-				return true, v
-			}
-		case tview.MouseLeftDoubleClick:
-			clickedIndex := v.offset + (my - y)
-			if clickedIndex >= 0 && clickedIndex < v.totalCount {
-				v.selectedIndex = clickedIndex
-				if v.onSelect != nil {
-					item := v.getItem(clickedIndex)
-					if item != nil {
-						v.onSelect(clickedIndex, *item)
-					}
-				}
-				return true, v
-			}
-		case tview.MouseScrollUp:
-			if v.offset > 0 {
-				v.offset--
-			}
-			return true, v
-		case tview.MouseScrollDown:
-			_, _, _, height := v.GetInnerRect()
-			if v.offset < v.totalCount-height {
-				v.offset++
-			}
-			return true, v
-		}
-
-		return false, nil
-	})
-}
-
 // Focus handles focus
-func (v *VirtualList) Focus(delegate func(tview.Primitive)) {
-	v.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the component has focus
 func (v *VirtualList) HasFocus() bool {
 	return v.Box.HasFocus()

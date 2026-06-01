@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/bus"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -21,7 +21,7 @@ import (
 // The overlay enables the bus on Start and restores its prior state on Stop,
 // so callers do not need to manage bus.SetEnabled themselves.
 type DebugOverlay struct {
-	*tview.Table
+	*core.Table
 	base *ComponentBase
 
 	mu          sync.Mutex
@@ -39,14 +39,13 @@ func NewDebugOverlay(capacity int) *DebugOverlay {
 	if capacity <= 0 {
 		capacity = 500
 	}
-	tbl := tview.NewTable().
-		SetBorders(false).
-		SetSelectable(true, false).
-		SetFixed(1, 0)
-	tbl.SetBorder(true).SetTitle(" Bus Debug ")
+	tbl := core.NewTable()
+	tbl.SetSelectable(true, false)
+	tbl.SetBorder(true)
+	tbl.SetTitle(" Bus Debug ")
 
 	d := &DebugOverlay{
-		Table:   tbl,
+		Table: tbl,
 		cap:     capacity,
 		sources: map[string]bool{},
 	}
@@ -129,11 +128,11 @@ func (d *DebugOverlay) append(e bus.Event) {
 }
 
 func (d *DebugOverlay) renderHeader() {
-	d.Table.SetCell(0, 0, tview.NewTableCell("seq").SetSelectable(false).SetAttributes(tcell.AttrBold))
-	d.Table.SetCell(0, 1, tview.NewTableCell("time").SetSelectable(false).SetAttributes(tcell.AttrBold))
-	d.Table.SetCell(0, 2, tview.NewTableCell("src").SetSelectable(false).SetAttributes(tcell.AttrBold))
-	d.Table.SetCell(0, 3, tview.NewTableCell("kind").SetSelectable(false).SetAttributes(tcell.AttrBold))
-	d.Table.SetCell(0, 4, tview.NewTableCell("payload").SetSelectable(false).SetAttributes(tcell.AttrBold))
+	d.Table.SetCell(0, 0, core.NewTableCell("seq"))
+	d.Table.SetCell(0, 1, core.NewTableCell("time"))
+	d.Table.SetCell(0, 2, core.NewTableCell("src"))
+	d.Table.SetCell(0, 3, core.NewTableCell("kind"))
+	d.Table.SetCell(0, 4, core.NewTableCell("payload"))
 }
 
 func (d *DebugOverlay) refresh() {
@@ -168,11 +167,11 @@ func (d *DebugOverlay) refresh() {
 		if len(filter) > 0 && !filter[e.Source] {
 			continue
 		}
-		d.Table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("%d", e.Seq)))
-		d.Table.SetCell(row, 1, tview.NewTableCell(e.Time.Format("15:04:05.000")))
-		d.Table.SetCell(row, 2, tview.NewTableCell(e.Source))
-		d.Table.SetCell(row, 3, tview.NewTableCell(e.Kind))
-		d.Table.SetCell(row, 4, tview.NewTableCell(formatPayload(e.Payload)))
+		d.Table.SetCell(row, 0, core.NewTableCell(fmt.Sprintf("%d", e.Seq)))
+		d.Table.SetCell(row, 1, core.NewTableCell(e.Time.Format("15:04:05.000")))
+		d.Table.SetCell(row, 2, core.NewTableCell(e.Source))
+		d.Table.SetCell(row, 3, core.NewTableCell(e.Kind))
+		d.Table.SetCell(row, 4, core.NewTableCell(formatPayload(e.Payload)))
 		row++
 	}
 }
@@ -188,7 +187,7 @@ func formatPayload(p any) string {
 	return s
 }
 
-func (d *DebugOverlay) handleKey(event *tcell.EventKey, _ func(tview.Primitive)) bool {
+func (d *DebugOverlay) handleKey(event *tcell.EventKey) bool {
 	if event.Key() == tcell.KeyEscape {
 		if d.onClose != nil {
 			d.onClose()

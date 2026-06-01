@@ -5,7 +5,6 @@ import (
 	"sort"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // SelectOption represents an option in a select dropdown.
@@ -39,7 +38,7 @@ func NewSelect(name string) *Select {
 		name:     name,
 		selected: -1,
 	}
-	s.initWidget(tview.NewBox())
+	s.initWidget()
 	return s
 }
 
@@ -55,7 +54,8 @@ func (s *Select) SetPlaceholder(placeholder string) *Select {
 	return s
 }
 
-// SetOptions sets the available options.
+// SetOptions sets available options where Label and Value are identical.
+// Use SetOptionsWithValues when the display text should differ from the stored value.
 func (s *Select) SetOptions(options []string) *Select {
 	s.options = make([]SelectOption, len(options))
 	for i, opt := range options {
@@ -64,7 +64,7 @@ func (s *Select) SetOptions(options []string) *Select {
 	return s
 }
 
-// SetOptionsWithValues sets options with custom values.
+// SetOptionsWithValues sets options with distinct display labels and stored values.
 func (s *Select) SetOptionsWithValues(options []SelectOption) *Select {
 	s.options = options
 	return s
@@ -78,6 +78,12 @@ func (s *Select) SetDefault(value string) *Select {
 			break
 		}
 	}
+	return s
+}
+
+// SetExpanded sets whether the dropdown is open.
+func (s *Select) SetExpanded(expanded bool) *Select {
+	s.expanded = expanded
 	return s
 }
 
@@ -180,7 +186,7 @@ func (s *Select) emitChange(oldIndex, newIndex int) {
 
 // Draw renders the select component.
 func (s *Select) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen)
 	x, y, width, height := s.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -291,62 +297,63 @@ func (s *Select) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (s *Select) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return s.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		oldSelected := s.selected
+func (s *Select) HandleKey(ev *tcell.EventKey) bool {
+	oldSelected := s.selected
 
-		switch event.Key() {
-		case tcell.KeyRune:
-			// Space to toggle dropdown (Enter is reserved for form submit)
-			if event.Rune() == ' ' {
-				if s.expanded {
-					s.expanded = false
-					if s.selected >= 0 {
-						s.emitChange(oldSelected, s.selected)
-					}
-				} else {
-					s.expanded = true
-				}
-				return
-			}
-			// Vim keys
-			switch event.Rune() {
-			case 'j':
-				if s.expanded && s.selected < len(s.options)-1 {
-					s.selected++
-				}
-			case 'k':
-				if s.expanded && s.selected > 0 {
-					s.selected--
-				}
-			}
-		case tcell.KeyEscape:
-			s.expanded = false
-		case tcell.KeyUp:
+	switch ev.Key() {
+	case tcell.KeyRune:
+		if ev.Rune() == ' ' {
 			if s.expanded {
-				if s.selected > 0 {
-					s.selected--
+				s.expanded = false
+				if s.selected >= 0 {
+					s.emitChange(oldSelected, s.selected)
 				}
 			} else {
 				s.expanded = true
 			}
-		case tcell.KeyDown:
-			if s.expanded {
-				if s.selected < len(s.options)-1 {
-					s.selected++
-				}
-			} else {
-				s.expanded = true
-			}
+			return true
 		}
-	})
+		switch ev.Rune() {
+		case 'j':
+			if s.expanded && s.selected < len(s.options)-1 {
+				s.selected++
+			}
+			return true
+		case 'k':
+			if s.expanded && s.selected > 0 {
+				s.selected--
+			}
+			return true
+		}
+	case tcell.KeyEscape:
+		s.expanded = false
+		return true
+	case tcell.KeyUp:
+		if s.expanded {
+			if s.selected > 0 {
+				s.selected--
+			}
+		} else {
+			s.expanded = true
+		}
+		return true
+	case tcell.KeyDown:
+		if s.expanded {
+			if s.selected < len(s.options)-1 {
+				s.selected++
+			}
+		} else {
+			s.expanded = true
+		}
+		return true
+	}
+	return false
 }
 
 // Focus handles focus.
-func (s *Select) Focus(delegate func(tview.Primitive)) {
+func (s *Select) Focus() {
 	s.focused = true
-	s.Box.Focus(delegate)
+	s.Box.Focus()
 }
 
 // Blur handles blur.
@@ -419,7 +426,7 @@ func NewMultiSelect(name string) *MultiSelect {
 		name:     name,
 		selected: make(map[int]bool),
 	}
-	m.initWidget(tview.NewBox())
+	m.initWidget()
 	return m
 }
 
@@ -441,6 +448,12 @@ func (m *MultiSelect) SetOptions(options []string) *MultiSelect {
 // SetOptionsWithValues sets options with custom values.
 func (m *MultiSelect) SetOptionsWithValues(options []SelectOption) *MultiSelect {
 	m.options = options
+	return m
+}
+
+// SetExpanded sets whether the dropdown list is open.
+func (m *MultiSelect) SetExpanded(expanded bool) *MultiSelect {
+	m.expanded = expanded
 	return m
 }
 
@@ -559,7 +572,7 @@ func (m *MultiSelect) emitChange(oldSelected, newSelected []SelectOption) {
 
 // Draw renders the multi-select component.
 func (m *MultiSelect) Draw(screen tcell.Screen) {
-	m.Box.DrawForSubclass(screen, m)
+	m.Box.DrawForSubclass(screen)
 	x, y, width, height := m.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -663,42 +676,44 @@ func (m *MultiSelect) Draw(screen tcell.Screen) {
 	_ = fgDimColor // Available for future use
 }
 
-// InputHandler handles keyboard input.
-func (m *MultiSelect) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyUp:
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case tcell.KeyDown:
+func (m *MultiSelect) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyUp:
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return true
+	case tcell.KeyDown:
+		if m.cursor < len(m.options)-1 {
+			m.cursor++
+		}
+		return true
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case ' ':
+			oldSelected := m.SelectedOptions()
+			m.selected[m.cursor] = !m.selected[m.cursor]
+			m.emitChange(oldSelected, m.SelectedOptions())
+			return true
+		case 'j':
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case ' ':
-				// Space to toggle selection (Enter is reserved for form submit)
-				oldSelected := m.SelectedOptions()
-				m.selected[m.cursor] = !m.selected[m.cursor]
-				m.emitChange(oldSelected, m.SelectedOptions())
-			case 'j':
-				if m.cursor < len(m.options)-1 {
-					m.cursor++
-				}
-			case 'k':
-				if m.cursor > 0 {
-					m.cursor--
-				}
+			return true
+		case 'k':
+			if m.cursor > 0 {
+				m.cursor--
 			}
+			return true
 		}
-	})
+	}
+	return false
 }
 
 // Focus handles focus.
-func (m *MultiSelect) Focus(delegate func(tview.Primitive)) {
+func (m *MultiSelect) Focus() {
 	m.focused = true
-	m.Box.Focus(delegate)
+	m.Box.Focus()
 }
 
 // Blur handles blur.

@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // GraphNode represents a node in the 2D node graph.
@@ -71,6 +70,7 @@ type NodeGraph struct {
 
 	// Auto-center flag (centers on first draw when dimensions are available)
 	needsCenter bool
+	fitAll      bool // center bounding box of all nodes instead of focused node
 
 	// Callbacks
 	onSelect func(node *GraphNode)
@@ -82,11 +82,13 @@ func NewNodeGraph() *NodeGraph {
 		nodeWidth:  18,
 		nodeHeight: 3,
 	}
-	g.initWidget(tview.NewBox())
+	g.initWidget()
 	return g
 }
 
-// SetData sets the graph data and computes layout.
+// SetData sets the graph data and triggers layout computation. The viewport
+// centers on the first draw after this call — on FocusID if set, or on the
+// bounding box of all nodes if SetFit(true) was called.
 func (g *NodeGraph) SetData(data *NodeGraphData) *NodeGraph {
 	g.data = data
 	g.computeLayout()
@@ -97,6 +99,14 @@ func (g *NodeGraph) SetData(data *NodeGraphData) *NodeGraph {
 // SetNodeWidth sets the width of nodes.
 func (g *NodeGraph) SetNodeWidth(width int) *NodeGraph {
 	g.nodeWidth = width
+	return g
+}
+
+// SetFit controls the initial viewport centering strategy. When true, the
+// viewport centers on the bounding box of all nodes. When false (default),
+// it centers on NodeGraphData.FocusID instead.
+func (g *NodeGraph) SetFit(fit bool) *NodeGraph {
+	g.fitAll = fit
 	return g
 }
 
@@ -122,6 +132,35 @@ func (g *NodeGraph) SetFocus(nodeID string) {
 		g.data.FocusID = nodeID
 		g.centerOnNode(nodeID)
 	}
+}
+
+// centerOnAll centers the viewport on the bounding box of all nodes.
+func (g *NodeGraph) centerOnAll() {
+	if g.data == nil || len(g.data.nodes) == 0 {
+		return
+	}
+	_, _, width, height := g.GetInnerRect()
+	if width <= 0 || height <= 0 {
+		return
+	}
+	minX, minY := 1<<30, 1<<30
+	maxX, maxY := -1<<30, -1<<30
+	for _, node := range g.data.nodes {
+		if node.x < minX {
+			minX = node.x
+		}
+		if node.y < minY {
+			minY = node.y
+		}
+		if node.x+node.width > maxX {
+			maxX = node.x + node.width
+		}
+		if node.y+node.height > maxY {
+			maxY = node.y + node.height
+		}
+	}
+	g.offsetX = minX + (maxX-minX)/2 - width/2
+	g.offsetY = minY + (maxY-minY)/2 - height/2
 }
 
 // centerOnNode centers the view on the given node.
@@ -232,7 +271,7 @@ func (g *NodeGraph) computeLayout() {
 
 // Draw renders the node graph.
 func (g *NodeGraph) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.Box.DrawForSubclass(screen)
 	x, y, width, height := g.GetInnerRect()
 
 	if width <= 0 || height <= 0 || g.data == nil {
@@ -242,10 +281,11 @@ func (g *NodeGraph) Draw(screen tcell.Screen) {
 	// Auto-center on first draw after data is set
 	if g.needsCenter {
 		g.needsCenter = false
-		if g.data.FocusID != "" {
+		if g.fitAll {
+			g.centerOnAll()
+		} else if g.data.FocusID != "" {
 			g.centerOnNode(g.data.FocusID)
 		} else if len(g.data.nodes) > 0 {
-			// Center on first node if no focus set
 			for id := range g.data.nodes {
 				g.centerOnNode(id)
 				break
@@ -567,93 +607,44 @@ func (g *NodeGraph) getStatusIcon(status string) string {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (g *NodeGraph) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return g.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyUp:
-			g.offsetY -= 2
-		case tcell.KeyDown:
-			g.offsetY += 2
-		case tcell.KeyLeft:
+// HandleKey handles keyboard input.
+func (g *NodeGraph) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyUp:
+		g.offsetY -= 2
+	case tcell.KeyDown:
+		g.offsetY += 2
+	case tcell.KeyLeft:
+		g.offsetX -= 4
+	case tcell.KeyRight:
+		g.offsetX += 4
+	case tcell.KeyEnter:
+		if g.data != nil && g.data.FocusID != "" {
+			if node := g.data.GetNode(g.data.FocusID); node != nil && g.onSelect != nil {
+				g.onSelect(node)
+			}
+		}
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'h':
 			g.offsetX -= 4
-		case tcell.KeyRight:
+		case 'l':
 			g.offsetX += 4
-		case tcell.KeyEnter:
-			if g.data != nil && g.data.FocusID != "" {
-				if node := g.data.GetNode(g.data.FocusID); node != nil && g.onSelect != nil {
-					g.onSelect(node)
-				}
-			}
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'h':
-				g.offsetX -= 4
-			case 'l':
-				g.offsetX += 4
-			case 'k':
-				g.offsetY -= 2
-			case 'j':
-				g.offsetY += 2
-			case 'c':
-				// Center on focused node
-				if g.data != nil && g.data.FocusID != "" {
-					g.centerOnNode(g.data.FocusID)
-				}
-			}
-		}
-	})
-}
-
-// MouseHandler handles mouse input.
-func (g *NodeGraph) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return g.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		mx, my := event.Position()
-
-		if !g.InRect(mx, my) {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseLeftClick:
-			setFocus(g)
-			// Check if click is on a node
-			x, y, _, _ := g.GetInnerRect()
-			for _, node := range g.data.nodes {
-				screenX := x + node.x - g.offsetX
-				screenY := y + node.y - g.offsetY
-				if mx >= screenX && mx < screenX+node.width &&
-					my >= screenY && my < screenY+node.height {
-					g.SetFocus(node.ID)
-					return true, g
-				}
-			}
-			return true, g
-		case tview.MouseLeftDoubleClick:
-			// Select focused node
-			if g.data != nil && g.data.FocusID != "" {
-				if node := g.data.GetNode(g.data.FocusID); node != nil && g.onSelect != nil {
-					g.onSelect(node)
-				}
-			}
-			return true, g
-		case tview.MouseScrollUp:
+		case 'k':
 			g.offsetY -= 2
-			return true, g
-		case tview.MouseScrollDown:
+		case 'j':
 			g.offsetY += 2
-			return true, g
+		case 'c':
+			// Center on focused node
+			if g.data != nil && g.data.FocusID != "" {
+				g.centerOnNode(g.data.FocusID)
+			}
 		}
-
-		return false, nil
-	})
+	}
+	return false
 }
 
 // Focus handles focus.
-func (g *NodeGraph) Focus(delegate func(tview.Primitive)) {
-	g.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the graph has focus.
 func (g *NodeGraph) HasFocus() bool {
 	return g.Box.HasFocus()

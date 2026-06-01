@@ -5,10 +5,14 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+
+	"github.com/atterpac/dado/theme"
 )
 
-// ProgressModal is a modal dialog for displaying progress of long-running operations
+// ProgressModal is a modal dialog for long-running operations. Defaults to
+// indeterminate (spinner) mode; call SetProgress(0.0–1.0) to switch to a
+// determinate bar. Call Complete or Fail to update the state; the modal
+// stays visible until Close is called or the user presses a key.
 type ProgressModal struct {
 	widgetBase
 
@@ -39,7 +43,6 @@ type ProgressModal struct {
 	onClose    func()
 
 	// Focus management
-	previousFocus tview.Primitive
 }
 
 // NewProgressModal creates a new progress modal
@@ -50,7 +53,7 @@ func NewProgressModal() *ProgressModal {
 		progress:     -1, // Indeterminate by default
 		spinnerStop:  make(chan struct{}),
 	}
-	p.initWidget(tview.NewBox())
+	p.initWidget()
 	p.SetBorder(true)
 	return p
 }
@@ -196,7 +199,7 @@ func (p *ProgressModal) SetOnClose(fn func()) *ProgressModal {
 }
 
 // StartSpinner starts the spinner animation for indeterminate mode
-func (p *ProgressModal) StartSpinner(app *tview.Application) {
+func (p *ProgressModal) StartSpinner() {
 	p.mu.Lock()
 	// Stop any existing spinner goroutine before starting a new one
 	if p.spinnerStop != nil {
@@ -222,7 +225,7 @@ func (p *ProgressModal) StartSpinner(app *tview.Application) {
 				p.mu.Lock()
 				p.spinnerFrame = (p.spinnerFrame + 1) % len(spinnerFrames)
 				p.mu.Unlock()
-				app.QueueUpdateDraw(func() {})
+				theme.QueueUpdateDraw(func() {})
 			}
 		}
 	}()
@@ -254,77 +257,75 @@ func (p *ProgressModal) Draw(screen tcell.Screen) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	th := p.th()
+	bg := th.Bg()
+	fg := th.Fg()
+	dim := th.FgDim()
+	border := th.BorderFocus()
+	accent := th.Accent()
+	success := th.Success()
+	errColor := th.Error()
+	warning := th.Warning()
+
 	screenWidth, screenHeight := screen.Size()
 
-	// Draw backdrop if enabled
 	if p.showBackdrop {
-		backdropStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorDarkGray)
-		for y := 0; y < screenHeight; y++ {
-			for x := 0; x < screenWidth; x++ {
+		backdropStyle := tcell.StyleDefault.Background(bg).Foreground(dim)
+		for y := range screenHeight {
+			for x := range screenWidth {
 				screen.SetContent(x, y, '░', nil, backdropStyle)
 			}
 		}
 	}
 
-	// Calculate modal dimensions
 	modalWidth := p.width
-	modalHeight := 9 // Title + border + progress + messages + footer
-
+	modalHeight := 9
 	if p.subMessage != "" {
 		modalHeight++
 	}
 
-	// Center modal
 	modalX := (screenWidth - modalWidth) / 2
 	modalY := (screenHeight - modalHeight) / 2
 
-	// Draw modal background
-	bgStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	bgStyle := tcell.StyleDefault.Background(bg).Foreground(fg)
 	fillRect(screen, modalX, modalY, modalWidth, modalHeight, bgStyle)
 
-	// Draw border
-	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+	borderStyle := tcell.StyleDefault.Background(bg).Foreground(border)
 	p.drawBorder(screen, modalX, modalY, modalWidth, modalHeight, borderStyle)
 
-	// Draw title
-	titleStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Bold(true)
+	titleStyle := tcell.StyleDefault.Background(bg).Foreground(fg).Bold(true)
 	title := p.title
 	if p.complete {
 		title = title + " ✓"
-		titleStyle = titleStyle.Foreground(tcell.ColorGreen)
+		titleStyle = titleStyle.Foreground(success)
 	} else if p.failed {
 		title = title + " ✗"
-		titleStyle = titleStyle.Foreground(tcell.ColorRed)
+		titleStyle = titleStyle.Foreground(errColor)
 	}
 	titleX := modalX + (modalWidth-len(title))/2
 	p.drawText(screen, titleX, modalY+1, title, titleStyle)
 
-	// Draw separator
 	p.drawHorizontalLine(screen, modalX, modalY+2, modalWidth, borderStyle)
 
-	// Draw progress bar or spinner
 	progressY := modalY + 4
 	if p.indeterminate && !p.complete && !p.failed {
-		// Draw spinner
 		frames := spinnerFrames[SpinnerCircle]
 		spinnerChar := frames[p.spinnerFrame%len(frames)]
 		spinnerText := fmt.Sprintf("%s Loading...", spinnerChar)
 		spinnerX := modalX + (modalWidth-len(spinnerText))/2
-		spinnerStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
+		spinnerStyle := tcell.StyleDefault.Background(bg).Foreground(warning)
 		p.drawText(screen, spinnerX, progressY, spinnerText, spinnerStyle)
 	} else {
-		// Draw progress bar
 		barWidth := modalWidth - 8
 		barX := modalX + 3
-		p.drawProgressBar(screen, barX, progressY, barWidth)
+		p.drawProgressBar(screen, barX, progressY, barWidth, bg, fg, dim, accent, errColor)
 	}
 
-	// Draw message
 	messageY := progressY + 2
 	if p.message != "" {
-		messageStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+		messageStyle := tcell.StyleDefault.Background(bg).Foreground(fg)
 		if p.failed {
-			messageStyle = messageStyle.Foreground(tcell.ColorRed)
+			messageStyle = messageStyle.Foreground(errColor)
 		}
 		msgX := modalX + (modalWidth-len(p.message))/2
 		if len(p.message) > modalWidth-4 {
@@ -334,10 +335,9 @@ func (p *ProgressModal) Draw(screen tcell.Screen) {
 		p.drawText(screen, msgX, messageY, p.message, messageStyle)
 	}
 
-	// Draw sub-message
 	if p.subMessage != "" {
 		subMessageY := messageY + 1
-		subStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+		subStyle := tcell.StyleDefault.Background(bg).Foreground(dim)
 		subX := modalX + (modalWidth-len(p.subMessage))/2
 		if len(p.subMessage) > modalWidth-4 {
 			p.subMessage = p.subMessage[:modalWidth-7] + "..."
@@ -346,11 +346,9 @@ func (p *ProgressModal) Draw(screen tcell.Screen) {
 		p.drawText(screen, subX, subMessageY, p.subMessage, subStyle)
 	}
 
-	// Draw footer separator
 	footerY := modalY + modalHeight - 3
 	p.drawHorizontalLine(screen, modalX, footerY, modalWidth, borderStyle)
 
-	// Draw footer text
 	footerTextY := modalY + modalHeight - 2
 	var footerText string
 	if p.complete || p.failed {
@@ -359,13 +357,13 @@ func (p *ProgressModal) Draw(screen tcell.Screen) {
 		footerText = "[Esc] Cancel"
 	}
 	if footerText != "" {
-		footerStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+		footerStyle := tcell.StyleDefault.Background(bg).Foreground(dim)
 		footerX := modalX + (modalWidth-len(footerText))/2
 		p.drawText(screen, footerX, footerTextY, footerText, footerStyle)
 	}
 }
 
-func (p *ProgressModal) drawProgressBar(screen tcell.Screen, x, y, width int) {
+func (p *ProgressModal) drawProgressBar(screen tcell.Screen, x, y, width int, bg, _, dim, accent, errColor tcell.Color) {
 	progress := p.progress
 	if progress < 0 {
 		progress = 0
@@ -377,24 +375,31 @@ func (p *ProgressModal) drawProgressBar(screen tcell.Screen, x, y, width int) {
 	fillWidth := int(progress * float64(width))
 	emptyWidth := width - fillWidth
 
-	fillStyle := tcell.StyleDefault.Foreground(tcell.ColorBlue)
-	emptyStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+	barColor := accent
+	if p.failed {
+		barColor = errColor
+	}
+	fillStyle := tcell.StyleDefault.Background(bg).Foreground(barColor)
+	emptyStyle := tcell.StyleDefault.Background(bg).Foreground(dim)
 
-	// Draw filled portion
-	for i := 0; i < fillWidth; i++ {
+	for i := range fillWidth {
 		screen.SetContent(x+i, y, '█', nil, fillStyle)
 	}
-
-	// Draw empty portion
-	for i := 0; i < emptyWidth; i++ {
+	for i := range emptyWidth {
 		screen.SetContent(x+fillWidth+i, y, '░', nil, emptyStyle)
 	}
 
-	// Draw percentage
-	pct := fmt.Sprintf("%3.0f%%", progress*100)
-	pctX := x + width + 1
-	pctStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-	p.drawText(screen, pctX, y, pct, pctStyle)
+	// Draw percentage overlaid centered on the bar, colored like the bar
+	pct := fmt.Sprintf(" %.0f%% ", progress*100)
+	pctX := x + (width-len(pct))/2
+	pctStyle := tcell.StyleDefault.Background(bg).Foreground(barColor).Bold(true)
+	for i, r := range pct {
+		col := pctX + i
+		if col < x || col >= x+width {
+			continue
+		}
+		screen.SetContent(col, y, r, nil, pctStyle)
+	}
 }
 
 func (p *ProgressModal) drawBorder(screen tcell.Screen, x, y, width, height int, style tcell.Style) {
@@ -431,51 +436,7 @@ func (p *ProgressModal) drawText(screen tcell.Screen, x, y int, text string, sty
 	}
 }
 
-// InputHandler handles keyboard input
-func (p *ProgressModal) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		p.mu.RLock()
-		complete := p.complete
-		failed := p.failed
-		cancelable := p.cancelable
-		onCancel := p.onCancel
-		onClose := p.onClose
-		p.mu.RUnlock()
-
-		switch event.Key() {
-		case tcell.KeyEsc:
-			if complete || failed {
-				// Close on Esc when done
-				if onClose != nil {
-					onClose()
-				}
-			} else if cancelable && onCancel != nil {
-				// Cancel operation
-				onCancel()
-			}
-		case tcell.KeyEnter:
-			if complete || failed {
-				if onClose != nil {
-					onClose()
-				}
-			}
-		}
-	})
-}
-
-// MouseHandler handles mouse events
-func (p *ProgressModal) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-	return p.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-		// Consume all mouse events to prevent interaction with background
-		return true, nil
-	})
-}
-
 // Focus is called when the modal receives focus
-func (p *ProgressModal) Focus(delegate func(p tview.Primitive)) {
-	p.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the modal has focus
 func (p *ProgressModal) HasFocus() bool {
 	return p.Box.HasFocus()

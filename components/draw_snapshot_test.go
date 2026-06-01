@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rivo/tview"
-
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 	"github.com/atterpac/dado/theme/themes"
 )
@@ -23,94 +22,94 @@ import (
 type snapCase struct {
 	name string
 	w, h int
-	make func() tview.Primitive
+	make func() core.Widget
 }
 
 func drawSnapshotCases() []snapCase {
 	return []snapCase{
-		{"badge", 16, 1, func() tview.Primitive { return NewBadge("NEW").SetVariant(BadgeSuccess) }},
-		{"chip", 18, 1, func() tview.Primitive { return NewChip("tag").SetRemovable(true) }},
-		{"divider_label", 24, 1, func() tview.Primitive { return NewDivider().SetLabel("Section") }},
-		{"button", 12, 1, func() tview.Primitive { return NewButton("OK") }},
-		{"progressbar", 30, 1, func() tview.Primitive {
+		{"badge", 16, 1, func() core.Widget { return NewBadge("NEW").SetVariant(BadgeSuccess) }},
+		{"chip", 18, 1, func() core.Widget { return NewChip("tag").SetRemovable(true) }},
+		{"divider_label", 24, 1, func() core.Widget { return NewDivider().SetLabel("Section") }},
+		{"button", 12, 1, func() core.Widget { return NewButton("OK") }},
+		{"progressbar", 30, 1, func() core.Widget {
 			return NewProgressBar().SetProgress(0.42).SetLabel("Load").SetShowPercentage(true)
 		}},
-		{"gauge", 22, 3, func() tview.Primitive { return NewGauge().SetValue(63).SetLabel("CPU").SetUnit("%") }},
-		{"sparkline", 20, 1, func() tview.Primitive {
+		{"gauge", 22, 3, func() core.Widget { return NewGauge().SetValue(63).SetLabel("CPU").SetUnit("%") }},
+		{"sparkline", 20, 1, func() core.Widget {
 			return NewSparkline().SetValues([]float64{1, 3, 2, 5, 4, 6, 2, 7})
 		}},
-		{"checkbox", 24, 1, func() tview.Primitive { return NewCheckbox("agree").SetLabel("Agree").SetChecked(true) }},
-		{"radiogroup", 24, 4, func() tview.Primitive {
+		{"checkbox", 24, 1, func() core.Widget { return NewCheckbox("agree").SetLabel("Agree").SetChecked(true) }},
+		{"radiogroup", 24, 4, func() core.Widget {
 			return NewRadioGroup("pick").SetLabel("Pick").SetOptions([]string{"One", "Two", "Three"})
 		}},
-		{"metriccard", 26, 6, func() tview.Primitive {
+		{"metriccard", 26, 6, func() core.Widget {
 			return NewMetricCard().SetLabel("Requests").SetValue("1.2k").SetTrend(TrendUp, "+5%", true)
 		}},
-		{"barchart", 32, 10, func() tview.Primitive {
+		{"barchart", 32, 10, func() core.Widget {
 			return NewBarChart().SetValues([]float64{3, 7, 5, 9}, []string{"a", "b", "c", "d"}).SetShowValues(true)
 		}},
-		{"tabs", 30, 1, func() tview.Primitive {
+		{"tabs", 30, 1, func() core.Widget {
 			return NewTabs().AddTab("One", nil).AddTab("Two", nil).SetActive(0)
 		}},
-		{"contextmenu", 22, 6, func() tview.Primitive {
+		{"contextmenu", 22, 6, func() core.Widget {
 			return NewContextMenu().AddItem("a", "Copy", nil).AddItem("b", "Paste", nil)
 		}},
-		{"keyhintbar", 40, 1, func() tview.Primitive {
+		{"keyhintbar", 40, 1, func() core.Widget {
 			return NewKeyHintBar().SetHints([]KeyHint{{Key: "Enter", Description: "Select"}, {Key: "Esc", Description: "Close"}})
 		}},
-		{"hintgrid", 40, 3, func() tview.Primitive {
+		{"hintgrid", 40, 3, func() core.Widget {
 			return NewHintGrid().SetHints([]KeyHint{{Key: "j", Description: "Down"}, {Key: "k", Description: "Up"}})
 		}},
-		{"panel", 24, 6, func() tview.Primitive { return NewPanel().SetTitle("Title") }},
-		{"select", 28, 1, func() tview.Primitive {
+		{"panel", 24, 6, func() core.Widget { return NewPanel().SetTitle("Title") }},
+		{"select", 28, 1, func() core.Widget {
 			return NewSelect("s").SetLabel("Pick").SetOptions([]string{"Alpha", "Beta", "Gamma"})
 		}},
-		{"multiselect", 28, 4, func() tview.Primitive {
+		{"multiselect", 28, 4, func() core.Widget {
 			return NewMultiSelect("m").SetLabel("Pick").SetOptions([]string{"Alpha", "Beta"})
 		}},
-		{"textfield", 30, 1, func() tview.Primitive {
+		{"textfield", 30, 1, func() core.Widget {
 			return NewTextField("t").SetLabel("Name").SetValue("Ada")
 		}},
-		{"textfield_placeholder", 30, 1, func() tview.Primitive {
+		{"textfield_placeholder", 30, 1, func() core.Widget {
 			return NewTextField("t").SetLabel("Name").SetPlaceholder("enter name")
 		}},
-		{"textarea", 30, 4, func() tview.Primitive {
+		{"textarea", 30, 4, func() core.Widget {
 			return NewTextArea("ta").SetLabel("Bio").SetValue("hello")
 		}},
-		{"autocomplete", 30, 1, func() tview.Primitive {
+		{"autocomplete", 30, 1, func() core.Widget {
 			return NewAutocompleteInput().SetText("que")
 		}},
-		{"statusbar", 40, 1, func() tview.Primitive {
+		{"statusbar", 40, 1, func() core.Widget {
 			return NewStatusBar().SetLeft(StatusSection{Text: "Ready"}).SetRight(StatusSection{Text: "v1"})
 		}},
-		{"searchbar", 40, 1, func() tview.Primitive {
+		{"searchbar", 40, 1, func() core.Widget {
 			return NewSearchBar().SetPlaceholder("Search").SetQuery("foo")
 		}},
-		{"finder", 40, 10, func() tview.Primitive {
+		{"finder", 40, 10, func() core.Widget {
 			return NewFinder().SetPrompt("> ").SetPlaceholder("Find")
 		}},
-		{"progressmodal", 44, 12, func() tview.Primitive {
+		{"progressmodal", 44, 12, func() core.Widget {
 			return NewProgressModal().SetMessage("Working")
 		}},
 		// Viz/container widgets rendered empty: the background-clear loops run
 		// regardless of data, so these pin those fills even without content.
-		{"codeview", 40, 10, func() tview.Primitive { return NewCodeView() }},
-		{"gitgraph", 40, 10, func() tview.Primitive { return NewGitGraph() }},
-		{"heatmap", 30, 10, func() tview.Primitive { return NewHeatMap() }},
-		{"nodegraph", 40, 12, func() tview.Primitive { return NewNodeGraph() }},
-		{"tree", 30, 8, func() tview.Primitive { return NewTree() }},
-		{"linegraph", 32, 10, func() tview.Primitive { return NewLineGraph() }},
-		{"graphtree", 40, 12, func() tview.Primitive { return NewGraphTree() }},
-		{"timeline", 40, 8, func() tview.Primitive { return NewTimeline() }},
-		{"virtuallist", 30, 8, func() tview.Primitive { return NewVirtualList() }},
-		{"logviewer", 40, 10, func() tview.Primitive { return NewLogViewer() }},
-		{"diffviewer", 40, 10, func() tview.Primitive { return NewDiffViewer() }},
-		{"datagrid", 40, 10, func() tview.Primitive { return NewDataGrid() }},
-		{"erdgraph", 40, 12, func() tview.Primitive { return NewERDGraph() }},
+		{"codeview", 40, 10, func() core.Widget { return NewCodeView() }},
+		{"gitgraph", 40, 10, func() core.Widget { return NewGitGraph() }},
+		{"heatmap", 30, 10, func() core.Widget { return NewHeatMap() }},
+		{"nodegraph", 40, 12, func() core.Widget { return NewNodeGraph() }},
+		{"tree", 30, 8, func() core.Widget { return NewTree() }},
+		{"linegraph", 32, 10, func() core.Widget { return NewLineGraph() }},
+		{"graphtree", 40, 12, func() core.Widget { return NewGraphTree() }},
+		{"timeline", 40, 8, func() core.Widget { return NewTimeline() }},
+		{"virtuallist", 30, 8, func() core.Widget { return NewVirtualList() }},
+		{"logviewer", 40, 10, func() core.Widget { return NewLogViewer() }},
+		{"diffviewer", 40, 10, func() core.Widget { return NewDiffViewer() }},
+		{"datagrid", 40, 10, func() core.Widget { return NewDataGrid() }},
+		{"erdgraph", 40, 12, func() core.Widget { return NewERDGraph() }},
 	}
 }
 
-func renderSnapshot(p tview.Primitive, w, h int) string {
+func renderSnapshot(p core.Widget, w, h int) string {
 	ts := newTestScreen(w, h)
 	p.SetRect(0, 0, w, h)
 	p.Draw(ts.SimulationScreen)

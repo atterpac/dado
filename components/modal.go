@@ -2,8 +2,8 @@ package components
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -38,7 +38,9 @@ func DefaultModalBehavior() ModalBehavior {
 	}
 }
 
-// ModalConfig configures modal dimensions and behavior.
+// ModalConfig configures modal dimensions and behavior. Width/Height 0 uses
+// the min/max range for auto-sizing; set both for a fixed-size modal.
+// The modal re-centers on every Draw, so it adapts to terminal resizes.
 type ModalConfig struct {
 	Title     string
 	Width     int // Fixed width (0 = use min/max calculation)
@@ -53,11 +55,11 @@ type ModalConfig struct {
 // Modal is a configurable modal dialog with centered positioning.
 // Modal implements the nav.ModalComponent interface for automatic lifecycle management.
 type Modal struct {
-	*tview.Flex
+	*core.Flex
 	panel       *Panel
 	hintBar     *KeyHintBar
-	content     tview.Primitive
-	focusTarget tview.Primitive // Optional: specific primitive to focus when modal opens
+	content     core.Widget
+	focusTarget core.Widget // Optional: specific widget to focus when modal opens
 	config      ModalConfig
 	behavior    ModalBehavior
 	onClose     func()
@@ -68,9 +70,9 @@ type Modal struct {
 
 // NewModal creates a new modal with the given configuration.
 func NewModal(config ModalConfig) *Modal {
-	flex := tview.NewFlex()
+	flex := core.NewFlex()
 	// Transparent background so backdrop/underlying content shows through
-	flex.SetBackgroundColor(tcell.ColorDefault)
+	flex.Box.SetBackgroundColor(tcell.ColorDefault)
 
 	// Initialize behavior from config
 	behavior := DefaultModalBehavior()
@@ -95,10 +97,10 @@ func NewModal(config ModalConfig) *Modal {
 // setupLayout builds the modal's internal structure.
 func (m *Modal) setupLayout() {
 	// Inner content area
-	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	innerFlex := core.NewFlex().SetDirection(core.Column)
 
 	// Content placeholder (will be replaced by SetContent)
-	contentBox := tview.NewBox()
+	contentBox := new(core.Box)
 	innerFlex.AddItem(contentBox, 0, 1, true)
 
 	// Hint bar at bottom
@@ -132,25 +134,25 @@ func (m *Modal) setupLayout() {
 	}
 
 	// Build centering layout
-	m.Flex.SetDirection(tview.FlexRow)
-	m.Flex.AddItem(nil, 0, 1, false) // Top spacer
+	m.Flex.SetDirection(core.Column)
+	m.Flex.AddItem(new(core.Box), 0, 1, false) // Top spacer
 
-	centerRow := tview.NewFlex().SetDirection(tview.FlexColumn)
-	centerRow.SetBackgroundColor(tcell.ColorDefault) // Transparent
-	centerRow.AddItem(nil, 0, 1, false)              // Left spacer
-	centerRow.AddItem(m.panel, width, 0, true)       // Modal panel
-	centerRow.AddItem(nil, 0, 1, false)              // Right spacer
+	centerRow := core.NewFlex().SetDirection(core.Row)
+	centerRow.Box.SetBackgroundColor(tcell.ColorDefault) // Transparent
+	centerRow.AddItem(new(core.Box), 0, 1, false)        // Left spacer
+	centerRow.AddItem(m.panel, width, 0, true)           // Modal panel
+	centerRow.AddItem(new(core.Box), 0, 1, false)        // Right spacer
 
 	m.Flex.AddItem(centerRow, height, 0, true)
-	m.Flex.AddItem(nil, 0, 1, false) // Bottom spacer
+	m.Flex.AddItem(new(core.Box), 0, 1, false) // Bottom spacer
 }
 
 // SetContent sets the modal's main content.
-func (m *Modal) SetContent(content tview.Primitive) *Modal {
+func (m *Modal) SetContent(content core.Widget) *Modal {
 	m.content = content
 
 	// Rebuild inner flex with new content
-	innerFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	innerFlex := core.NewFlex().SetDirection(core.Column)
 	innerFlex.AddItem(content, 0, 1, true)
 	innerFlex.AddItem(m.hintBar, 1, 0, false)
 	m.panel.SetContent(innerFlex)
@@ -252,22 +254,20 @@ func (m *Modal) drawBackdrop(screen tcell.Screen) {
 	fillRect(screen, x, y, width, height, style)
 }
 
-// InputHandler handles input with base modal behavior.
-func (m *Modal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// Base modal input handling
-		handled := m.handleBaseInput(event)
-		if handled {
-			return
-		}
+// HandleKey processes a key event for the Modal.
+func (m *Modal) HandleKey(ev *tcell.EventKey) bool {
+	// Base modal input handling
+	if m.handleBaseInput(ev) {
+		return true
+	}
 
-		// Delegate to content
-		if m.content != nil {
-			if handler := m.content.InputHandler(); handler != nil {
-				handler(event, setFocus)
-			}
+	// Delegate to content
+	if m.content != nil {
+		if kh, ok := m.content.(interface{ HandleKey(*tcell.EventKey) bool }); ok {
+			kh.HandleKey(ev)
 		}
-	})
+	}
+	return false
 }
 
 // handleBaseInput handles Enter for submit and Esc for cancel.
@@ -289,32 +289,14 @@ func (m *Modal) handleBaseInput(event *tcell.EventKey) bool {
 	return false
 }
 
-// WrapInputHandler wraps a custom handler with modal's base handler.
-func (m *Modal) WrapInputHandler(handler func(*tcell.EventKey, func(tview.Primitive))) func(*tcell.EventKey, func(tview.Primitive)) {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		// First try base handling
-		if m.handleBaseInput(event) {
-			return
-		}
-		// Then custom handler
-		handler(event, setFocus)
-	}
-}
-
 // Focus delegates to focusTarget, content, or panel.
-func (m *Modal) Focus(delegate func(tview.Primitive)) {
-	if m.focusTarget != nil {
-		delegate(m.focusTarget)
-	} else if m.content != nil {
-		delegate(m.content)
-	} else {
-		delegate(m.panel)
-	}
+func (m *Modal) Focus() {
+	m.Flex.Box.Focus()
 }
 
-// SetFocusOnShow sets a specific primitive to focus when the modal is shown.
+// SetFocusOnShow sets a specific widget to focus when the modal is shown.
 // This is useful when the content is a container and you want to focus a child.
-func (m *Modal) SetFocusOnShow(p tview.Primitive) *Modal {
+func (m *Modal) SetFocusOnShow(p core.Widget) *Modal {
 	m.focusTarget = p
 	return m
 }

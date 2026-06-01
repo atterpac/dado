@@ -22,8 +22,8 @@ A container with rounded borders and optional title. Delegates focus and input t
 
 ```go
 type Panel struct {
-    *tview.Box
-    content    tview.Primitive
+    widgetBase
+    content    core.Widget
     title      string
     titleColor tcell.Color  // 0 means use theme default
 }
@@ -31,7 +31,7 @@ type Panel struct {
 func NewPanel() *Panel
 
 // SetContent sets the inner content primitive
-func (p *Panel) SetContent(content tview.Primitive) *Panel
+func (p *Panel) SetContent(content core.Widget) *Panel
 
 // SetTitle sets the title displayed in the top border
 func (p *Panel) SetTitle(title string) *Panel
@@ -40,7 +40,7 @@ func (p *Panel) SetTitle(title string) *Panel
 func (p *Panel) SetTitleColor(color tcell.Color) *Panel
 
 // GetContent returns the inner content
-func (p *Panel) GetContent() tview.Primitive
+func (p *Panel) GetContent() core.Widget
 ```
 
 ### Draw Implementation
@@ -69,7 +69,7 @@ func (p *Panel) Draw(screen tcell.Screen) {
 ### Implementation Notes
 
 From `internal/ui/panel.go`:
-- Uses `tview.Box` as base for rect management
+- Uses `core.Box` as base for rect management
 - Rounded corners: `╭ ╮ ╰ ╯`
 - Title centered in top border with padding
 - Delegates `Focus()`, `Blur()`, `HasFocus()`, `InputHandler()` to content
@@ -96,10 +96,10 @@ type ModalConfig struct {
 }
 
 type Modal struct {
-    *tview.Flex
+    *core.Flex
     panel    *Panel
     hintBar  *KeyHintBar
-    content  tview.Primitive
+    content  core.Widget
     config   ModalConfig
     onClose  func()
     onSubmit func()
@@ -109,7 +109,7 @@ type Modal struct {
 func NewModal(config ModalConfig) *Modal
 
 // SetContent sets the modal's main content
-func (m *Modal) SetContent(content tview.Primitive) *Modal
+func (m *Modal) SetContent(content core.Widget) *Modal
 
 // SetHints sets the key hints displayed at bottom
 func (m *Modal) SetHints(hints []KeyHint) *Modal
@@ -127,7 +127,7 @@ func (m *Modal) SetOnCancel(fn func()) *Modal
 func (m *Modal) Close()
 
 // WrapInputHandler wraps custom handler with modal's base handler
-func (m *Modal) WrapInputHandler(handler func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey, func(tview.Primitive))
+func (m *Modal) WrapInputHandler(handler func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey, func(core.Widget))
 ```
 
 ### Layout Structure
@@ -179,7 +179,7 @@ Enhanced table wrapper with header support, selection, and theme-aware styling.
 
 ```go
 type Table struct {
-    *tview.Table
+    *core.Table
     headers            []string
     hasHeader          bool
     multiSelect        bool
@@ -237,7 +237,7 @@ func (t *Table) SetActions(actions *ActionRegistry) *Table
 type TableCell struct {
     Text       string
     Color      tcell.Color  // 0 = auto-detect from text
-    Align      int          // tview.AlignLeft, etc.
+    Align      int          // core.AlignLeft, etc.
     Expansion  int
     MaxWidth   int
     Selectable bool
@@ -281,7 +281,7 @@ func (t *Table) Draw(screen tcell.Screen) {
 ### Implementation Notes
 
 From `internal/ui/table.go`:
-- Wraps `tview.Table` for enhanced functionality
+- Wraps `core.Table` for enhanced functionality
 - Header row is fixed (not selectable)
 - Multi-select with space/ctrl+a
 - Status text auto-coloring via registry
@@ -303,7 +303,7 @@ type KeyHint struct {
 }
 
 type KeyHintBar struct {
-    *tview.Box
+    widgetBase
     hints []KeyHint
 }
 
@@ -360,7 +360,7 @@ Centered display for empty/loading/error states with icon, title, and message.
 
 ```go
 type EmptyState struct {
-    *tview.Flex
+    *core.Flex
     icon    string
     title   string
     message string

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/theme"
 )
@@ -13,7 +12,8 @@ import (
 // Badge - Small label/count indicator
 // =============================================================================
 
-// BadgeVariant defines badge appearance
+// BadgeVariant controls the color scheme of a Badge: Default (neutral gray),
+// Primary (accent), Success (green), Warning (yellow), Error (red), Info (blue).
 type BadgeVariant int
 
 const (
@@ -25,7 +25,7 @@ const (
 	BadgeInfo
 )
 
-// Badge is a small label or count indicator
+// Badge is a small pill-shaped label for counts, statuses, or tags.
 type Badge struct {
 	widgetBase
 
@@ -42,7 +42,7 @@ func NewBadge(text string) *Badge {
 		variant: BadgeDefault,
 		pill:    true,
 	}
-	b.initWidget(tview.NewBox())
+	b.initWidget()
 	return b
 }
 
@@ -105,7 +105,7 @@ func (b *Badge) getColors() (bg, fg tcell.Color) {
 
 // Draw renders the badge
 func (b *Badge) Draw(screen tcell.Screen) {
-	b.Box.DrawForSubclass(screen, b)
+	b.Box.DrawForSubclass(screen)
 	x, y, width, height := b.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -154,7 +154,8 @@ func (b *Badge) Width() int {
 // Chip - Removable tag with optional icon
 // =============================================================================
 
-// Chip is a removable tag element
+// Chip is a labeled tag with optional remove button and click handler.
+// Set removable=true via SetRemovable and wire SetOnRemove to handle dismissal.
 type Chip struct {
 	widgetBase
 
@@ -171,7 +172,7 @@ type Chip struct {
 // NewChip creates a new chip
 func NewChip(text string) *Chip {
 	c := &Chip{text: text}
-	c.initWidget(tview.NewBox())
+	c.initWidget()
 	return c
 }
 
@@ -247,7 +248,7 @@ func (c *Chip) IsSelected() bool {
 
 // Draw renders the chip
 func (c *Chip) Draw(screen tcell.Screen) {
-	c.Box.DrawForSubclass(screen, c)
+	c.Box.DrawForSubclass(screen)
 	x, y, width, height := c.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -323,7 +324,7 @@ func (c *Chip) Width() int {
 // Divider - Horizontal or vertical separator
 // =============================================================================
 
-// DividerOrientation defines divider direction
+// DividerOrientation specifies whether the Divider draws horizontally or vertically.
 type DividerOrientation int
 
 const (
@@ -331,7 +332,8 @@ const (
 	DividerVertical
 )
 
-// Divider is a visual separator
+// Divider renders a single-line visual separator using the theme border color.
+// Default orientation is horizontal; use NewDivider(DividerVertical) for columns.
 type Divider struct {
 	widgetBase
 
@@ -346,7 +348,7 @@ func NewDivider() *Divider {
 		orientation: DividerHorizontal,
 		style:       '─',
 	}
-	d.initWidget(tview.NewBox())
+	d.initWidget()
 	return d
 }
 
@@ -356,7 +358,7 @@ func NewVerticalDivider() *Divider {
 		orientation: DividerVertical,
 		style:       '│',
 	}
-	d.initWidget(tview.NewBox())
+	d.initWidget()
 	return d
 }
 
@@ -391,7 +393,7 @@ func (d *Divider) SetOrientation(o DividerOrientation) *Divider {
 
 // Draw renders the divider
 func (d *Divider) Draw(screen tcell.Screen) {
-	d.Box.DrawForSubclass(screen, d)
+	d.Box.DrawForSubclass(screen)
 	x, y, width, height := d.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -451,7 +453,8 @@ func (d *Divider) GetFieldHeight() int {
 // Skeleton - Loading placeholder with animation
 // =============================================================================
 
-// SkeletonVariant defines skeleton shape
+// SkeletonVariant controls the shape rendered during animated loading:
+// Text for multi-line stubs, Block for rectangular placeholders, Circle for avatars.
 type SkeletonVariant int
 
 const (
@@ -460,7 +463,8 @@ const (
 	SkeletonCircle                        // Circle/avatar
 )
 
-// Skeleton is an animated loading placeholder
+// Skeleton renders an animated placeholder in place of content while data loads.
+// Size it identically to the content it replaces so layout does not shift on load.
 type Skeleton struct {
 	widgetBase
 
@@ -481,7 +485,7 @@ func NewSkeleton() *Skeleton {
 		animated: true,
 		interval: 150 * time.Millisecond,
 	}
-	s.initWidget(tview.NewBox())
+	s.initWidget()
 	return s
 }
 
@@ -557,7 +561,7 @@ func (s *Skeleton) Stop() *Skeleton {
 
 // Draw renders the skeleton
 func (s *Skeleton) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen)
 	x, y, width, height := s.GetInnerRect()
 
 	if width <= 0 || height <= 0 {

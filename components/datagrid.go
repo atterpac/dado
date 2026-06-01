@@ -1,9 +1,5 @@
 package components
 
-import (
-	"github.com/rivo/tview"
-)
-
 // GridMode represents the current interaction mode of the DataGrid.
 type GridMode int
 
@@ -22,7 +18,7 @@ type editState struct {
 }
 
 // DataGrid is an advanced virtualized table component with cell-level navigation,
-// inline editing, and changeset tracking. Built on tview.Box with custom rendering,
+// inline editing, and changeset tracking. Built on core.Box with custom rendering,
 // following the same approach as VirtualList.
 type DataGrid struct {
 	widgetBase
@@ -35,6 +31,7 @@ type DataGrid struct {
 	cursor       CellPosition // Current cell position
 	mode         GridMode     // Current interaction mode
 	selectedRows map[int]bool // Multi-select row tracking
+	deletedRows  map[int]bool // Rows staged for deletion (rendered with the error color)
 
 	// Editing
 	changeset *Changeset // Dirty cell tracking
@@ -66,6 +63,9 @@ type DataGrid struct {
 	// deferredCallback is set by input handlers for callbacks that must
 	// run after mu is released (external callbacks that may re-enter public methods).
 	deferredCallback func()
+
+	// gPressed tracks the 'g' key for the gg sequence in normal mode.
+	gPressed bool
 }
 
 // NewDataGrid creates a new DataGrid component with default settings.
@@ -73,11 +73,12 @@ func NewDataGrid() *DataGrid {
 	dg := &DataGrid{
 		changeset:    NewChangeset(),
 		selectedRows: make(map[int]bool),
+		deletedRows:  make(map[int]bool),
 		showHeader:   true,
 		separator:    '│',
 		overscan:     5,
 	}
-	dg.initWidget(tview.NewBox())
+	dg.initWidget()
 	return dg
 }
 
@@ -299,6 +300,37 @@ func (dg *DataGrid) IsRowSelected(row int) bool {
 	dg.mu.RLock()
 	defer dg.mu.RUnlock()
 	return dg.selectedRows[row]
+}
+
+// --- Deletion marking ---
+//
+// Rows staged for deletion are rendered with the theme's error color so the
+// user can see what will be removed on submit. The grid only tracks the marks
+// for display; the owner is responsible for the actual delete on submit.
+
+// SetRowDeleted marks (or unmarks) a row as staged for deletion.
+func (dg *DataGrid) SetRowDeleted(row int, deleted bool) {
+	dg.mu.Lock()
+	defer dg.mu.Unlock()
+	if deleted {
+		dg.deletedRows[row] = true
+	} else {
+		delete(dg.deletedRows, row)
+	}
+}
+
+// IsRowDeleted returns whether the given row is staged for deletion.
+func (dg *DataGrid) IsRowDeleted(row int) bool {
+	dg.mu.RLock()
+	defer dg.mu.RUnlock()
+	return dg.deletedRows[row]
+}
+
+// ClearDeletedRows removes all deletion marks.
+func (dg *DataGrid) ClearDeletedRows() {
+	dg.mu.Lock()
+	defer dg.mu.Unlock()
+	dg.deletedRows = make(map[int]bool)
 }
 
 // GetSelectedRowIndices returns all selected row indices sorted ascending.
@@ -553,10 +585,6 @@ func (dg *DataGrid) cursorNonFrozenIdx() int {
 }
 
 // Focus handles focus.
-func (dg *DataGrid) Focus(delegate func(tview.Primitive)) {
-	dg.Box.Focus(delegate)
-}
-
 // HasFocus returns whether the component has focus.
 func (dg *DataGrid) HasFocus() bool {
 	return dg.Box.HasFocus()
