@@ -371,6 +371,8 @@ func (m *modalWrapper) Start() {
 	m.modal.SetOnClose(func() {
 		m.app.pages.Pop()
 	})
+	// Focus the modal's content (e.g. the first form field) so input is captured.
+	m.modal.Focus()
 }
 
 func (m *modalWrapper) Stop() {}
@@ -393,5 +395,15 @@ func (m *modalWrapper) OnDismiss() bool {
 
 func (m *modalWrapper) Draw(screen tcell.Screen) { m.modal.Draw(screen) }
 func (m *modalWrapper) SetRect(x, y, w, h int)   { m.modal.SetRect(x, y, w, h) }
+func (m *modalWrapper) Focus()                   { m.modal.Focus() }
 func (m *modalWrapper) Blur()                    { m.modal.Blur() }
 func (m *modalWrapper) HasFocus() bool           { return m.modal.HasFocus() }
+
+func (m *modalWrapper) HandleKey(ev *tcell.EventKey) bool { return m.modal.HandleKey(ev) }
+
+func (m *modalWrapper) HandleMouse(action core.MouseAction, ev *tcell.EventMouse) (bool, core.Widget) {
+	if mh, ok := any(m.modal).(core.MouseHandler); ok {
+		return mh.HandleMouse(action, ev)
+	}
+	return false, nil
+}

@@ -264,10 +264,14 @@ func (m *Modal) HandleKey(ev *tcell.EventKey) bool {
 	// Delegate to content
 	if m.content != nil {
 		if kh, ok := m.content.(interface{ HandleKey(*tcell.EventKey) bool }); ok {
-			kh.HandleKey(ev)
+			if kh.HandleKey(ev) {
+				return true
+			}
 		}
 	}
-	return false
+	// A modal captures all input by default, so consume the event regardless to
+	// stop it from propagating up the parent chain and being handled twice.
+	return m.behavior.CapturesAllInput
 }
 
 // handleBaseInput handles Enter for submit and Esc for cancel.

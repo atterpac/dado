@@ -102,6 +102,9 @@ func (d *DiffViewer) SetDiffResult(result *DiffResult) *DiffViewer {
 	d.result = result
 	d.flattenLines()
 	d.selectedIndex = 0
+	if len(d.lines) > 0 {
+		d.selectedIndex = d.firstChangeInHunk(d.lines[0].HunkIndex, 0)
+	}
 	d.offset = 0
 	return d
 }
@@ -230,12 +233,27 @@ func (d *DiffViewer) GetHunkLines(hunkIndex int) []DiffLine {
 	return lines
 }
 
-// NextHunk moves to the next hunk
+// firstChangeInHunk returns the index of the first added/removed line in the
+// given hunk. Falls back to the supplied index (typically the hunk header) when
+// the hunk has no changed lines.
+func (d *DiffViewer) firstChangeInHunk(hunkIndex, fallback int) int {
+	for i := range d.lines {
+		if d.lines[i].HunkIndex != hunkIndex {
+			continue
+		}
+		if d.lines[i].Type == DiffLineAdded || d.lines[i].Type == DiffLineRemoved {
+			return i
+		}
+	}
+	return fallback
+}
+
+// NextHunk moves to the first changed line of the next hunk
 func (d *DiffViewer) NextHunk() {
 	currentHunk := d.GetCurrentHunkIndex()
 	for i := d.selectedIndex + 1; i < len(d.lines); i++ {
 		if d.lines[i].HunkIndex > currentHunk {
-			d.selectedIndex = i
+			d.selectedIndex = d.firstChangeInHunk(d.lines[i].HunkIndex, i)
 			d.ensureVisible()
 			return
 		}
@@ -257,7 +275,7 @@ func (d *DiffViewer) PrevHunk() {
 			for i > 0 && d.lines[i-1].HunkIndex == d.lines[i].HunkIndex {
 				i--
 			}
-			d.selectedIndex = i
+			d.selectedIndex = d.firstChangeInHunk(d.lines[i].HunkIndex, i)
 			d.ensureVisible()
 			return
 		}
@@ -500,6 +518,12 @@ func (d *DiffViewer) moveUp() {
 		d.ensureVisible()
 	}
 }
+
+// MoveDown moves the selection down by one line.
+func (d *DiffViewer) MoveDown() { d.moveDown() }
+
+// MoveUp moves the selection up by one line.
+func (d *DiffViewer) MoveUp() { d.moveUp() }
 
 // HasFocus returns whether the component has focus
 func (d *DiffViewer) HasFocus() bool {
