@@ -7,26 +7,27 @@ type listItem struct {
 	secondary string
 	shortcut  rune
 	selected  func()
+	cached    *Text // main parsed once into styled spans (see AddItem)
 }
 
 // List is a scrollable selectable list.
 type List struct {
 	Box
-	items    []listItem
-	current  int
-	offset   int
+	items   []listItem
+	current int
+	offset  int
 
 	wrapAround    bool
 	showSecondary bool
 
-	mainTextColor         tcell.Color
-	secondaryTextColor    tcell.Color
-	selectedBgColor       tcell.Color
-	selectedTextColor     tcell.Color
-	shortcutColor         tcell.Color
+	mainTextColor      tcell.Color
+	secondaryTextColor tcell.Color
+	selectedBgColor    tcell.Color
+	selectedTextColor  tcell.Color
+	shortcutColor      tcell.Color
 
-	onChange  func(cur, prev int, main, secondary string, shortcut rune)
-	onSelect  func(idx int, main, secondary string, shortcut rune)
+	onChange func(cur, prev int, main, secondary string, shortcut rune)
+	onSelect func(idx int, main, secondary string, shortcut rune)
 }
 
 // NewList returns an empty List.
@@ -34,7 +35,13 @@ func NewList() *List { return &List{} }
 
 // AddItem appends an item. shortcut 0 = no shortcut. selected is called on Enter.
 func (l *List) AddItem(main, secondary string, shortcut rune, selected func()) *List {
-	l.items = append(l.items, listItem{main, secondary, shortcut, selected})
+	l.items = append(l.items, listItem{
+		main:      main,
+		secondary: secondary,
+		shortcut:  shortcut,
+		selected:  selected,
+		cached:    ParseTagged(main, tcell.StyleDefault),
+	})
 	return l
 }
 
@@ -90,15 +97,22 @@ func (l *List) Draw(screen tcell.Screen) {
 			break
 		}
 		item := l.items[idx]
+		selected := idx == l.current
 		style := tcell.StyleDefault
-		if idx == l.current {
+		if selected {
 			style = style.Reverse(true)
 		}
-		// Fill row background, then render text with tag parsing
+		// Fill row background, then render the pre-parsed text. The selection
+		// overlay applies reverse on top of each span's own style, so cached
+		// spans (parsed once in AddItem) need no per-frame re-parsing.
 		for col := 0; col < w; col++ {
 			screen.SetContent(x+col, y+row, ' ', nil, style)
 		}
-		PrintTagged(screen, item.main, x, y+row, w, style)
+		var overlay func(tcell.Style) tcell.Style
+		if selected {
+			overlay = func(s tcell.Style) tcell.Style { return s.Reverse(true) }
+		}
+		item.cached.DrawFunc(screen, x, y+row, w, overlay)
 	}
 }
 

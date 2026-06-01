@@ -2,7 +2,6 @@ package core
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -11,7 +10,7 @@ import (
 type TextView struct {
 	Box
 	text       string
-	lines      []styledLine // cached wrapped lines
+	lines      []*Text // cached wrapped lines (styled spans)
 	scrollY    int
 	scrollX    int
 	scrollable bool
@@ -20,15 +19,6 @@ type TextView struct {
 	fgColor    tcell.Color // foreground override (ColorDefault = use style/default)
 	textStyle  tcell.Style // base style for plain text
 	textAlign  int         // AlignLeft/AlignCenter/AlignRight
-}
-
-type styledLine struct {
-	segments []styledSegment
-}
-
-type styledSegment struct {
-	text  string
-	style tcell.Style
 }
 
 // NewTextView returns a ready TextView.
@@ -93,10 +83,7 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 			break
 		}
 		// Compute line width for alignment
-		lineRunes := 0
-		for _, seg := range tv.lines[lineIdx].segments {
-			lineRunes += utf8.RuneCountInString(seg.text)
-		}
+		lineRunes := tv.lines[lineIdx].Width()
 		startCol := 0
 		switch tv.textAlign {
 		case AlignCenter:
@@ -115,8 +102,8 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 		for ; col < startCol; col++ {
 			screen.SetContent(x+col, y+row, ' ', nil, clearStyle)
 		}
-		for _, seg := range tv.lines[lineIdx].segments {
-			segStyle := seg.style
+		for _, seg := range tv.lines[lineIdx].Spans() {
+			segStyle := seg.Style
 			// Apply base fg if segment is using default foreground
 			fg, bg, _ := segStyle.Decompose()
 			if fg == tcell.ColorDefault {
@@ -128,7 +115,7 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 				bg = tv.Box.bg()
 			}
 			segStyle = segStyle.Background(bg)
-			for _, r := range seg.text {
+			for _, r := range seg.Text {
 				if col >= w {
 					break
 				}
@@ -158,108 +145,15 @@ func (tv *TextView) reflow(maxWidth int) {
 	}
 }
 
-func (tv *TextView) wrapPlain(text string, width int) []styledLine {
-	if width <= 0 {
-		return []styledLine{{[]styledSegment{{text, tcell.StyleDefault}}}}
-	}
-	var lines []styledLine
-	for utf8.RuneCountInString(text) > width {
-		// Break at width
-		cut := 0
-		for i := range text {
-			cut = i
-			if i >= width {
-				break
-			}
-		}
-		if cut == 0 {
-			cut = width
-		}
-		lines = append(lines, styledLine{[]styledSegment{{text[:cut], tcell.StyleDefault}}})
-		text = text[cut:]
-	}
-	lines = append(lines, styledLine{[]styledSegment{{text, tcell.StyleDefault}}})
-	return lines
+func (tv *TextView) wrapPlain(text string, width int) []*Text {
+	return NewText().Append(text, tcell.StyleDefault).splitWidth(width)
 }
 
-// parseColorLine parses a line that may contain [color] tags.
-// Supports: [#rrggbb], [red], [-], [fg:bg:attrs], [::b], [-:-:-], etc.
-func (tv *TextView) parseColorLine(text string, width int) []styledLine {
-	var segs []styledSegment
-	style := tcell.StyleDefault
-	for len(text) > 0 {
-		if text[0] == '[' {
-			end := strings.Index(text, "]")
-			if end > 0 {
-				tag := text[1:end]
-				if newStyle, ok := parseTag(tag, style); ok {
-					style = newStyle
-					text = text[end+1:]
-					continue
-				}
-			}
-		}
-		// Next rune
-		r, size := utf8.DecodeRuneInString(text)
-		segs = append(segs, styledSegment{string(r), style})
-		text = text[size:]
-	}
-
-	// Merge consecutive segments with same style for efficiency
-	merged := mergeSegments(segs)
-
-	// Wrap at width
-	if width <= 0 {
-		return []styledLine{{merged}}
-	}
-	// Count runes
-	total := 0
-	for _, s := range merged {
-		total += utf8.RuneCountInString(s.text)
-	}
-	if total <= width {
-		return []styledLine{{merged}}
-	}
-	// Split into lines — simple: re-expand to runes, chunk
-	type runeStyle struct {
-		r rune
-		s tcell.Style
-	}
-	var runes []runeStyle
-	for _, s := range merged {
-		for _, r := range s.text {
-			runes = append(runes, runeStyle{r, s.style})
-		}
-	}
-	var lines []styledLine
-	for len(runes) > 0 {
-		chunk := runes
-		if len(chunk) > width {
-			chunk = runes[:width]
-		}
-		runes = runes[len(chunk):]
-		var lineSegs []styledSegment
-		for _, rs := range chunk {
-			lineSegs = append(lineSegs, styledSegment{string(rs.r), rs.s})
-		}
-		lines = append(lines, styledLine{mergeSegments(lineSegs)})
-	}
-	return lines
-}
-
-func mergeSegments(segs []styledSegment) []styledSegment {
-	if len(segs) == 0 {
-		return nil
-	}
-	out := []styledSegment{segs[0]}
-	for _, s := range segs[1:] {
-		if s.style == out[len(out)-1].style {
-			out[len(out)-1].text += s.text
-		} else {
-			out = append(out, s)
-		}
-	}
-	return out
+// parseColorLine parses a line that may contain [color] tags into styled spans,
+// then hard-wraps it to width. Supports: [#rrggbb], [red], [-], [fg:bg:attrs],
+// [::b], [-:-:-], etc. Tag parsing and span merging are handled by ParseTagged.
+func (tv *TextView) parseColorLine(text string, width int) []*Text {
+	return ParseTagged(text, tcell.StyleDefault).splitWidth(width)
 }
 
 // parseTag parses a [color] tag and returns the updated style.
@@ -402,7 +296,7 @@ func parseHex3(s string) (r, g, b uint8, ok bool) {
 	if e1 || e2 || e3 {
 		return 0, 0, 0, false
 	}
-	return rv*17, gv*17, bv*17, true
+	return rv * 17, gv * 17, bv * 17, true
 }
 
 func hexByte(hi, lo byte) (uint8, bool) {
@@ -459,4 +353,3 @@ func (tv *TextView) HandleKey(ev *tcell.EventKey) bool {
 	}
 	return false
 }
-

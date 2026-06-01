@@ -22,6 +22,11 @@ type App struct {
 	mu           sync.Mutex
 	mouseCapture Widget
 
+	// dirty marks that a redraw is needed before the loop blocks again.
+	// Set on the event-loop goroutine only (by handled events and drained
+	// queue fns); coalesced into a single draw() per loop iteration.
+	dirty bool
+
 	inputCapture func(*tcell.EventKey) *tcell.EventKey
 	onResize     func(w, h int)
 	afterDraw    func(screen tcell.Screen)
@@ -90,7 +95,7 @@ func (a *App) QueueUpdateDraw(fn func()) *App {
 	}
 	a.queue <- func() {
 		fn()
-		a.draw()
+		a.dirty = true
 	}
 	return a
 }
@@ -184,7 +189,8 @@ func (a *App) Run() error {
 			return nil
 		case fn := <-a.queue:
 			fn()
-			// Drain remaining queue items before blocking.
+			// Drain remaining queue items before drawing. Each fn that needs
+			// a redraw sets a.dirty; the single draw below coalesces them.
 			for len(a.queue) > 0 {
 				(<-a.queue)()
 			}
@@ -199,7 +205,7 @@ func (a *App) Run() error {
 					w, h := ev.Size()
 					a.onResize(w, h)
 				}
-				a.draw()
+				a.dirty = true
 			case *tcell.EventKey:
 				if ev.Key() == tcell.KeyCtrlC {
 					a.Stop()
@@ -212,13 +218,19 @@ func (a *App) Run() error {
 				if processed != nil {
 					a.dispatchKey(processed)
 				}
-				a.draw()
+				a.dirty = true
 			case *tcell.EventMouse:
 				a.dispatchMouse(ev)
 			case *tcell.EventPaste:
 				// tcell uses EventPaste as a start/end bracket marker.
 				_ = ev
 			}
+		}
+
+		// Coalesce all redraws requested during this iteration into one frame.
+		if a.dirty {
+			a.dirty = false
+			a.draw()
 		}
 	}
 }
