@@ -145,7 +145,7 @@ func (a *App) openThemeSelector() {
 }
 
 // themeSelectorWrapper adapts theme.ThemeSelectorModal to nav.Component.
-// The modal already implements tview.Primitive; this adds the lifecycle and
+// The modal already implements core.Widget; this adds the lifecycle and
 // hint methods nav.Pages requires.
 type themeSelectorWrapper struct {
 	*theme.ThemeSelectorModal

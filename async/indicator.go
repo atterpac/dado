@@ -5,8 +5,7 @@ import (
 	"sync"
 
 	"github.com/atterpac/dado/components"
-	"github.com/atterpac/dado/theme"
-	"github.com/rivo/tview"
+	"github.com/atterpac/dado/core"
 )
 
 // LoadingIndicator defines the interface for loading indicators.
@@ -94,11 +93,7 @@ func (t *toastIndicator) Show() {
 
 	// Get or create toast manager
 	if t.manager == nil {
-		app := theme.GetApp()
-		if app == nil {
-			return
-		}
-		t.manager = components.NewToastManager(app)
+		t.manager = components.NewToastManager()
 	}
 
 	// Show persistent loading toast
@@ -272,10 +267,7 @@ func (p *progressIndicator) Show() {
 		SetMessage(p.config.Message).
 		SetIndeterminate(true)
 
-	// Start spinner animation
-	if app := theme.GetApp(); app != nil {
-		p.modal.StartSpinner(app)
-	}
+	p.modal.StartSpinner()
 
 	if p.show != nil {
 		p.show(p.modal)
@@ -372,43 +364,42 @@ func (c *callbackIndicator) Error(err error) {
 	}
 }
 
-// --- Primitive Indicator ---
+// --- Widget Indicator ---
 
-// primitiveIndicator shows/hides a tview primitive.
-type primitiveIndicator struct {
-	primitive tview.Primitive
-	pages     *tview.Pages
-	name      string
-	mu        sync.Mutex
+// widgetIndicator shows/hides a core.Widget via core.Pages.
+type widgetIndicator struct {
+	widget core.Widget
+	pages  *core.Pages
+	name   string
+	mu     sync.Mutex
 }
 
-// Primitive creates an indicator that shows/hides a tview primitive.
-// The primitive is added to pages when shown and removed when hidden.
+// Widget creates an indicator that shows/hides a widget via a Pages container.
 //
 // Example:
 //
 //	spinner := NewSpinner()
 //	async.NewLoader[Data]().
-//	    WithIndicator(async.Primitive(spinner, pages, "spinner")).
+//	    WithIndicator(async.Widget(spinner, pages, "spinner")).
 //	    Run(fetchData)
-func Primitive(p tview.Primitive, pages *tview.Pages, name string) LoadingIndicator {
-	return &primitiveIndicator{
-		primitive: p,
-		pages:     pages,
-		name:      name,
+func Widget(w core.Widget, pages *core.Pages, name string) LoadingIndicator {
+	return &widgetIndicator{
+		widget: w,
+		pages:  pages,
+		name:   name,
 	}
 }
 
-func (p *primitiveIndicator) Show() {
+func (p *widgetIndicator) Show() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.pages != nil && p.primitive != nil {
-		p.pages.AddPage(p.name, p.primitive, true, true)
+	if p.pages != nil && p.widget != nil {
+		p.pages.AddPage(p.name, p.widget, true, true)
 	}
 }
 
-func (p *primitiveIndicator) Hide() {
+func (p *widgetIndicator) Hide() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -417,8 +408,8 @@ func (p *primitiveIndicator) Hide() {
 	}
 }
 
-func (p *primitiveIndicator) Success()        {}
-func (p *primitiveIndicator) Error(err error) {}
+func (p *widgetIndicator) Success()        {}
+func (p *widgetIndicator) Error(err error) {}
 
 // --- Noop Indicator ---
 

@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/nav"
 	"github.com/atterpac/dado/theme"
 )
@@ -16,14 +16,14 @@ import (
 type DashboardSection struct {
 	Title     string
 	Span      int // number of columns to span (1-4)
-	Content   tview.Primitive
+	Content   core.Widget
 	Refresh   time.Duration // refresh interval, 0 for no auto-refresh
 	OnRefresh func()        // called on refresh
 }
 
 // Dashboard is a multi-pane status dashboard.
 type Dashboard struct {
-	*tview.Box
+	core.Box
 
 	title    string
 	sections []DashboardSection
@@ -43,7 +43,6 @@ type Dashboard struct {
 // NewDashboard creates a new Dashboard.
 func NewDashboard() *Dashboard {
 	return &Dashboard{
-		Box:         tview.NewBox(),
 		columns:     4,
 		stopRefresh: make(map[int]chan struct{}),
 		tickers:     make(map[int]*time.Ticker),
@@ -81,7 +80,7 @@ func (d *Dashboard) AddSection(section DashboardSection) *Dashboard {
 }
 
 // AddWidget adds a simple widget section.
-func (d *Dashboard) AddWidget(title string, content tview.Primitive) *Dashboard {
+func (d *Dashboard) AddWidget(title string, content core.Widget) *Dashboard {
 	return d.AddSection(DashboardSection{
 		Title:   title,
 		Span:    1,
@@ -131,7 +130,7 @@ func (d *Dashboard) GetSection(index int) *DashboardSection {
 }
 
 // UpdateSection updates a section's content.
-func (d *Dashboard) UpdateSection(index int, content tview.Primitive) *Dashboard {
+func (d *Dashboard) UpdateSection(index int, content core.Widget) *Dashboard {
 	if index >= 0 && index < len(d.sections) {
 		d.sections[index].Content = content
 	}
@@ -195,7 +194,7 @@ func (d *Dashboard) Hints() []components.KeyHint {
 
 // Draw renders the dashboard.
 func (d *Dashboard) Draw(screen tcell.Screen) {
-	d.Box.DrawForSubclass(screen, d)
+	d.Box.DrawForSubclass(screen)
 	x, y, width, height := d.GetInnerRect()
 
 	if width <= 0 || height <= 0 {
@@ -354,40 +353,39 @@ func (d *Dashboard) Draw(screen tcell.Screen) {
 	_ = fgDimColor
 }
 
-// InputHandler handles keyboard input.
-func (d *Dashboard) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return d.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyTab:
+func (d *Dashboard) HandleKey(ev *tcell.EventKey) bool {
+	switch ev.Key() {
+	case tcell.KeyTab:
+		d.focusNext()
+	case tcell.KeyBacktab:
+		d.focusPrev()
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'r':
+			for _, section := range d.sections {
+				if section.OnRefresh != nil {
+					section.OnRefresh()
+				}
+			}
+		case 'j', 'l':
 			d.focusNext()
-		case tcell.KeyBacktab:
+		case 'k', 'h':
 			d.focusPrev()
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'r':
-				// Refresh all sections
-				for _, section := range d.sections {
-					if section.OnRefresh != nil {
-						section.OnRefresh()
-					}
-				}
-			case 'j', 'l':
-				d.focusNext()
-			case 'k', 'h':
-				d.focusPrev()
-			}
 		}
+	}
 
-		// Pass to focused section
-		if d.focusedSection >= 0 && d.focusedSection < len(d.sections) {
-			section := d.sections[d.focusedSection]
-			if section.Content != nil {
-				if handler := section.Content.InputHandler(); handler != nil {
-					handler(event, setFocus)
-				}
+	if d.focusedSection >= 0 && d.focusedSection < len(d.sections) {
+		section := d.sections[d.focusedSection]
+		if section.Content != nil {
+			type keyHandlerable interface {
+				HandleKey(*tcell.EventKey) bool
+			}
+			if kh, ok := section.Content.(keyHandlerable); ok {
+				kh.HandleKey(ev)
 			}
 		}
-	})
+	}
+	return false
 }
 
 func (d *Dashboard) focusNext() {
@@ -430,15 +428,8 @@ func (d *Dashboard) focusPrev() {
 }
 
 // Focus handles focus.
-func (d *Dashboard) Focus(delegate func(tview.Primitive)) {
-	if d.focusedSection >= 0 && d.focusedSection < len(d.sections) {
-		section := d.sections[d.focusedSection]
-		if section.Content != nil {
-			delegate(section.Content)
-			return
-		}
-	}
-	d.Box.Focus(delegate)
+func (d *Dashboard) Focus() {
+	d.Box.Focus()
 }
 
 // HasFocus returns whether the dashboard has focus.
@@ -449,32 +440,6 @@ func (d *Dashboard) HasFocus() bool {
 		}
 	}
 	return d.Box.HasFocus()
-}
-
-// MouseHandler handles mouse input.
-func (d *Dashboard) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return d.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if !d.InRect(event.Position()) {
-			return false, nil
-		}
-
-		// Find which section was clicked
-		mx, my := event.Position()
-		for i, section := range d.sections {
-			if section.Content != nil {
-				cx, cy, cw, ch := section.Content.GetRect()
-				if mx >= cx && mx < cx+cw && my >= cy && my < cy+ch {
-					d.focusedSection = i
-					if handler := section.Content.MouseHandler(); handler != nil {
-						return handler(action, event, setFocus)
-					}
-					return true, section.Content
-				}
-			}
-		}
-
-		return false, nil
-	})
 }
 
 // Ensure Dashboard implements nav.Component

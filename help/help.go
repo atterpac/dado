@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/input"
 	"github.com/atterpac/dado/theme"
 )
@@ -172,7 +172,7 @@ func (h *Help) ExportManPage(path string) error {
 
 // HelpModal is a modal dialog displaying help information.
 type HelpModal struct {
-	*tview.Box
+	core.Box
 
 	help         *Help
 	scrollOffset int
@@ -183,7 +183,6 @@ type HelpModal struct {
 // NewHelpModal creates a new HelpModal.
 func NewHelpModal(help *Help) *HelpModal {
 	return &HelpModal{
-		Box:  tview.NewBox(),
 		help: help,
 	}
 }
@@ -411,79 +410,49 @@ func (m *HelpModal) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles keyboard input.
-func (m *HelpModal) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if !m.visible {
-			return
-		}
+func (m *HelpModal) HandleKey(ev *tcell.EventKey) bool {
+	if !m.visible {
+		return false
+	}
 
-		switch event.Key() {
-		case tcell.KeyEscape, tcell.KeyEnter:
-			m.Hide()
-		case tcell.KeyUp:
+	switch ev.Key() {
+	case tcell.KeyEscape, tcell.KeyEnter:
+		m.Hide()
+	case tcell.KeyUp:
+		m.scrollOffset--
+	case tcell.KeyDown:
+		m.scrollOffset++
+	case tcell.KeyPgUp:
+		m.scrollOffset -= 10
+	case tcell.KeyPgDn:
+		m.scrollOffset += 10
+	case tcell.KeyHome:
+		m.scrollOffset = 0
+	case tcell.KeyEnd:
+		m.scrollOffset = m.totalLines
+	case tcell.KeyRune:
+		switch ev.Rune() {
+		case 'k':
 			m.scrollOffset--
-		case tcell.KeyDown:
+		case 'j':
 			m.scrollOffset++
-		case tcell.KeyPgUp:
-			m.scrollOffset -= 10
-		case tcell.KeyPgDn:
-			m.scrollOffset += 10
-		case tcell.KeyHome:
+		case 'g':
 			m.scrollOffset = 0
-		case tcell.KeyEnd:
+		case 'G':
 			m.scrollOffset = m.totalLines
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'k':
-				m.scrollOffset--
-			case 'j':
-				m.scrollOffset++
-			case 'g':
-				m.scrollOffset = 0
-			case 'G':
-				m.scrollOffset = m.totalLines
-			case 'q':
-				m.Hide()
-			}
+		case 'q':
+			m.Hide()
 		}
 	}
+	return false
 }
 
 // Focus handles focus.
-func (m *HelpModal) Focus(delegate func(tview.Primitive)) {
-	// Modal captures focus
+func (m *HelpModal) Focus() {
+	m.Box.Focus()
 }
 
 // HasFocus returns whether the modal has focus.
 func (m *HelpModal) HasFocus() bool {
 	return m.visible
-}
-
-// MouseHandler handles mouse input.
-func (m *HelpModal) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
-		if !m.visible {
-			return false, nil
-		}
-
-		switch action {
-		case tview.MouseScrollUp:
-			m.scrollOffset--
-			return true, m
-		case tview.MouseScrollDown:
-			m.scrollOffset++
-			return true, m
-		case tview.MouseLeftClick:
-			// Check if click is outside modal to close
-			screenWidth, screenHeight := event.Position()
-			_ = screenWidth
-			_ = screenHeight
-			// For simplicity, any click closes
-			m.Hide()
-			return true, m
-		}
-
-		return true, m
-	}
 }

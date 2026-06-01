@@ -2,9 +2,9 @@ package input
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 
 	// TODO: Update import path when extracted to separate repo
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/theme"
 )
 
@@ -28,7 +28,7 @@ type CommandTypeConfig struct {
 
 // CommandBar is a K9s-style command/filter input bar.
 type CommandBar struct {
-	*tview.Box
+	core.Box
 	input       string
 	cursorPos   int
 	commandType CommandType
@@ -42,7 +42,6 @@ type CommandBar struct {
 // NewCommandBar creates a new command bar.
 func NewCommandBar() *CommandBar {
 	c := &CommandBar{
-		Box:         tview.NewBox(),
 		typeConfigs: make(map[CommandType]CommandTypeConfig),
 	}
 
@@ -137,11 +136,11 @@ func (c *CommandBar) SetOnChange(fn func(input string)) *CommandBar {
 // Draw renders the command bar.
 func (c *CommandBar) Draw(screen tcell.Screen) {
 	if !c.visible {
-		c.Box.DrawForSubclass(screen, c)
+		c.Box.DrawForSubclass(screen)
 		return
 	}
 
-	c.Box.DrawForSubclass(screen, c)
+	c.Box.DrawForSubclass(screen)
 
 	x, y, width, height := c.GetInnerRect()
 	if width < 1 || height < 1 {
@@ -209,94 +208,87 @@ func (c *CommandBar) Draw(screen tcell.Screen) {
 	}
 }
 
-// InputHandler handles key events for the command bar.
-func (c *CommandBar) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return c.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
-		if !c.visible {
-			return
+func (c *CommandBar) HandleKey(ev *tcell.EventKey) bool {
+	if !c.visible {
+		return false
+	}
+
+	inputRunes := []rune(c.input)
+
+	switch ev.Key() {
+	case tcell.KeyEnter:
+		if c.onSubmit != nil {
+			c.onSubmit(c.commandType, c.input)
 		}
 
-		inputRunes := []rune(c.input)
+	case tcell.KeyEscape:
+		if c.onCancel != nil {
+			c.onCancel()
+		}
 
-		switch event.Key() {
-		case tcell.KeyEnter:
-			if c.onSubmit != nil {
-				c.onSubmit(c.commandType, c.input)
-			}
-
-		case tcell.KeyEscape:
-			if c.onCancel != nil {
-				c.onCancel()
-			}
-
-		case tcell.KeyBackspace, tcell.KeyBackspace2:
-			if c.cursorPos > 0 {
-				inputRunes = append(inputRunes[:c.cursorPos-1], inputRunes[c.cursorPos:]...)
-				c.input = string(inputRunes)
-				c.cursorPos--
-				c.notifyChange()
-			}
-
-		case tcell.KeyDelete:
-			if c.cursorPos < len(inputRunes) {
-				inputRunes = append(inputRunes[:c.cursorPos], inputRunes[c.cursorPos+1:]...)
-				c.input = string(inputRunes)
-				c.notifyChange()
-			}
-
-		case tcell.KeyLeft:
-			if c.cursorPos > 0 {
-				c.cursorPos--
-			}
-
-		case tcell.KeyRight:
-			if c.cursorPos < len(inputRunes) {
-				c.cursorPos++
-			}
-
-		case tcell.KeyHome, tcell.KeyCtrlA:
-			c.cursorPos = 0
-
-		case tcell.KeyEnd, tcell.KeyCtrlE:
-			c.cursorPos = len(inputRunes)
-
-		case tcell.KeyCtrlU:
-			// Clear to start of line
-			c.input = string(inputRunes[c.cursorPos:])
-			c.cursorPos = 0
-			c.notifyChange()
-
-		case tcell.KeyCtrlK:
-			// Clear to end of line
-			c.input = string(inputRunes[:c.cursorPos])
-			c.notifyChange()
-
-		case tcell.KeyCtrlW:
-			// Delete word backward
-			if c.cursorPos > 0 {
-				// Find start of previous word
-				pos := c.cursorPos - 1
-				for pos > 0 && inputRunes[pos] == ' ' {
-					pos--
-				}
-				for pos > 0 && inputRunes[pos-1] != ' ' {
-					pos--
-				}
-				inputRunes = append(inputRunes[:pos], inputRunes[c.cursorPos:]...)
-				c.input = string(inputRunes)
-				c.cursorPos = pos
-				c.notifyChange()
-			}
-
-		case tcell.KeyRune:
-			// Insert character at cursor
-			r := event.Rune()
-			inputRunes = append(inputRunes[:c.cursorPos], append([]rune{r}, inputRunes[c.cursorPos:]...)...)
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if c.cursorPos > 0 {
+			inputRunes = append(inputRunes[:c.cursorPos-1], inputRunes[c.cursorPos:]...)
 			c.input = string(inputRunes)
-			c.cursorPos++
+			c.cursorPos--
 			c.notifyChange()
 		}
-	})
+
+	case tcell.KeyDelete:
+		if c.cursorPos < len(inputRunes) {
+			inputRunes = append(inputRunes[:c.cursorPos], inputRunes[c.cursorPos+1:]...)
+			c.input = string(inputRunes)
+			c.notifyChange()
+		}
+
+	case tcell.KeyLeft:
+		if c.cursorPos > 0 {
+			c.cursorPos--
+		}
+
+	case tcell.KeyRight:
+		if c.cursorPos < len(inputRunes) {
+			c.cursorPos++
+		}
+
+	case tcell.KeyHome, tcell.KeyCtrlA:
+		c.cursorPos = 0
+
+	case tcell.KeyEnd, tcell.KeyCtrlE:
+		c.cursorPos = len(inputRunes)
+
+	case tcell.KeyCtrlU:
+		c.input = string(inputRunes[c.cursorPos:])
+		c.cursorPos = 0
+		c.notifyChange()
+
+	case tcell.KeyCtrlK:
+		c.input = string(inputRunes[:c.cursorPos])
+		c.notifyChange()
+
+	case tcell.KeyCtrlW:
+		if c.cursorPos > 0 {
+			pos := c.cursorPos - 1
+			for pos > 0 && inputRunes[pos] == ' ' {
+				pos--
+			}
+			for pos > 0 && inputRunes[pos-1] != ' ' {
+				pos--
+			}
+			inputRunes = append(inputRunes[:pos], inputRunes[c.cursorPos:]...)
+			c.input = string(inputRunes)
+			c.cursorPos = pos
+			c.notifyChange()
+		}
+
+	case tcell.KeyRune:
+		r := ev.Rune()
+		inputRunes = append(inputRunes[:c.cursorPos], append([]rune{r}, inputRunes[c.cursorPos:]...)...)
+		c.input = string(inputRunes)
+		c.cursorPos++
+		c.notifyChange()
+	}
+	return false
 }
 
 // notifyChange calls the onChange callback if set.
@@ -312,9 +304,9 @@ func (c *CommandBar) HasFocus() bool {
 }
 
 // Focus makes the command bar focusable when visible.
-func (c *CommandBar) Focus(delegate func(tview.Primitive)) {
+func (c *CommandBar) Focus() {
 	if c.visible {
-		c.Box.Focus(delegate)
+		c.Box.Focus()
 	}
 }
 

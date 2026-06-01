@@ -5,10 +5,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
-
 	// TODO: Update import path when extracted to separate repo
 	"github.com/atterpac/dado/components"
+	"github.com/atterpac/dado/core"
 	"github.com/atterpac/dado/effect"
 	"github.com/atterpac/dado/nav"
 	"github.com/atterpac/dado/theme"
@@ -17,13 +16,13 @@ import (
 // AppConfig configures the application layout.
 type AppConfig struct {
 	// TopBar is shown at the top (e.g., status bar). Can be nil.
-	TopBar tview.Primitive
+	TopBar core.Widget
 
 	// ShowCrumbs enables the breadcrumb bar below TopBar.
 	ShowCrumbs bool
 
 	// BottomBar is shown at the bottom (e.g., Menu). Can be nil.
-	BottomBar tview.Primitive
+	BottomBar core.Widget
 
 	// TopBarHeight is the height of the top bar (default: 3).
 	TopBarHeight int
@@ -53,14 +52,14 @@ const defaultEffectShutdownTimeout = 2 * time.Second
 
 // App is the application root that manages the overall layout.
 type App struct {
-	app              *tview.Application
-	main             *tview.Flex
-	topBar           tview.Primitive
+	app              *core.App
+	main             *core.Flex
+	topBar           core.Widget
 	crumbs           *nav.Crumbs
 	pages            *nav.Pages
 	menu             *Menu
 	config           AppConfig
-	userInputCapture func(*tcell.EventKey) *tcell.EventKey // User's custom input capture
+	userInputCapture func(*tcell.EventKey) *tcell.EventKey
 	effects          *effect.Dispatcher
 	subs             components.Subscriptions
 	themeState       *themeState
@@ -79,25 +78,23 @@ func NewApp(config AppConfig) *App {
 		config.DebugKey = tcell.KeyCtrlD
 	}
 
-	mainFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	mainFlex.SetBackgroundColor(theme.Bg())
-
 	a := &App{
-		app:     tview.NewApplication(),
-		main:    mainFlex,
+		app:     core.NewApp(),
+		main:    core.NewFlex().SetDirection(core.Column),
 		pages:   nav.NewPages(),
 		config:  config,
 		effects: effect.NewDispatcher(),
 	}
 
-	// Register main flex for automatic theme updates
-	a.subs.Add(theme.Register(mainFlex))
+	// Wire theme queue to core.App so theme changes trigger redraws.
+	theme.SetQueue(func(fn func()) { a.app.QueueUpdateDraw(fn) })
 
-	// Register with theme system
-	theme.SetApp(a.app)
+	// Wire theme.Bg as the global default background for all core primitives
+	// (Flex, TextView, Table, etc.) so they track theme changes automatically.
+	core.SetDefaultBackgroundFunc(theme.Bg)
 
-	// Set app reference in pages for focus management
-	a.pages.SetApplication(a.app)
+	// Wire focus manager into pages for modal focus save/restore.
+	a.pages.SetFocusManager(a.app.Focus())
 
 	// Build layout
 	a.buildLayout()
@@ -133,14 +130,13 @@ func (a *App) buildLayout() {
 	if a.config.ShowCrumbs {
 		a.crumbs = nav.NewCrumbs()
 		a.main.AddItem(a.crumbs, 1, 0, false)
-		// Connect crumbs to pages for automatic updates
 		a.pages.SetCrumbs(a.crumbs)
 	}
 
-	// Pages (main content area)
+	// Pages (main content area) — implements core.Widget directly
 	a.main.AddItem(a.pages, 0, 1, true)
 
-	// Bottom bar (menu)
+	// Bottom bar
 	if a.config.BottomBar != nil {
 		if menu, ok := a.config.BottomBar.(*Menu); ok {
 			a.menu = menu
@@ -148,7 +144,10 @@ func (a *App) buildLayout() {
 		a.main.AddItem(a.config.BottomBar, a.config.BottomBarHeight, 0, false)
 	}
 
-	a.app.SetRoot(a.main, true)
+	a.app.SetRoot(a.main)
+
+	// Give focus to pages (the main content area).
+	a.app.SetFocus(a.pages)
 }
 
 // Run starts the application event loop.
@@ -207,57 +206,41 @@ func (a *App) Menu() *Menu {
 	return a.menu
 }
 
-// TopBar returns the top bar primitive.
-func (a *App) TopBar() tview.Primitive {
+// TopBar returns the top bar widget.
+func (a *App) TopBar() core.Widget {
 	return a.topBar
 }
 
 // SetTopBar replaces the top bar.
-func (a *App) SetTopBar(bar tview.Primitive) *App {
-	// Remove old top bar
-	if a.topBar != nil {
-		a.main.RemoveItem(a.topBar)
-	}
-
+func (a *App) SetTopBar(bar core.Widget) *App {
 	a.topBar = bar
 	a.config.TopBar = bar
-
-	// Rebuild layout
 	a.main.Clear()
 	a.buildLayout()
-
 	return a
 }
 
 // SetBottomBar replaces the bottom bar.
-func (a *App) SetBottomBar(bar tview.Primitive) *App {
-	// Remove old bottom bar
-	if a.config.BottomBar != nil {
-		a.main.RemoveItem(a.config.BottomBar)
-	}
-
+func (a *App) SetBottomBar(bar core.Widget) *App {
 	a.config.BottomBar = bar
 	if menu, ok := bar.(*Menu); ok {
 		a.menu = menu
 	} else {
 		a.menu = nil
 	}
-
-	// Rebuild layout
 	a.main.Clear()
 	a.buildLayout()
-
 	return a
 }
 
-// GetApplication returns the underlying tview.Application.
-func (a *App) GetApplication() *tview.Application {
+// GetApp returns the underlying core.App.
+func (a *App) GetApp() *core.App {
 	return a.app
 }
 
-// SetFocus sets focus to a specific primitive.
-func (a *App) SetFocus(p tview.Primitive) *App {
-	a.app.SetFocus(p)
+// SetFocus sets focus to a specific widget.
+func (a *App) SetFocus(w core.Widget) *App {
+	a.app.SetFocus(w)
 	return a
 }
 
@@ -314,7 +297,7 @@ func (a *App) setupModalInputCapture() {
 			// Handle auto-dismiss on Escape
 			if behavior.DismissOnEsc && event.Key() == tcell.KeyEscape {
 				// Use a goroutine to completely defer the dismiss operation
-				// outside of tview's event handling to avoid deadlocks.
+				// outside of the event-handling goroutine to avoid deadlocks.
 				go func() {
 					a.app.QueueUpdateDraw(func() {
 						a.pages.DismissModal()
@@ -396,18 +379,7 @@ func (m *modalWrapper) OnDismiss() bool {
 	return true // Always allow dismiss
 }
 
-func (m *modalWrapper) Draw(screen tcell.Screen)      { m.modal.Draw(screen) }
-func (m *modalWrapper) GetRect() (int, int, int, int) { return m.modal.GetRect() }
-func (m *modalWrapper) SetRect(x, y, w, h int)        { m.modal.SetRect(x, y, w, h) }
-func (m *modalWrapper) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return m.modal.InputHandler()
-}
-func (m *modalWrapper) Focus(delegate func(tview.Primitive)) { m.modal.Focus(delegate) }
-func (m *modalWrapper) Blur()                                { m.modal.Blur() }
-func (m *modalWrapper) HasFocus() bool                       { return m.modal.HasFocus() }
-func (m *modalWrapper) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
-	return m.modal.MouseHandler()
-}
-func (m *modalWrapper) PasteHandler() func(string, func(tview.Primitive)) {
-	return m.modal.PasteHandler()
-}
+func (m *modalWrapper) Draw(screen tcell.Screen) { m.modal.Draw(screen) }
+func (m *modalWrapper) SetRect(x, y, w, h int)  { m.modal.SetRect(x, y, w, h) }
+func (m *modalWrapper) Blur()                    { m.modal.Blur() }
+func (m *modalWrapper) HasFocus() bool           { return m.modal.HasFocus() }
