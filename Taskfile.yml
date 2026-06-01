@@ -77,6 +77,53 @@ tasks:
     generates:
       - "{{.DOCS_OUTPUT}}/**/*"
 
+  docs:api:
+    desc: Generate component API JSON and MDX stubs from Go doc comments
+    cmds:
+      - go run ./cmd/docgen
+        -pkg components
+        -out docs-site/src/content/api
+        -docs docs-site/src/content/docs/components
+    generates:
+      - "docs-site/src/content/api/*.json"
+      - "docs-site/src/content/docs/components/*.mdx"
+
+  docs:images:
+    desc: Render component PNG snapshots to docs/images/components
+    cmds:
+      - mkdir -p docs/images/components
+      - GENERATE_IMAGES=1 go test ./components/ -run TestGenerateComponentImages -v
+    generates:
+      - "docs/images/components/*.png"
+
+  docs:site:dev:
+    desc: Start Astro dev server for the docs site
+    dir: docs-site
+    cmds:
+      - npm run dev
+
+  docs:site:build:
+    desc: Build the Astro docs site to docs-site/dist
+    dir: docs-site
+    cmds:
+      - npm run build
+    generates:
+      - "docs-site/dist/**/*"
+
+  docs:build:
+    desc: Full docs pipeline — API JSON + images + Astro build
+    cmds:
+      - task: docs:api
+      - task: docs:images
+      - task: docs:sync-images
+      - task: docs:site:build
+
+  docs:sync-images:
+    desc: Copy component images into the Astro public directory
+    cmds:
+      - mkdir -p docs-site/public/images/components
+      - cp -r docs/images/components/. docs-site/public/images/components/
+
   docs:clean:
     desc: Clean generated documentation
     cmds:
