@@ -20,7 +20,7 @@ func (dg *DataGrid) HandleKey(ev *tcell.EventKey) bool {
 		return true
 	}
 
-	dg.handleNormalInput(ev, &dg.gPressed)
+	consumed := dg.handleNormalInput(ev, &dg.gPressed)
 
 	// Collect deferred callback before releasing the lock.
 	// External callbacks (onModalEdit, onBack, onSearch, onCopy)
@@ -32,11 +32,14 @@ func (dg *DataGrid) HandleKey(ev *tcell.EventKey) bool {
 	if deferred != nil {
 		deferred()
 	}
-	return false
+	return consumed
 }
 
-// handleNormalInput processes input in normal mode.
-func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
+// handleNormalInput processes input in normal mode. It returns true when the
+// grid acted on the event so the caller can report consumption — otherwise the
+// app's dispatcher bubbles the key up to a parent container that re-routes it
+// back to this (focused) grid, moving the cursor twice for a single press.
+func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) bool {
 	key := event.Key()
 
 	// Check Ctrl combos first
@@ -44,19 +47,19 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 	case tcell.KeyCtrlD:
 		*gPressed = false
 		dg.halfPageDown()
-		return
+		return true
 	case tcell.KeyCtrlU:
 		*gPressed = false
 		dg.halfPageUp()
-		return
+		return true
 	case tcell.KeyCtrlZ:
 		*gPressed = false
 		dg.revertAllChanges()
-		return
+		return true
 	case tcell.KeyCtrlA:
 		*gPressed = false
 		dg.SelectAllRows()
-		return
+		return true
 	case tcell.KeyCtrlS:
 		*gPressed = false
 		if dg.onSubmit != nil && dg.changeset.HasChanges() {
@@ -64,46 +67,46 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 			cs := dg.changeset
 			dg.deferredCallback = func() { cb(cs) }
 		}
-		return
+		return true
 	case tcell.KeyUp:
 		*gPressed = false
 		dg.moveCursorUp()
-		return
+		return true
 	case tcell.KeyDown:
 		*gPressed = false
 		dg.moveCursorDown()
-		return
+		return true
 	case tcell.KeyLeft:
 		*gPressed = false
 		dg.moveCursorLeft()
-		return
+		return true
 	case tcell.KeyRight:
 		*gPressed = false
 		dg.moveCursorRight()
-		return
+		return true
 	case tcell.KeyHome:
 		*gPressed = false
 		dg.moveCursorToFirstRow()
-		return
+		return true
 	case tcell.KeyEnd:
 		*gPressed = false
 		dg.moveCursorToLastRow()
-		return
+		return true
 	case tcell.KeyPgUp:
 		*gPressed = false
 		dg.halfPageUp()
-		return
+		return true
 	case tcell.KeyPgDn:
 		*gPressed = false
 		dg.halfPageDown()
-		return
+		return true
 	case tcell.KeyEnter:
 		*gPressed = false
 		// Enter edits the current cell when it is editable; otherwise it falls
 		// back to the cell-select callback (e.g. read-only grids used as pickers).
 		if dg.source != nil && !dg.source.Cell(dg.cursor.Row, dg.cursor.Col).ReadOnly {
 			dg.enterEdit()
-			return
+			return true
 		}
 		if dg.onCellSelect != nil {
 			pos := dg.cursor
@@ -111,19 +114,20 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 			cb := dg.onCellSelect
 			dg.deferredCallback = func() { cb(pos, GridCell{Value: val}) }
 		}
-		return
+		return true
 	case tcell.KeyEscape:
 		*gPressed = false
 		if dg.onBack != nil {
 			cb := dg.onBack
 			dg.deferredCallback = func() { cb() }
+			return true
 		}
-		return
+		return false
 	}
 
 	if key != tcell.KeyRune {
 		*gPressed = false
-		return
+		return false
 	}
 
 	r := event.Rune()
@@ -133,10 +137,10 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 		if *gPressed {
 			*gPressed = false
 			dg.moveCursorToFirstRow()
-			return
+			return true
 		}
 		*gPressed = true
-		return
+		return true
 	}
 	*gPressed = false
 
@@ -170,11 +174,15 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 			value := dg.getCellValue(dg.cursor)
 			cb := dg.onCopy
 			dg.deferredCallback = func() { cb(value) }
+		} else {
+			return false
 		}
 	case '/':
 		if dg.onSearch != nil {
 			cb := dg.onSearch
 			dg.deferredCallback = func() { cb() }
+		} else {
+			return false
 		}
 	case ' ':
 		dg.ToggleRowSelection()
@@ -184,8 +192,15 @@ func (dg *DataGrid) handleNormalInput(event *tcell.EventKey, gPressed *bool) {
 		if dg.onBack != nil {
 			cb := dg.onBack
 			dg.deferredCallback = func() { cb() }
+		} else {
+			return false
 		}
+	default:
+		// Unhandled rune — let the app bubble it to parent handlers
+		// (global shortcuts, page router, etc.).
+		return false
 	}
+	return true
 }
 
 // handleEditInput processes input in edit mode (raw event handling for full text input).
