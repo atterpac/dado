@@ -19,6 +19,8 @@ const (
 	gitHoriz     = '─' // Horizontal line
 	gitTopLeft   = '╭' // Corner down-right
 	gitTopRight  = '╮' // Corner down-left
+	gitBotLeft   = '╰' // Corner up-right
+	gitBotRight  = '╯' // Corner up-left
 	gitVertRight = '├' // T-junction right
 	gitVertLeft  = '┤' // T-junction left
 	gitCross     = '┼' // Cross intersection
@@ -444,6 +446,7 @@ type gitLaneState struct {
 	mergeFrom     int
 	mergeTo       int
 	branchFrom    int
+	branchInto    int // if != -1, this lane curves down into the given column (branch point)
 	isStartOfLine bool
 	commitHash    string
 }
@@ -468,10 +471,19 @@ func (g *GitGraph) buildRowStates() []map[int]*gitLaneState {
 				mergeFrom:  -1,
 				mergeTo:    -1,
 				branchFrom: -1,
+				branchInto: -1,
 			}
 		}
 
 		for lane, hash := range activeLanes {
+			// A lane whose expected commit lives in a different column is a
+			// branch point: this lane curves down into the commit's column.
+			if hash == commit.Hash && lane != commit.Column {
+				states[row][lane].branchInto = commit.Column
+				states[row][lane].commitHash = hash
+				delete(activeLanes, lane)
+				continue
+			}
 			states[row][lane].hasLine = true
 			states[row][lane].commitHash = hash
 		}
@@ -857,6 +869,14 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 		return []rune{' ', ' ', ' '}
 	}
 
+	// Branch point: this lane curves down into another column toward its parent.
+	if state != nil && state.branchInto != -1 {
+		if state.branchInto < lane {
+			return []rune{gitHoriz, gitBotRight, ' '} // ─╯
+		}
+		return []rune{' ', gitBotLeft, gitHoriz} // ╰─
+	}
+
 	if commit.IsMerge && lane == commit.Column {
 		node := g.getNodeChar(commit)
 		if len(commit.Parents) > 1 {
@@ -874,7 +894,35 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 
 	if state.hasNode {
 		node := g.getNodeChar(commit)
-		return []rune{' ', node, ' '}
+		left, right := ' ', ' '
+		// Connect horizontally to any lanes curving into this commit's column.
+		for l, s := range allStates {
+			if s != nil && s.branchInto == lane {
+				if l < lane {
+					left = gitHoriz
+				} else if l > lane {
+					right = gitHoriz
+				}
+			}
+		}
+		return []rune{left, node, right}
+	}
+
+	// Span horizontally across columns between a branch point and its target.
+	for l, s := range allStates {
+		if s == nil || s.branchInto == -1 {
+			continue
+		}
+		lo, hi := l, s.branchInto
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		if lane > lo && lane < hi {
+			if state != nil && state.hasLine {
+				return []rune{gitHoriz, gitCross, gitHoriz}
+			}
+			return []rune{gitHoriz, gitHoriz, gitHoriz}
+		}
 	}
 
 	if commit.IsMerge && len(commit.Parents) > 1 {
