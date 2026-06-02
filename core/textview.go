@@ -158,14 +158,16 @@ func (tv *TextView) parseColorLine(text string, width int) []*Text {
 // parseTag parses a [color] tag and returns the updated style.
 // Tag formats: [color], [fg:bg:attrs], [-], [-:-:-], [::b], [#rrggbb], [#rrggbb::b]
 // Returns (newStyle, true) if the tag was recognized, (_, false) if not a color tag.
-func parseTag(tag string, current tcell.Style) (tcell.Style, bool) {
-	// Fast path: full reset shortcuts
+func parseTag(tag string, current, base tcell.Style) (tcell.Style, bool) {
+	// Fast path: full reset shortcuts. Reset to the caller's base style (e.g. a
+	// table row's selection background), not the terminal default, so a "[-]"
+	// inside a styled region doesn't punch a hole in that styling.
 	if tag == "-" || tag == "" {
-		return tcell.StyleDefault, true
+		return base, true
 	}
 	// Full reset [-:-:-] or similar all-dash forms
 	if tag == "-:-:-" || tag == "-:-" {
-		return tcell.StyleDefault, true
+		return base, true
 	}
 
 	// Split into up to 3 parts: fg:bg:attrs
@@ -191,12 +193,16 @@ func parseTag(tag string, current tcell.Style) (tcell.Style, bool) {
 	}
 
 	style := current
-	if fgPart == "-" {
+	// An empty part means "unspecified": keep the current color. Only "-" and a
+	// real color change anything; without this guard a fg-only tag like
+	// "[#88ccff]" would resolve its empty bg part to ColorDefault and wipe the
+	// inherited background (e.g. a selected row's highlight).
+	if fgPart == "-" || fgPart == "" {
 		// keep current fg
 	} else if fgOK {
 		style = style.Foreground(fgColor)
 	}
-	if bgPart == "-" {
+	if bgPart == "-" || bgPart == "" {
 		// keep current bg
 	} else if bgOK {
 		style = style.Background(bgColor)

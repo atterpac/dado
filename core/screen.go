@@ -98,10 +98,44 @@ func PrintClipped(screen tcell.Screen, text string, x, y, maxWidth int, style tc
 // color tags ([#rrggbb], [-], [::b], etc.) as it renders.
 // baseStyle is the fallback style for uncolored segments.
 // Returns the number of visible columns written.
+// TaggedWidth returns the number of visible cells a tagged string occupies,
+// i.e. its rune count excluding color/style tags like "[#ff0000]" or "[-]".
+func TaggedWidth(text string) int {
+	w := 0
+	for len(text) > 0 {
+		if text[0] == '[' {
+			if end := strings.Index(text, "]"); end > 0 {
+				if _, ok := parseTag(text[1:end], tcell.StyleDefault, tcell.StyleDefault); ok {
+					text = text[end+1:]
+					continue
+				}
+			}
+		}
+		_, size := utf8.DecodeRuneInString(text)
+		w++
+		text = text[size:]
+	}
+	return w
+}
+
 func PrintTagged(screen tcell.Screen, text string, x, y, maxWidth int, baseStyle tcell.Style) int {
+	return printTagged(screen, text, x, y, maxWidth, baseStyle, false)
+}
+
+// PrintTaggedLockColors renders tagged text but keeps baseStyle's foreground and
+// background, applying only the text attributes (bold, italic, underline) that
+// tags request. Use it for selected rows: cell color tags like [accent] would
+// otherwise paint text in a color that clashes with — or vanishes into — the
+// selection highlight (e.g. an accent-colored hash on an accent background).
+func PrintTaggedLockColors(screen tcell.Screen, text string, x, y, maxWidth int, baseStyle tcell.Style) int {
+	return printTagged(screen, text, x, y, maxWidth, baseStyle, true)
+}
+
+func printTagged(screen tcell.Screen, text string, x, y, maxWidth int, baseStyle tcell.Style, lockColors bool) int {
 	if maxWidth <= 0 {
 		return 0
 	}
+	baseFg, baseBg, _ := baseStyle.Decompose()
 	col := 0
 	style := baseStyle
 	for len(text) > 0 {
@@ -112,7 +146,13 @@ func PrintTagged(screen tcell.Screen, text string, x, y, maxWidth int, baseStyle
 			end := strings.Index(text, "]")
 			if end > 0 {
 				tag := text[1:end]
-				if newStyle, ok := parseTag(tag, style); ok {
+				if newStyle, ok := parseTag(tag, style, baseStyle); ok {
+					if lockColors {
+						// Keep the selection's colors; adopt only the attributes
+						// (bold/italic/…) the tag asked for.
+						_, _, attr := newStyle.Decompose()
+						newStyle = tcell.StyleDefault.Foreground(baseFg).Background(baseBg).Attributes(attr)
+					}
 					style = newStyle
 					text = text[end+1:]
 					continue

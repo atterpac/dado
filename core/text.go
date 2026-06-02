@@ -231,7 +231,7 @@ func ParseTagged(markup string, baseStyle tcell.Style) *Text {
 	for len(rest) > 0 {
 		if rest[0] == '[' {
 			if end := strings.Index(rest, "]"); end > 0 {
-				if newStyle, ok := parseTag(rest[1:end], style); ok {
+				if newStyle, ok := parseTag(rest[1:end], style, baseStyle); ok {
 					flush()
 					style = newStyle
 					rest = rest[end+1:]
