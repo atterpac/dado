@@ -65,42 +65,41 @@ func (tv *TextView) ScrollTo(row, col int) { tv.scrollY = row; tv.scrollX = col 
 // Draw renders the text into the inner rect.
 func (tv *TextView) Draw(screen tcell.Screen) {
 	tv.Box.Draw(screen)
-	x, y, w, h := tv.InnerRect()
-	if w <= 0 || h <= 0 {
+	vp := NewViewport(tv.InnerRect())
+	if vp.Empty() {
 		return
 	}
+	w, _ := vp.Size()
 	if len(tv.lines) == 0 || tv.wrapWidth != w {
 		tv.reflow(w)
 	}
+	vp.SetContentSize(w, len(tv.lines))
+	vp.SetOffset(0, tv.scrollY)
+
 	baseStyle := tv.textStyle
 	if tv.fgColor != tcell.ColorDefault {
 		baseStyle = baseStyle.Foreground(tv.fgColor)
 	}
 	clearStyle := tcell.StyleDefault.Background(tv.Box.bg())
-	for row := 0; row < h; row++ {
-		lineIdx := tv.scrollY + row
-		if lineIdx >= len(tv.lines) {
-			break
-		}
+
+	first, last := vp.VisibleRows()
+	for lineIdx := first; lineIdx < last; lineIdx++ {
 		// Compute line width for alignment
 		lineRunes := tv.lines[lineIdx].Width()
 		startCol := 0
 		switch tv.textAlign {
 		case AlignCenter:
 			startCol = (w - lineRunes) / 2
-			if startCol < 0 {
-				startCol = 0
-			}
 		case AlignRight:
 			startCol = w - lineRunes
-			if startCol < 0 {
-				startCol = 0
-			}
+		}
+		if startCol < 0 {
+			startCol = 0
 		}
 		col := 0
 		// fill leading space for alignment
 		for ; col < startCol; col++ {
-			screen.SetContent(x+col, y+row, ' ', nil, clearStyle)
+			vp.SetContent(screen, col, lineIdx, ' ', clearStyle)
 		}
 		for _, seg := range tv.lines[lineIdx].Spans() {
 			segStyle := seg.Style
@@ -119,13 +118,13 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 				if col >= w {
 					break
 				}
-				screen.SetContent(x+col, y+row, r, nil, segStyle)
+				vp.SetContent(screen, col, lineIdx, r, segStyle)
 				col++
 			}
 		}
 		// fill rest of row with background
 		for ; col < w; col++ {
-			screen.SetContent(x+col, y+row, ' ', nil, clearStyle)
+			vp.SetContent(screen, col, lineIdx, ' ', clearStyle)
 		}
 	}
 }
@@ -159,14 +158,16 @@ func (tv *TextView) parseColorLine(text string, width int) []*Text {
 // parseTag parses a [color] tag and returns the updated style.
 // Tag formats: [color], [fg:bg:attrs], [-], [-:-:-], [::b], [#rrggbb], [#rrggbb::b]
 // Returns (newStyle, true) if the tag was recognized, (_, false) if not a color tag.
-func parseTag(tag string, current tcell.Style) (tcell.Style, bool) {
-	// Fast path: full reset shortcuts
+func parseTag(tag string, current, base tcell.Style) (tcell.Style, bool) {
+	// Fast path: full reset shortcuts. Reset to the caller's base style (e.g. a
+	// table row's selection background), not the terminal default, so a "[-]"
+	// inside a styled region doesn't punch a hole in that styling.
 	if tag == "-" || tag == "" {
-		return tcell.StyleDefault, true
+		return base, true
 	}
 	// Full reset [-:-:-] or similar all-dash forms
 	if tag == "-:-:-" || tag == "-:-" {
-		return tcell.StyleDefault, true
+		return base, true
 	}
 
 	// Split into up to 3 parts: fg:bg:attrs
@@ -192,12 +193,16 @@ func parseTag(tag string, current tcell.Style) (tcell.Style, bool) {
 	}
 
 	style := current
-	if fgPart == "-" {
+	// An empty part means "unspecified": keep the current color. Only "-" and a
+	// real color change anything; without this guard a fg-only tag like
+	// "[#88ccff]" would resolve its empty bg part to ColorDefault and wipe the
+	// inherited background (e.g. a selected row's highlight).
+	if fgPart == "-" || fgPart == "" {
 		// keep current fg
 	} else if fgOK {
 		style = style.Foreground(fgColor)
 	}
-	if bgPart == "-" {
+	if bgPart == "-" || bgPart == "" {
 		// keep current bg
 	} else if bgOK {
 		style = style.Background(bgColor)

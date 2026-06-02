@@ -480,6 +480,7 @@ func (t *Tree) HandleKey(ev *tcell.EventKey) bool {
 	}
 
 	prevIndex := t.selectedIndex
+	handled := true
 
 	switch ev.Key() {
 	case tcell.KeyDown:
@@ -542,6 +543,8 @@ func (t *Tree) HandleKey(ev *tcell.EventKey) bool {
 			t.ExpandAll()
 		case 'C':
 			t.CollapseAll()
+		default:
+			handled = false
 		}
 	case tcell.KeyCtrlD:
 		_, _, _, height := t.GetInnerRect()
@@ -555,6 +558,8 @@ func (t *Tree) HandleKey(ev *tcell.EventKey) bool {
 		if t.selectedIndex < 0 {
 			t.selectedIndex = 0
 		}
+	default:
+		handled = false
 	}
 
 	// Call onHighlight if the selected index changed
@@ -563,7 +568,7 @@ func (t *Tree) HandleKey(ev *tcell.EventKey) bool {
 			t.onHighlight(node)
 		}
 	}
-	return false
+	return handled
 }
 
 func (t *Tree) moveDown() {

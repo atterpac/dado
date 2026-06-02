@@ -227,74 +227,174 @@ func (t *Table) GetInnerRect() (x, y, width, height int) {
 // Draw renders visible rows and columns.
 func (t *Table) Draw(screen tcell.Screen) {
 	t.Box.Draw(screen)
-	x, y, w, h := t.InnerRect()
-	if w <= 0 || h <= 0 || t.rows == 0 {
+	vp := NewViewport(t.InnerRect())
+	if vp.Empty() || t.rows == 0 {
 		return
 	}
+	x, _, w, h := vp.Rect()
 
-	// Compute column widths (simple: divide equally)
-	colW := w
-	if t.cols > 0 {
-		colW = w / t.cols
-		if colW < 1 {
-			colW = 1
-		}
-	}
+	// Compute per-column widths from content, honoring MaxWidth and Expansion.
+	colWidths := t.computeColumnWidths(w)
 
-	// Auto-scroll to keep selection visible, centered when possible.
-	if t.selRows && h > 0 {
-		if t.selRow < t.rowOffset {
-			t.rowOffset = t.selRow - h/2
-		} else if t.selRow >= t.rowOffset+h {
+	// Auto-scroll to keep selection visible, centered when possible. The
+	// viewport clamps the offset to the valid range when applied.
+	if t.selRows {
+		if t.selRow < t.rowOffset || t.selRow >= t.rowOffset+h {
 			t.rowOffset = t.selRow - h/2
 		}
-		if t.rowOffset > t.rows-h {
-			t.rowOffset = t.rows - h
-		}
-		if t.rowOffset < 0 {
-			t.rowOffset = 0
-		}
 	}
+	vp.SetContentSize(w, t.rows)
+	vp.SetOffset(0, t.rowOffset)
+	_, t.rowOffset = vp.Offset() // keep field in sync for HandleKey/paging
 
-	for screenRow := 0; screenRow < h; screenRow++ {
-		row := t.rowOffset + screenRow
-		if row >= t.rows {
-			break
+	first, last := vp.VisibleRows()
+	for row := first; row < last; row++ {
+		_, sy := vp.ScreenXY(0, row)
+		rowSelected := t.selRows && row == t.selRow
+
+		// Base row style and selection style. Selected rows are filled across
+		// the full width (including inter-column gaps and trailing space) so the
+		// highlight covers the whole row, not just the cell contents.
+		rowStyle := tcell.StyleDefault
+		if t.backgroundColor != tcell.ColorDefault {
+			rowStyle = rowStyle.Background(t.backgroundColor)
 		}
+		selStyle := rowStyle
+		if rowSelected {
+			if t.selectedStyle != (tcell.Style{}) {
+				selStyle = t.selectedStyle
+			} else {
+				selStyle = rowStyle.Reverse(true)
+			}
+			for c := 0; c < w; c++ {
+				screen.SetContent(x+c, sy, ' ', nil, selStyle)
+			}
+		}
+
 		colX := x
 		for col := 0; col < t.cols; col++ {
 			cell := t.GetCell(row, col)
-			// Build base style: table background → cell background → cell foreground
-			style := tcell.StyleDefault
-			if t.backgroundColor != tcell.ColorDefault {
-				style = style.Background(t.backgroundColor)
-			}
-			if cell.BgColor != tcell.ColorDefault {
-				style = style.Background(cell.BgColor)
-			}
-			if cell.Color != tcell.ColorDefault {
-				style = style.Foreground(cell.Color)
-			}
-			if t.selRows && row == t.selRow {
-				if t.selectedStyle != (tcell.Style{}) {
-					style = t.selectedStyle
-				} else {
-					style = style.Reverse(true)
+			style := selStyle
+			if !rowSelected {
+				style = rowStyle
+				if cell.BgColor != tcell.ColorDefault {
+					style = style.Background(cell.BgColor)
+				}
+				if cell.Color != tcell.ColorDefault {
+					style = style.Foreground(cell.Color)
+				}
+				// Fill the cell background for unselected rows.
+				for c := 0; c < colWidths[col]; c++ {
+					screen.SetContent(colX+c, sy, ' ', nil, style)
 				}
 			}
-			cw := colW
-			if col == t.cols-1 {
-				cw = x + w - colX // last col gets remainder
+			cw := colWidths[col]
+			// Offset the text within the cell to honor alignment.
+			textX := colX
+			if pad := cw - TaggedWidth(cell.Text); pad > 0 {
+				switch cell.Align {
+				case AlignRight:
+					textX += pad
+				case AlignCenter:
+					textX += pad / 2
+				}
 			}
-			// Fill cell background first
-			for c := 0; c < cw; c++ {
-				screen.SetContent(colX+c, y+screenRow, ' ', nil, style)
+			// Render text with tag parsing (handles [#color], [-], etc.). On a
+			// selected row, lock the colors to the selection style so per-cell
+			// tag colors can't clash with — or disappear into — the highlight.
+			if rowSelected {
+				PrintTaggedLockColors(screen, cell.Text, textX, sy, colX+cw-textX, style)
+			} else {
+				PrintTagged(screen, cell.Text, textX, sy, colX+cw-textX, style)
 			}
-			// Render text with tag parsing (handles [#color], [-], etc.)
-			PrintTagged(screen, cell.Text, colX, y+screenRow, cw, style)
-			colX += colW
+			colX += cw + 1 // one column gap between cells
 		}
 	}
+}
+
+// computeColumnWidths returns the rendered width of each column. Natural widths
+// come from cell content (capped by MaxWidth); any leftover horizontal space is
+// distributed to columns whose cells request Expansion, and overflow is taken
+// back from the widest columns so the row never exceeds the available width.
+func (t *Table) computeColumnWidths(avail int) []int {
+	widths := make([]int, t.cols)
+	expansion := make([]int, t.cols)
+	if t.cols == 0 {
+		return widths
+	}
+
+	for col := 0; col < t.cols; col++ {
+		for row := 0; row < t.rows; row++ {
+			cell := t.GetCell(row, col)
+			cw := TaggedWidth(cell.Text)
+			if cell.MaxWidth > 0 && cw > cell.MaxWidth {
+				cw = cell.MaxWidth
+			}
+			if cw > widths[col] {
+				widths[col] = cw
+			}
+			if cell.Expansion > expansion[col] {
+				expansion[col] = cell.Expansion
+			}
+		}
+	}
+
+	gaps := t.cols - 1 // single-space gap between columns
+	usable := avail - gaps
+	if usable < t.cols {
+		usable = t.cols // guarantee at least 1 cell per column
+	}
+
+	total := 0
+	for _, cw := range widths {
+		total += cw
+	}
+
+	switch {
+	case total < usable:
+		// Distribute slack to expansion columns (or the last column if none).
+		slack := usable - total
+		totalExp := 0
+		for _, e := range expansion {
+			totalExp += e
+		}
+		if totalExp == 0 {
+			widths[t.cols-1] += slack
+			break
+		}
+		given := 0
+		last := -1
+		for col, e := range expansion {
+			if e == 0 {
+				continue
+			}
+			last = col
+			add := slack * e / totalExp
+			widths[col] += add
+			given += add
+		}
+		if last >= 0 {
+			widths[last] += slack - given // remainder from integer division
+		}
+	case total > usable:
+		// Shrink the widest columns until the row fits.
+		over := total - usable
+		for over > 0 {
+			widest := 0
+			for col := 1; col < t.cols; col++ {
+				if widths[col] > widths[widest] {
+					widest = col
+				}
+			}
+			if widths[widest] <= 1 {
+				break
+			}
+			widths[widest]--
+			over--
+		}
+	}
+
+	return widths
 }
 
 // HandleKey handles selection movement and activation.

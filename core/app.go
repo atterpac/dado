@@ -33,6 +33,14 @@ type App struct {
 	inputCapture func(*tcell.EventKey) *tcell.EventKey
 	onResize     func(w, h int)
 	afterDraw    func(screen tcell.Screen)
+
+	// cursor holds the terminal cursor request for the current frame. It is
+	// reset to hidden at the start of every draw(), so a widget that wants the
+	// hardware cursor must re-assert it via App.ShowCursor during its Draw.
+	// This keeps the cursor in sync with focus without explicit teardown.
+	cursorX, cursorY int
+	cursorVisible    bool
+	cursorStyle      tcell.CursorStyle
 }
 
 // NewApp returns a ready App. The tcell screen is initialised lazily in Run().
@@ -136,6 +144,30 @@ func (a *App) MousePosition() (x, y int) { return a.mouseX, a.mouseY }
 // app otherwise redrawing on mouse moves. Pass nil to remove.
 func (a *App) SetMouseObserver(fn func(action MouseAction, ev *tcell.EventMouse) bool) *App {
 	a.mouseObserver = fn
+	return a
+}
+
+// ShowCursor requests the hardware terminal cursor at cell (x, y) for the
+// current frame. Because the request is cleared before every draw, call it from
+// a widget's Draw method each frame the cursor should be visible (e.g. an editor
+// painting its caret). Coordinates are absolute screen cells; the last caller in
+// a frame wins, so the deepest/focused widget naturally owns the cursor.
+func (a *App) ShowCursor(x, y int) *App {
+	a.cursorX, a.cursorY, a.cursorVisible = x, y, true
+	return a
+}
+
+// HideCursor clears any cursor request for the current frame. Rarely needed
+// directly since the cursor defaults to hidden each frame.
+func (a *App) HideCursor() *App {
+	a.cursorVisible = false
+	return a
+}
+
+// SetCursorStyle sets the shape/blink of the hardware cursor (e.g.
+// tcell.CursorStyleSteadyBar). It persists across frames until changed.
+func (a *App) SetCursorStyle(style tcell.CursorStyle) *App {
+	a.cursorStyle = style
 	return a
 }
 
@@ -265,9 +297,17 @@ func (a *App) draw() {
 	w, h := a.screen.Size()
 	a.root.SetRect(0, 0, w, h)
 	a.screen.Clear()
+	// Reset the cursor request; widgets re-assert it during Draw.
+	a.cursorVisible = false
 	a.root.Draw(a.screen)
 	if a.afterDraw != nil {
 		a.afterDraw(a.screen)
+	}
+	if a.cursorVisible {
+		a.screen.SetCursorStyle(a.cursorStyle)
+		a.screen.ShowCursor(a.cursorX, a.cursorY)
+	} else {
+		a.screen.HideCursor()
 	}
 	a.screen.Show()
 }

@@ -584,6 +584,18 @@ func (s *StatusBar) GetCompletions() []string {
 	return s.completions
 }
 
+// ShowCompletions sets the completion list and shows the popup, or hides it if
+// the list is empty. Useful for live (as-you-type) completion rather than only
+// on Tab. The selection index is reset unless it still points at a valid item.
+func (s *StatusBar) ShowCompletions(items []string) *StatusBar {
+	s.completions = items
+	s.showCompletions = len(items) > 0
+	if s.completionIndex >= len(items) {
+		s.completionIndex = -1
+	}
+	return s
+}
+
 // GetCompletionIndex returns the currently selected completion index.
 func (s *StatusBar) GetCompletionIndex() int {
 	return s.completionIndex

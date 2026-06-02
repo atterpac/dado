@@ -5,7 +5,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/atterpac/dado/theme"
+	"github.com/atterpac/dado/anim"
 )
 
 // ProgressBar is a horizontal progress bar component.
@@ -184,7 +184,7 @@ type Spinner struct {
 	running  bool
 	interval time.Duration
 
-	stopCh chan struct{}
+	cancel func() // unsubscribes from the shared frame clock
 }
 
 // NewSpinner creates a new Spinner.
@@ -225,27 +225,12 @@ func (s *Spinner) Start() *Spinner {
 	}
 
 	s.running = true
-	s.stopCh = make(chan struct{})
-
-	go func() {
-		ticker := time.NewTicker(s.interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-s.stopCh:
-				return
-			case <-ticker.C:
-				s.mu.Lock()
-				frames := spinnerFrames[s.style]
-				s.frame = (s.frame + 1) % len(frames)
-				s.mu.Unlock()
-
-				// Request redraw
-				theme.QueueUpdateDraw(func() {})
-			}
-		}
-	}()
+	// The tick callback runs on the UI thread (see theme.Subscribe), as does
+	// Draw, so advancing the frame here needs no lock against the reader.
+	s.cancel = anim.Subscribe(s.interval, func() {
+		frames := spinnerFrames[s.style]
+		s.frame = (s.frame + 1) % len(frames)
+	})
 
 	return s
 }
@@ -260,7 +245,10 @@ func (s *Spinner) Stop() *Spinner {
 	}
 
 	s.running = false
-	close(s.stopCh)
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
 	return s
 }
 

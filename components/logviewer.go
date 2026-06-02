@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+
+	"github.com/atterpac/dado/core"
 )
 
 // LogLevel represents log severity in ascending order (Debug < Info < Warn < Error < Fatal).
@@ -512,29 +514,33 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 		return
 	}
 
-	// Draw visible entries
-	for i := 0; i < height && v.offsetY+i < len(v.filteredIdx); i++ {
-		entryIdx := v.filteredIdx[v.offsetY+i]
-		entry := v.entries[entryIdx]
-		rowY := y + i
+	// Draw visible entries. The viewport translates content (column, rowIdx)
+	// to screen coordinates and clips writes past the right/bottom edges.
+	vp := core.NewViewport(x, y, width, height)
+	vp.SetContentSize(width, len(v.filteredIdx))
+	vp.SetOffset(0, v.offsetY)
+	_, v.offsetY = vp.Offset() // keep field in sync
 
-		isSelected := v.offsetY+i == v.selectedLine
+	first, last := vp.VisibleRows()
+	for rowIdx := first; rowIdx < last; rowIdx++ {
+		entryIdx := v.filteredIdx[rowIdx]
+		entry := v.entries[entryIdx]
+
+		isSelected := rowIdx == v.selectedLine
 		rowBg := bgColor
 		if isSelected {
 			rowBg = highlightBg
 		}
 
-		col := x
+		col := 0
 
 		// Timestamp
 		if v.showTimestamp {
 			ts := entry.Timestamp.Format(v.timestampFmt)
 			tsStyle := tcell.StyleDefault.Background(rowBg).Foreground(fgDimColor)
 			for _, r := range ts {
-				if col < x+width {
-					screen.SetContent(col, rowY, r, nil, tsStyle)
-					col++
-				}
+				vp.SetContent(screen, col, rowIdx, r, tsStyle)
+				col++
 			}
 			col++ // space
 		}
@@ -545,10 +551,8 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 			levelStyle := tcell.StyleDefault.Background(rowBg).Foreground(levelColor)
 			levelStr := entry.Level.Short()
 			for _, r := range levelStr {
-				if col < x+width {
-					screen.SetContent(col, rowY, r, nil, levelStyle)
-					col++
-				}
+				vp.SetContent(screen, col, rowIdx, r, levelStyle)
+				col++
 			}
 			col++ // space
 		}
@@ -558,10 +562,8 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 			srcStyle := tcell.StyleDefault.Background(rowBg).Foreground(fgDimColor)
 			srcStr := "[" + entry.Source + "]"
 			for _, r := range srcStr {
-				if col < x+width {
-					screen.SetContent(col, rowY, r, nil, srcStyle)
-					col++
-				}
+				vp.SetContent(screen, col, rowIdx, r, srcStyle)
+				col++
 			}
 			col++ // space
 		}
@@ -569,16 +571,16 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 		// Message
 		msgStyle := tcell.StyleDefault.Background(rowBg).Foreground(fgColor)
 		for _, r := range entry.Message {
-			if col < x+width {
-				screen.SetContent(col, rowY, r, nil, msgStyle)
-				col++
-			}
+			vp.SetContent(screen, col, rowIdx, r, msgStyle)
+			col++
 		}
 
 		// Fill rest of selected line
 		if isSelected {
 			fillStyle := tcell.StyleDefault.Background(rowBg)
-			fillLine(screen, col, rowY, x+width-col, fillStyle)
+			for ; col < width; col++ {
+				vp.SetContent(screen, col, rowIdx, ' ', fillStyle)
+			}
 		}
 	}
 
