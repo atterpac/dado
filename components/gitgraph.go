@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atterpac/dado/theme"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -367,6 +368,9 @@ type GitGraph struct {
 	// step. Zero (the default) fires onChange synchronously on every change.
 	changeDebounce time.Duration
 	changeTimer    *time.Timer
+	// debounceCleanup records that a Subs() cleanup stopping the pending timer
+	// has been registered, so we register it exactly once.
+	debounceCleanup bool
 
 	// refTextCache holds the pre-rendered right-aligned ref string for each
 	// commit row. It is width-independent, so it is built once and reused across

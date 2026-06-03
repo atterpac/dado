@@ -206,7 +206,7 @@ func (a *App) Run() error {
 		a.screen.EnablePaste()
 	}
 
-	eventCh := make(chan tcell.Event, 4)
+	eventCh := make(chan tcell.Event, 64)
 	go func() {
 		for {
 			ev := a.screen.PollEvent()
@@ -251,34 +251,12 @@ func (a *App) Run() error {
 			if !ok {
 				return nil
 			}
-			switch ev := ev.(type) {
-			case *tcell.EventResize:
-				a.screen.Sync()
-				if a.onResize != nil {
-					w, h := ev.Size()
-					a.onResize(w, h)
-				}
-				a.dirty = true
-			case *tcell.EventKey:
-				if ev.Key() == tcell.KeyCtrlC {
-					a.Stop()
-					continue
-				}
-				processed := ev
-				if a.inputCapture != nil {
-					processed = a.inputCapture(ev)
-				}
-				if processed != nil {
-					a.dispatchKey(processed)
-				}
-				a.dirty = true
-			case *tcell.EventMouse:
-				if a.dispatchMouse(ev) {
-					a.dirty = true
-				}
-			case *tcell.EventPaste:
-				// tcell uses EventPaste as a start/end bracket marker.
-				_ = ev
+			a.handleEvent(ev)
+			// Drain any events already buffered so a burst of input (e.g.
+			// holding j/k, fast scroll) collapses into a single redraw
+			// instead of one full clear+draw+show per event.
+			for len(eventCh) > 0 {
+				a.handleEvent(<-eventCh)
 			}
 		}
 
@@ -287,6 +265,41 @@ func (a *App) Run() error {
 			a.dirty = false
 			a.draw()
 		}
+	}
+}
+
+// handleEvent dispatches a single input event and marks the screen dirty if a
+// redraw is needed. It is called once per buffered event during an input burst;
+// the caller coalesces the resulting redraws into a single draw().
+func (a *App) handleEvent(ev tcell.Event) {
+	switch ev := ev.(type) {
+	case *tcell.EventResize:
+		a.screen.Sync()
+		if a.onResize != nil {
+			w, h := ev.Size()
+			a.onResize(w, h)
+		}
+		a.dirty = true
+	case *tcell.EventKey:
+		if ev.Key() == tcell.KeyCtrlC {
+			a.Stop()
+			return
+		}
+		processed := ev
+		if a.inputCapture != nil {
+			processed = a.inputCapture(ev)
+		}
+		if processed != nil {
+			a.dispatchKey(processed)
+		}
+		a.dirty = true
+	case *tcell.EventMouse:
+		if a.dispatchMouse(ev) {
+			a.dirty = true
+		}
+	case *tcell.EventPaste:
+		// tcell uses EventPaste as a start/end bracket marker.
+		_ = ev
 	}
 }
 
