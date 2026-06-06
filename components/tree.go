@@ -519,8 +519,12 @@ func (t *Tree) HandleKey(ev *tcell.EventKey) bool {
 			t.moveUp()
 		case 'l':
 			t.expandOrMoveIn()
+		case 'L':
+			t.ExpandAll()
 		case 'h':
 			t.collapseOrMoveOut()
+		case 'H':
+			t.CollapseAll()
 		case 'g':
 			t.selectedIndex = 0
 		case 'G':
