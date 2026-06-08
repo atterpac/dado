@@ -185,12 +185,15 @@ func parseTag(tag string, current, base tcell.Style) (tcell.Style, bool) {
 	}
 
 	// If all parts are empty or dash with no valid color, not a tag
-	// (avoids matching things like [0] which are not color tags)
 	fgColor, fgOK := resolveColor(fgPart)
 	bgColor, bgOK := resolveColor(bgPart)
 
+	// A background part that was never supplied (no colon in the tag) defaults to
+	// "" and resolves to ColorDefault
+	bgProvided := len(parts) >= 2
+
 	// Must have at least one recognized part to be a color tag
-	if !fgOK && !bgOK && attrPart == "" {
+	if !fgOK && !(bgProvided && bgOK) && attrPart == "" {
 		return current, false
 	}
 
