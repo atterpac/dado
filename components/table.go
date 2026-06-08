@@ -27,6 +27,7 @@ type Table struct {
 	headers           []string
 	hasHeader         bool
 	multiSelect       bool
+	vimKeys           bool // j/k/g/G row navigation (default on)
 	selectedRows      map[int]bool
 	onSelect          func(row int)
 	onSelectionChange func(rows []int)
@@ -56,6 +57,7 @@ func NewTable() *Table {
 		selectedKeys:  make(map[string]bool),
 		rowKeyToIndex: make(map[string]int),
 		rowIndexToKey: make(map[int]string),
+		vimKeys:       true,
 	}
 
 	t.Table.SetSelectable(true, false)
@@ -966,9 +968,18 @@ func (t *Table) Rect() (x, y, w, h int) {
 	return
 }
 
+// SetVimKeys toggles j/k/g/G row navigation. Enabled by default; pass false
+// for tables that sit under a text-input overlay where the runes should fall
+// through instead of moving the selection.
+func (t *Table) SetVimKeys(enabled bool) *Table {
+	t.vimKeys = enabled
+	return t
+}
+
 // HandleKey processes a key event for the Table.
-// Multi-select keys (Space, Ctrl+A) are handled directly; all other keys
-// are delegated to the table's built-in input handler (arrows, Enter, etc.).
+// Multi-select keys (Space, Ctrl+A) and vim navigation (j/k/g/G) are handled
+// directly; all other keys are delegated to the table's built-in input handler
+// (arrows, Enter, etc.).
 func (t *Table) HandleKey(ev *tcell.EventKey) bool {
 	if t.multiSelect {
 		switch ev.Key() {
@@ -979,6 +990,31 @@ func (t *Table) HandleKey(ev *tcell.EventKey) bool {
 			}
 		case tcell.KeyCtrlA:
 			t.SelectAll()
+			return true
+		}
+	}
+	if t.vimKeys && ev.Key() == tcell.KeyRune {
+		if n := t.GetDataRowCount(); n > 0 {
+			target := t.SelectedRow()
+			switch ev.Rune() {
+			case 'j':
+				target++
+			case 'k':
+				target--
+			case 'g':
+				target = 0
+			case 'G':
+				target = n - 1
+			default:
+				return t.Table.HandleKey(ev)
+			}
+			if target < 0 {
+				target = 0
+			}
+			if target >= n {
+				target = n - 1
+			}
+			t.SelectRow(target)
 			return true
 		}
 	}
