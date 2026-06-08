@@ -1,10 +1,13 @@
 package components
 
 import (
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/atterpac/dado/theme"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -59,6 +62,12 @@ type GitGraphData struct {
 	ColumnCap     int                   // Maximum columns to display (0 = unlimited)
 	ActiveCols    map[int]string        // Column -> commit hash currently in that column
 	ColumnBranch  map[int]string        // Column -> branch name that owns this lane
+
+	// rowStates caches the per-row lane render state produced by LayoutGraph as
+	// dense slices indexed 0..MaxColumn (no nil entries). Computed once per
+	// layout and reused on every Draw, so scrolling never recomputes the graph
+	// and the render hot path uses slice indexing instead of map lookups.
+	rowStates [][]*gitLaneState
 }
 
 // NewGitGraphData creates an empty graph data structure
@@ -80,10 +89,27 @@ func (g *GitGraphData) GetCommit(hash string) *GitCommit {
 	return g.CommitMap[hash]
 }
 
-// LayoutGraph assigns columns to commits for visualization
-// Each branch lineage gets its own column that persists until the branch merges
-// The current branch (if set) is always assigned to column 0
+// lowestFreeColumn returns the smallest column index in [0, cap) that is not
+// currently occupied by an active line. When every column under the cap is
+// taken it falls back to the last column so lanes collapse instead of growing
+// without bound.
+func lowestFreeColumn(active map[int]string, cap int) int {
+	for c := 0; c < cap; c++ {
+		if _, used := active[c]; !used {
+			return c
+		}
+	}
+	return cap - 1
+}
+
+// LayoutGraph assigns columns to commits and builds the per-row render state in
+// a single deterministic pass. Lanes are reclaimed (lowest free column reused)
+// as branches terminate, so short-lived branches no longer exhaust the column
+// cap. The resulting lane states are cached on the data so Draw never recomputes
+// them while scrolling.
 func (g *GitGraphData) LayoutGraph() {
+	g.rowStates = nil
+	g.MaxColumn = 0
 	if len(g.Commits) == 0 {
 		return
 	}
@@ -94,141 +120,201 @@ func (g *GitGraphData) LayoutGraph() {
 		columnCap = 12 // Default to 12 columns max (36 chars for graph)
 	}
 
-	// activeLines: column -> commit hash that line is expecting next
-	activeLines := make(map[int]string)
-	// commitColumn: hash -> assigned column (persists for the branch)
-	commitColumn := make(map[string]int)
-	// columnBranch: column -> branch name that owns this lane
 	g.ColumnBranch = make(map[int]string)
-	nextFreeCol := 0
 
-	// Find the current branch tip commit and reserve column 0 for it
-	var currentBranchTip *GitCommit
+	// Find the current branch tip so we can prefer column 0 for it.
+	tipHash := ""
 	if g.CurrentBranch != "" {
 		for _, commit := range g.Commits {
 			for _, ref := range commit.Refs {
 				if ref == g.CurrentBranch || ref == "HEAD" {
-					currentBranchTip = commit
+					tipHash = commit.Hash
 					break
 				}
 			}
-			if currentBranchTip != nil {
+			if tipHash != "" {
 				break
 			}
 		}
 	}
 
-	// If we found the current branch tip, reserve column 0 for it
-	if currentBranchTip != nil {
-		commitColumn[currentBranchTip.Hash] = 0
-		g.ColumnBranch[0] = g.CurrentBranch
-		nextFreeCol = 1
+	numRows := len(g.Commits)
+	states := make([]map[int]*gitLaneState, numRows)
+	// active: column -> parent hash the lane is currently flowing toward.
+	active := make(map[int]string)
+
+	newState := func() *gitLaneState {
+		return &gitLaneState{mergeFrom: -1, mergeTo: -1, branchFrom: -1, branchInto: -1}
 	}
+
+	// Line-identity coloring: lineID maps an active column to the color id of
+	// the line currently flowing through it. A new id is minted whenever a
+	// fresh line starts in a column (a branch tip or a merge source) and is
+	// carried along while the line continues, so a column reused by a different
+	// branch gets a different color. Ids start at 0 so the first line (usually
+	// the current branch / HEAD) keeps the leading palette color.
+	lineSeq := 0
+	lineID := make(map[int]int)
+	nextID := func() int { id := lineSeq; lineSeq++; return id }
 
 	for i, commit := range g.Commits {
 		commit.Row = i
-
-		// Check if this commit already has a column assigned (e.g., current branch tip)
-		if col, exists := commitColumn[commit.Hash]; exists {
-			commit.Column = col
-			// Check if this commit was expected in an active line and update
-			for activeCol, hash := range activeLines {
-				if hash == commit.Hash {
-					delete(activeLines, activeCol)
-					break
-				}
+		row := make(map[int]*gitLaneState)
+		states[i] = row
+		st := func(lane int) *gitLaneState {
+			s := row[lane]
+			if s == nil {
+				s = newState()
+				row[lane] = s
 			}
-		} else {
-			// Check if this commit was expected in an active line
-			foundCol := -1
-			for col, hash := range activeLines {
-				if hash == commit.Hash {
-					foundCol = col
-					break
-				}
-			}
-
-			if foundCol >= 0 {
-				// This commit continues an existing line
-				commit.Column = foundCol
-				commitColumn[commit.Hash] = foundCol
-			} else {
-				// New branch head - allocate a new column
-				if nextFreeCol < columnCap {
-					commit.Column = nextFreeCol
-					nextFreeCol++
-				} else {
-					// At cap - reuse the last column
-					commit.Column = columnCap - 1
-				}
-				commitColumn[commit.Hash] = commit.Column
-			}
+			return s
 		}
 
-		// Record branch name for this column if commit has refs and column doesn't have a branch yet
-		if g.ColumnBranch[commit.Column] == "" {
+		// Collect every lane currently expecting this commit, sorted so the
+		// choice of column is deterministic regardless of map iteration order.
+		var incoming []int
+		for lane, h := range active {
+			if h == commit.Hash {
+				incoming = append(incoming, lane)
+			}
+		}
+		sort.Ints(incoming)
+
+		// Choose the commit's column.
+		var col int
+		switch {
+		case len(incoming) > 0:
+			col = incoming[0]
+		case commit.Hash == tipHash:
+			if _, used := active[0]; !used {
+				col = 0
+			} else {
+				col = lowestFreeColumn(active, columnCap)
+			}
+		default:
+			col = lowestFreeColumn(active, columnCap)
+		}
+		commit.Column = col
+
+		// Determine the color id of the line this commit sits on. When lanes
+		// were already flowing into this column, the commit inherits that
+		// line's id; otherwise it starts a brand-new line.
+		if _, ok := lineID[col]; !ok {
+			lineID[col] = nextID()
+		}
+		colorID := lineID[col]
+
+		// Pass-through lines and branch-point convergence.
+		for lane, h := range active {
+			if h == commit.Hash {
+				if lane != col {
+					// Extra lane expecting this commit curves down into its column.
+					s := st(lane)
+					s.branchInto = col
+					s.commitHash = h
+					s.colorID = lineID[lane]
+					delete(active, lane)
+					delete(lineID, lane)
+				}
+				continue
+			}
+			s := st(lane)
+			s.hasLine = true
+			s.commitHash = h
+			s.colorID = lineID[lane]
+		}
+
+		// Place the node and free its lane (the first parent repopulates it).
+		node := st(col)
+		node.hasNode = true
+		node.commitHash = commit.Hash
+		node.colorID = colorID
+		delete(active, col)
+
+		// Record this column's branch name from refs if not already set.
+		if g.ColumnBranch[col] == "" {
 			for _, ref := range commit.Refs {
 				if !strings.HasPrefix(ref, "origin/") && ref != "HEAD" {
-					g.ColumnBranch[commit.Column] = ref
+					g.ColumnBranch[col] = ref
 					break
 				}
 			}
 		}
 
-		if commit.Column > g.MaxColumn && commit.Column < columnCap {
-			g.MaxColumn = commit.Column
-		}
-		if g.MaxColumn >= columnCap {
-			g.MaxColumn = columnCap - 1
-		}
-
-		// Remove this commit from active lines (we've processed it)
-		delete(activeLines, commit.Column)
-
-		// Track parent commits - only if they exist in our commit list
+		// Route parents into lanes.
+		firstParentContinues := false
 		for idx, parentHash := range commit.Parents {
-			// Only track parents that are in our loaded commits
 			if g.CommitMap[parentHash] == nil {
 				continue
 			}
-
-			// Check if parent is already tracked in an active line
-			parentHasCol := false
-			for _, h := range activeLines {
-				if h == parentHash {
-					parentHasCol = true
-					break
+			if idx == 0 {
+				// First parent continues this commit's column and line.
+				active[col] = parentHash
+				lineID[col] = colorID
+				firstParentContinues = true
+				continue
+			}
+			// Secondary parent (merge source). Reuse a lane already flowing to
+			// it (lowest), otherwise allocate the lowest free column.
+			plane := -1
+			for lane, h := range active {
+				if h == parentHash && (plane == -1 || lane < plane) {
+					plane = lane
 				}
 			}
+			if plane == -1 {
+				plane = lowestFreeColumn(active, columnCap)
+				active[plane] = parentHash
+				lineID[plane] = nextID() // merge source starts its own line
+				s := st(plane)
+				s.isStartOfLine = true
+				s.branchFrom = col
+				s.colorID = lineID[plane]
+			}
+			// Merge edge: from the parent's lane into the commit's column.
+			st(plane).mergeTo = col
+			st(plane).colorID = lineID[plane]
+			st(col).mergeFrom = plane
+		}
+		// If no first parent kept this column alive, the line ends here; drop
+		// its id so a later branch reusing the column mints a fresh color.
+		if !firstParentContinues {
+			delete(lineID, col)
+		}
 
-			if !parentHasCol {
-				if idx == 0 {
-					// First parent continues in same column as this commit
-					activeLines[commit.Column] = parentHash
-				} else {
-					// Secondary parent (merge source) - needs its own column
-					// Check if this parent already has a column assigned from another path
-					if existingCol, exists := commitColumn[parentHash]; exists {
-						// Parent already has a column, mark it active
-						activeLines[existingCol] = parentHash
-					} else {
-						// New line for merge source - allocate column if under cap
-						var newCol int
-						if nextFreeCol < columnCap {
-							newCol = nextFreeCol
-							nextFreeCol++
-						} else {
-							newCol = columnCap - 1
-						}
-						activeLines[newCol] = parentHash
-						if newCol > g.MaxColumn {
-							g.MaxColumn = newCol
-						}
-					}
-				}
+		// Track the widest column seen, in either this row or the live lanes.
+		for lane := range row {
+			if lane > g.MaxColumn {
+				g.MaxColumn = lane
+			}
+		}
+		for lane := range active {
+			if lane > g.MaxColumn {
+				g.MaxColumn = lane
 			}
 		}
 	}
+
+	if g.MaxColumn > columnCap-1 {
+		g.MaxColumn = columnCap - 1
+	}
+
+	// Materialize each row's sparse lane map into a dense slice indexed
+	// 0..MaxColumn (no nil entries). The renderer indexes lanes directly and
+	// iterates them every frame, so slices avoid per-cell map hashing.
+	dense := make([][]*gitLaneState, numRows)
+	for i, row := range states {
+		laneSlice := make([]*gitLaneState, g.MaxColumn+1)
+		for lane := 0; lane <= g.MaxColumn; lane++ {
+			if s := row[lane]; s != nil {
+				laneSlice[lane] = s
+			} else {
+				laneSlice[lane] = newState()
+			}
+		}
+		dense[i] = laneSlice
+	}
+	g.rowStates = dense
 
 	// Parse merge commits to find branch names for merged branches
 	// Standard merge messages are like "Merge branch 'feature-x' into main"
@@ -310,6 +396,20 @@ type GitGraph struct {
 	onSelect func(commit *GitCommit)
 	onChange func(commit *GitCommit)
 
+	// changeDebounce, when > 0, coalesces rapid selection changes (e.g. holding
+	// j/k) so onChange fires only once movement settles, instead of once per
+	// step. Zero (the default) fires onChange synchronously on every change.
+	changeDebounce time.Duration
+	changeTimer    *time.Timer
+	// debounceCleanup records that a Subs() cleanup stopping the pending timer
+	// has been registered, so we register it exactly once.
+	debounceCleanup bool
+
+	// refTextCache holds the pre-rendered right-aligned ref string for each
+	// commit row. It is width-independent, so it is built once and reused across
+	// frames; nil means it needs rebuilding (after SetGraph or a showRefs change).
+	refTextCache []string
+
 	// Style options
 	showRefs   bool
 	showHash   bool
@@ -318,7 +418,12 @@ type GitGraph struct {
 	dateFormat string
 	laneColors []tcell.Color
 	columnCap  int // Maximum columns to display (0 = default of 12)
+	maxRefLen  int // Max displayed length of a branch/tag name (0 = default of 20)
 }
+
+// defaultMaxRefLen caps how many runes of a branch/tag name are shown in the
+// ref decoration before it is truncated with an ellipsis.
+const defaultMaxRefLen = 20
 
 // NewGitGraph creates a new git graph component
 func NewGitGraph() *GitGraph {
@@ -338,6 +443,7 @@ func (g *GitGraph) SetGraph(data *GitGraphData) *GitGraph {
 	g.graph = data
 	g.selectedIndex = 0
 	g.offset = 0
+	g.refTextCache = nil
 	return g
 }
 
@@ -356,6 +462,7 @@ func (g *GitGraph) SetOnChange(fn func(commit *GitCommit)) *GitGraph {
 // SetShowRefs enables/disables showing branch/tag refs
 func (g *GitGraph) SetShowRefs(show bool) *GitGraph {
 	g.showRefs = show
+	g.refTextCache = nil
 	return g
 }
 
@@ -376,6 +483,35 @@ func (g *GitGraph) SetShowAuthor(show bool) *GitGraph {
 func (g *GitGraph) SetColumnCap(cap int) *GitGraph {
 	g.columnCap = cap
 	return g
+}
+
+// SetMaxRefLen sets the maximum displayed length (in runes) of a branch/tag
+// name in the ref decoration; longer names are truncated with an ellipsis.
+// Default is 20. Set to 0 to use the default; set negative to disable truncation.
+func (g *GitGraph) SetMaxRefLen(n int) *GitGraph {
+	g.maxRefLen = n
+	g.refTextCache = nil
+	return g
+}
+
+// truncateRef shortens a ref name to the configured max length, appending an
+// ellipsis when it overflows.
+func (g *GitGraph) truncateRef(name string) string {
+	max := g.maxRefLen
+	if max == 0 {
+		max = defaultMaxRefLen
+	}
+	if max < 0 {
+		return name
+	}
+	r := []rune(name)
+	if len(r) <= max {
+		return name
+	}
+	if max == 1 {
+		return "…"
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // SetShowDate enables/disables showing date
@@ -433,10 +569,57 @@ func (g *GitGraph) SelectByHash(hash string) *GitGraph {
 	return g
 }
 
-func (g *GitGraph) triggerOnChange() {
-	if g.onChange != nil {
-		g.onChange(g.GetSelected())
+// SetChangeDebounce coalesces selection-change callbacks during rapid
+// navigation. With d > 0, onChange fires once the selection stops changing for
+// d (useful when onChange does expensive work like loading a diff). With d == 0
+// (the default) onChange fires synchronously on every change.
+//
+// When debouncing, the fired callback is marshaled back onto the draw goroutine
+// via theme.QueueUpdateDraw, so onChange (and the selection read it sees) runs
+// with the same threading guarantees as the synchronous path — no extra locking
+// is required in the callback.
+func (g *GitGraph) SetChangeDebounce(d time.Duration) *GitGraph {
+	g.changeDebounce = d
+	// Register a one-time teardown that stops any pending timer when the
+	// component is stopped, so a debounce in flight can't fire into a
+	// torn-down widget or leak its goroutine.
+	if d > 0 && !g.debounceCleanup {
+		g.debounceCleanup = true
+		g.Subs().Add(func() {
+			g.mu.Lock()
+			if g.changeTimer != nil {
+				g.changeTimer.Stop()
+				g.changeTimer = nil
+			}
+			g.mu.Unlock()
+		})
 	}
+	return g
+}
+
+// triggerOnChange notifies the onChange callback of a selection change. It is
+// only ever called from HandleKey/SetSelectedIndex on the draw goroutine, so
+// changeTimer is single-goroutine state needing no lock. When debouncing, the
+// timer fires on its own goroutine but immediately hands work back to the draw
+// goroutine via theme.QueueUpdateDraw, where GetSelected/onChange run safely.
+func (g *GitGraph) triggerOnChange() {
+	if g.onChange == nil {
+		return
+	}
+	if g.changeDebounce <= 0 {
+		g.onChange(g.GetSelected())
+		return
+	}
+	g.mu.Lock()
+	if g.changeTimer != nil {
+		g.changeTimer.Stop()
+	}
+	g.changeTimer = time.AfterFunc(g.changeDebounce, func() {
+		theme.QueueUpdateDraw(func() {
+			g.onChange(g.GetSelected())
+		})
+	})
+	g.mu.Unlock()
 }
 
 // laneState tracks rendering state for each lane
@@ -449,82 +632,93 @@ type gitLaneState struct {
 	branchInto    int // if != -1, this lane curves down into the given column (branch point)
 	isStartOfLine bool
 	commitHash    string
+	// colorID identifies the *line* occupying this lane, not the lane index.
+	// A fresh id is assigned each time a new line starts in a column, so a
+	// column reused by a later branch draws in a different color — making it
+	// clear where one branch ends and another begins in the same column.
+	colorID int
 }
 
-// buildRowStates computes lane states for rendering
-func (g *GitGraph) buildRowStates() []map[int]*gitLaneState {
+// buildRowStates returns the per-row lane states computed by LayoutGraph.
+// The states are cached on the graph data, so this is cheap to call every
+// frame. If the data was never laid out, it is laid out on demand.
+func (g *GitGraph) buildRowStates() [][]*gitLaneState {
 	if g.graph == nil || len(g.graph.Commits) == 0 {
 		return nil
 	}
+	if g.graph.rowStates == nil {
+		g.graph.LayoutGraph()
+	}
+	return g.graph.rowStates
+}
 
-	numRows := len(g.graph.Commits)
-	states := make([]map[int]*gitLaneState, numRows)
-	activeLanes := make(map[int]string)
-
-	for row := 0; row < numRows; row++ {
-		commit := g.graph.Commits[row]
-		states[row] = make(map[int]*gitLaneState)
-
-		maxLane := g.graph.MaxColumn
-		for lane := 0; lane <= maxLane; lane++ {
-			states[row][lane] = &gitLaneState{
-				mergeFrom:  -1,
-				mergeTo:    -1,
-				branchFrom: -1,
-				branchInto: -1,
-			}
+// buildRefTexts returns the cached per-row ref strings, building them on first
+// use. The strings depend only on commit refs and the showRefs flag, not on
+// width or scroll, so they are reused across frames. Invalidated (set nil) by
+// SetGraph and SetShowRefs.
+func (g *GitGraph) buildRefTexts() []string {
+	if g.refTextCache != nil {
+		return g.refTextCache
+	}
+	cache := make([]string, len(g.graph.Commits))
+	if g.showRefs {
+		for i, commit := range g.graph.Commits {
+			cache[i] = g.formatRefText(commit)
 		}
+	}
+	g.refTextCache = cache
+	return cache
+}
 
-		for lane, hash := range activeLanes {
-			// A lane whose expected commit lives in a different column is a
-			// branch point: this lane curves down into the commit's column.
-			if hash == commit.Hash && lane != commit.Column {
-				states[row][lane].branchInto = commit.Column
-				states[row][lane].commitHash = hash
-				delete(activeLanes, lane)
-				continue
-			}
-			states[row][lane].hasLine = true
-			states[row][lane].commitHash = hash
-		}
+// formatRefText renders the right-aligned ref decoration for a single commit
+// (branches, tags, remote-tracking arrows, ahead/behind counts).
+func (g *GitGraph) formatRefText(commit *GitCommit) string {
+	if len(commit.Refs) == 0 {
+		return ""
+	}
 
-		states[row][commit.Column].hasNode = true
-		states[row][commit.Column].commitHash = commit.Hash
-
-		if commit.IsMerge && len(commit.Parents) > 1 {
-			for i := 1; i < len(commit.Parents); i++ {
-				parentHash := commit.Parents[i]
-				parent := g.graph.GetCommit(parentHash)
-				if parent != nil {
-					fromLane := parent.Column
-					toLane := commit.Column
-					states[row][fromLane].mergeTo = toLane
-					states[row][toLane].mergeFrom = fromLane
-				}
-			}
-		}
-
-		delete(activeLanes, commit.Column)
-
-		for i, parentHash := range commit.Parents {
-			parent := g.graph.GetCommit(parentHash)
-			if parent == nil {
-				continue
-			}
-
-			if i == 0 {
-				activeLanes[commit.Column] = parentHash
-			} else {
-				if _, exists := activeLanes[parent.Column]; !exists {
-					activeLanes[parent.Column] = parentHash
-					states[row][parent.Column].isStartOfLine = true
-					states[row][parent.Column].branchFrom = commit.Column
-				}
-			}
+	// Build a set of remote refs for quick lookup.
+	remoteRefs := make(map[string]bool)
+	for _, ref := range commit.Refs {
+		if name, ok := strings.CutPrefix(ref, "origin/"); ok {
+			remoteRefs[name] = true
 		}
 	}
 
-	return states
+	// Build ahead/behind indicator.
+	aheadBehind := ""
+	switch {
+	case commit.Ahead > 0 && commit.Behind > 0:
+		aheadBehind = " ↑" + strconv.Itoa(commit.Ahead) + "↓" + strconv.Itoa(commit.Behind)
+	case commit.Ahead > 0:
+		aheadBehind = " ↑" + strconv.Itoa(commit.Ahead)
+	case commit.Behind > 0:
+		aheadBehind = " ↓" + strconv.Itoa(commit.Behind)
+	}
+
+	var refParts []string
+	for _, ref := range commit.Refs {
+		if strings.HasPrefix(ref, "origin/") || ref == "HEAD" {
+			continue
+		}
+		if remoteRefs[ref] {
+			refParts = append(refParts, "↕ "+g.truncateRef(ref)+aheadBehind)
+		} else {
+			refParts = append(refParts, "● "+g.truncateRef(ref))
+		}
+	}
+
+	// Remote-only refs (no matching local branch).
+	for _, ref := range commit.Refs {
+		if localName, ok := strings.CutPrefix(ref, "origin/"); ok && !slices.Contains(commit.Refs, localName) {
+			refParts = append(refParts, "○ "+g.truncateRef(localName))
+		}
+	}
+
+	if len(refParts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(refParts, "  ") + " "
 }
 
 // Draw renders the git graph
@@ -572,6 +766,7 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 	}
 
 	rowStates := g.buildRowStates()
+	refTexts := g.buildRefTexts()
 
 	for i := 0; i < height && g.offset+i < len(g.graph.Commits); i++ {
 		commit := g.graph.Commits[g.offset+i]
@@ -591,7 +786,9 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 
 		for lane := 0; lane <= g.graph.MaxColumn; lane++ {
 			state := states[lane]
-			laneColor := laneColors[lane%len(laneColors)]
+			// Color follows the line occupying the lane, not the lane index, so
+			// a column reused by a different branch is visibly a different color.
+			laneColor := laneColors[state.colorID%len(laneColors)]
 
 			cellStyle := rowStyle
 			if !isSelected {
@@ -600,13 +797,9 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 
 			chars := g.getLaneChars(commit, lane, state, states, rowIndex, rowStates)
 
-			for ci, ch := range chars {
+			for _, ch := range chars {
 				if col < x+width {
-					charStyle := cellStyle
-					if ci == 1 && state.hasNode && !isSelected {
-						charStyle = tcell.StyleDefault.Background(bgColor).Foreground(laneColors[commit.Column%len(laneColors)])
-					}
-					screen.SetContent(col, rowY, ch, nil, charStyle)
+					screen.SetContent(col, rowY, ch, nil, cellStyle)
 					col++
 				}
 			}
@@ -617,66 +810,9 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			col++
 		}
 
-		// Build ref text FIRST to know exact space needed
-		var refText string
-		if g.showRefs && len(commit.Refs) > 0 {
-			// Build a set of remote refs for quick lookup
-			remoteRefs := make(map[string]bool)
-			for _, ref := range commit.Refs {
-				if strings.HasPrefix(ref, "origin/") {
-					remoteRefs[strings.TrimPrefix(ref, "origin/")] = true
-				}
-			}
-
-			// Build ahead/behind indicator
-			aheadBehind := ""
-			if commit.Ahead > 0 || commit.Behind > 0 {
-				if commit.Ahead > 0 && commit.Behind > 0 {
-					aheadBehind = " ↑" + strconv.Itoa(commit.Ahead) + "↓" + strconv.Itoa(commit.Behind)
-				} else if commit.Ahead > 0 {
-					aheadBehind = " ↑" + strconv.Itoa(commit.Ahead)
-				} else if commit.Behind > 0 {
-					aheadBehind = " ↓" + strconv.Itoa(commit.Behind)
-				}
-			}
-
-			// Build ref display parts
-			var refParts []string
-			for _, ref := range commit.Refs {
-				if strings.HasPrefix(ref, "origin/") {
-					continue
-				}
-				if ref == "HEAD" {
-					continue
-				}
-				if remoteRefs[ref] {
-					refParts = append(refParts, "↕ "+ref+aheadBehind)
-				} else {
-					refParts = append(refParts, "● "+ref)
-				}
-			}
-
-			// Remote-only refs
-			for _, ref := range commit.Refs {
-				if strings.HasPrefix(ref, "origin/") {
-					localName := strings.TrimPrefix(ref, "origin/")
-					hasLocal := false
-					for _, r := range commit.Refs {
-						if r == localName {
-							hasLocal = true
-							break
-						}
-					}
-					if !hasLocal {
-						refParts = append(refParts, "○ "+localName)
-					}
-				}
-			}
-
-			if len(refParts) > 0 {
-				refText = " " + strings.Join(refParts, "  ") + " "
-			}
-		}
+		// Ref text is independent of width/scroll, so it is built once and
+		// cached rather than rebuilt for every visible row each frame.
+		refText := refTexts[rowIndex]
 
 		// Calculate space available for content after graph lanes
 		availableSpace := (x + width) - col - 2
@@ -684,10 +820,7 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 		// Build branch display text for selected rows without refs
 		branchDisplay := ""
 		if refText == "" && isSelected && commit.Branch != "" {
-			branchDisplay = commit.Branch
-			if len(branchDisplay) > 25 {
-				branchDisplay = branchDisplay[:22] + "..."
-			}
+			branchDisplay = g.truncateRef(commit.Branch)
 		}
 
 		// Calculate how much space each element needs
@@ -794,8 +927,9 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			refLen := len([]rune(refText))
 			refStartCol := x + width - refLen
 
-			// Always render refs - they take priority
-			laneColor := laneColors[commit.Column%len(laneColors)]
+			// Always render refs - they take priority. Match the commit's line
+			// color (by colorID, same as the node) rather than its raw column.
+			laneColor := laneColors[states[commit.Column].colorID%len(laneColors)]
 			refStyle := rowStyle
 			if !isSelected {
 				refStyle = tcell.StyleDefault.Background(bgColor).Foreground(laneColor).Bold(true)
@@ -828,7 +962,7 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 }
 
 // getLaneChars returns the 3 characters to draw for a lane
-func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState, allStates map[int]*gitLaneState, rowIndex int, allRowStates []map[int]*gitLaneState) []rune {
+func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState, allStates []*gitLaneState, rowIndex int, allRowStates [][]*gitLaneState) []rune {
 	if state != nil && (state.mergeFrom != -1 || state.mergeTo != -1) {
 		if state.hasNode {
 			node := g.getNodeChar(commit)
@@ -879,17 +1013,18 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 
 	if commit.IsMerge && lane == commit.Column {
 		node := g.getNodeChar(commit)
-		if len(commit.Parents) > 1 {
-			secondParent := g.graph.GetCommit(commit.Parents[1])
-			if secondParent != nil {
-				if secondParent.Column < lane {
-					return []rune{gitHoriz, node, ' '}
-				} else if secondParent.Column > lane {
-					return []rune{' ', node, gitHoriz}
-				}
+		// Span toward every merge source, not just the first, so octopus
+		// merges connect on both sides of the node.
+		secCols := g.secondaryParentCols(commit)
+		left, right := ' ', ' '
+		for _, c := range secCols {
+			if c < lane {
+				left = gitHoriz
+			} else if c > lane {
+				right = gitHoriz
 			}
 		}
-		return []rune{' ', node, ' '}
+		return []rune{left, node, right}
 	}
 
 	if state.hasNode {
@@ -926,12 +1061,33 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 	}
 
 	if commit.IsMerge && len(commit.Parents) > 1 {
-		secondParent := g.graph.GetCommit(commit.Parents[1])
-		if secondParent != nil {
-			minLane := commit.Column
-			maxLane := secondParent.Column
-			if minLane > maxLane {
-				minLane, maxLane = maxLane, minLane
+		secCols := g.secondaryParentCols(commit)
+		if len(secCols) > 0 {
+			minLane, maxLane := commit.Column, commit.Column
+			isSec := false
+			for _, c := range secCols {
+				if c < minLane {
+					minLane = c
+				}
+				if c > maxLane {
+					maxLane = c
+				}
+				if c == lane {
+					isSec = true
+				}
+			}
+
+			if isSec {
+				if lane < commit.Column {
+					if state.hasLine {
+						return []rune{' ', gitVertRight, gitHoriz}
+					}
+					return []rune{' ', gitTopLeft, gitHoriz}
+				}
+				if state.hasLine {
+					return []rune{gitHoriz, gitVertLeft, ' '}
+				}
+				return []rune{gitHoriz, gitTopRight, ' '}
 			}
 
 			if lane > minLane && lane < maxLane {
@@ -939,20 +1095,6 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 					return []rune{gitHoriz, gitCross, gitHoriz}
 				}
 				return []rune{gitHoriz, gitHoriz, gitHoriz}
-			}
-
-			if lane == secondParent.Column {
-				if lane < commit.Column {
-					if state.hasLine {
-						return []rune{' ', gitVertRight, gitHoriz}
-					}
-					return []rune{' ', gitTopLeft, gitHoriz}
-				} else {
-					if state.hasLine {
-						return []rune{gitHoriz, gitVertLeft, ' '}
-					}
-					return []rune{gitHoriz, gitTopRight, ' '}
-				}
 			}
 		}
 	}
@@ -972,6 +1114,21 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 	}
 
 	return []rune{' ', ' ', ' '}
+}
+
+// secondaryParentCols returns the assigned columns of all merge-source parents
+// (every parent after the first) that exist in the loaded commit set.
+func (g *GitGraph) secondaryParentCols(commit *GitCommit) []int {
+	if !commit.IsMerge || len(commit.Parents) < 2 {
+		return nil
+	}
+	cols := make([]int, 0, len(commit.Parents)-1)
+	for i := 1; i < len(commit.Parents); i++ {
+		if p := g.graph.GetCommit(commit.Parents[i]); p != nil {
+			cols = append(cols, p.Column)
+		}
+	}
+	return cols
 }
 
 func (g *GitGraph) getNodeChar(commit *GitCommit) rune {
