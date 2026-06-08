@@ -59,6 +59,25 @@ func TestTextView_Scroll_Down(t *testing.T) {
 	assert.Equal(t, 1, row)
 }
 
+func TestTextView_Scroll_ClampsAtBottom(t *testing.T) {
+	tv := core.NewTextView()
+	tv.SetScrollable(true)
+	tv.SetText("l1\nl2\nl3\nl4\nl5") // 5 lines
+	tv.SetRect(0, 0, 20, 3)         // 3 visible -> max offset 2
+
+	// Press Down well past the end.
+	for range 10 {
+		coretest.SimulateKey(tv, tcell.KeyDown)
+	}
+	row, _ := tv.GetScrollOffset()
+	assert.Equal(t, 2, row, "scrollY must clamp to max offset, not overshoot")
+
+	// One Up should move immediately, with no phantom rows to climb back through.
+	coretest.SimulateKey(tv, tcell.KeyUp)
+	row, _ = tv.GetScrollOffset()
+	assert.Equal(t, 1, row)
+}
+
 func TestTextView_Scroll_NotScrollable_IgnoresKey(t *testing.T) {
 	tv := core.NewTextView()
 	tv.SetScrollable(false)

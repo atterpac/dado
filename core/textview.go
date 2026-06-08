@@ -75,6 +75,8 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 	}
 	vp.SetContentSize(w, len(tv.lines))
 	vp.SetOffset(0, tv.scrollY)
+	// Write the clamped offset back so scrollY never lands past the last line.
+	_, tv.scrollY = vp.Offset()
 
 	baseStyle := tv.textStyle
 	if tv.fgColor != tcell.ColorDefault {
@@ -327,34 +329,32 @@ func (tv *TextView) HandleKey(ev *tcell.EventKey) bool {
 	if !tv.scrollable {
 		return false
 	}
-	_, _, _, h := tv.InnerRect()
+	_, _, w, h := tv.InnerRect()
+	if len(tv.lines) == 0 || tv.wrapWidth != w {
+		tv.reflow(w)
+	}
 	switch ev.Key() {
 	case tcell.KeyDown:
 		tv.scrollY++
-		return true
 	case tcell.KeyUp:
-		if tv.scrollY > 0 {
-			tv.scrollY--
-		}
-		return true
+		tv.scrollY--
 	case tcell.KeyPgDn:
 		tv.scrollY += h
-		return true
 	case tcell.KeyPgUp:
 		tv.scrollY -= h
-		if tv.scrollY < 0 {
-			tv.scrollY = 0
-		}
-		return true
 	case tcell.KeyHome:
 		tv.scrollY = 0
-		return true
 	case tcell.KeyEnd:
-		tv.scrollY = len(tv.lines) - h
-		if tv.scrollY < 0 {
-			tv.scrollY = 0
-		}
-		return true
+		tv.scrollY = tv.maxScrollY(h)
+	default:
+		return false
 	}
-	return false
+	tv.scrollY = clampInt(tv.scrollY, 0, tv.maxScrollY(h))
+	return true
+}
+
+// maxScrollY is the largest valid top row for a viewport of height h: never
+// negative, and zero when the content fits.
+func (tv *TextView) maxScrollY(h int) int {
+	return max(0, len(tv.lines)-h)
 }
