@@ -2,6 +2,7 @@ package components
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -96,6 +97,7 @@ type GraphTree struct {
 
 	showEdgeLabels bool
 	indentSize     int
+	prefixBuf      []rune // reused line-prefix scratch (Draw only)
 
 	// Callbacks
 	onChange       func(node *GraphTreeNode)
@@ -225,7 +227,7 @@ func (t *GraphTree) Draw(screen tcell.Screen) {
 		col := x
 
 		// Draw indent with tree lines
-		prefix := t.buildLinePrefix(node, t.offset+i)
+		prefix := t.linePrefix(node, t.offset+i)
 		prefixStyle := tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 		if isSelected {
 			prefixStyle = style
@@ -325,56 +327,55 @@ func (t *GraphTree) Draw(screen tcell.Screen) {
 	}
 }
 
-func (t *GraphTree) buildLinePrefix(node *GraphTreeNode, flatIndex int) string {
-	if node.Depth == 0 {
-		return ""
+// linePrefix fills the reused buffer with node's indentation (spaces) plus the
+// two edge connector runes at its tail, returning it. The reused []rune avoids
+// the per-node Repeat + []rune conversions + string() this used to allocate.
+func (t *GraphTree) linePrefix(node *GraphTreeNode, flatIndex int) []rune {
+	n := node.Depth * t.indentSize
+	if cap(t.prefixBuf) < n {
+		t.prefixBuf = make([]rune, n)
+	}
+	buf := t.prefixBuf[:n]
+	for i := range buf {
+		buf[i] = ' '
+	}
+	if n == 0 {
+		return buf
 	}
 
-	prefix := strings.Repeat(" ", node.Depth*t.indentSize)
-
-	// Determine edge type from parent
+	// Determine edge connector (always two runes) from the parent edge type.
 	var edgeChars string
 	if flatIndex > 0 {
 		parentNode := t.findParentNode(node)
 		if parentNode != nil {
-			edge := t.data.GetEdge(parentNode.ID, node.ID)
-			if edge != nil {
+			if edge := t.data.GetEdge(parentNode.ID, node.ID); edge != nil {
 				isLast := t.isLastChild(parentNode, node.ID)
 				switch edge.Type {
 				case GraphEdgeSolid:
-					if isLast {
-						edgeChars = "└─"
-					} else {
-						edgeChars = "├─"
-					}
+					edgeChars = pick(isLast, "└─", "├─")
 				case GraphEdgeDashed:
-					if isLast {
-						edgeChars = "└╌"
-					} else {
-						edgeChars = "├╌"
-					}
+					edgeChars = pick(isLast, "└╌", "├╌")
 				case GraphEdgeDotted:
-					if isLast {
-						edgeChars = "└·"
-					} else {
-						edgeChars = "├·"
-					}
+					edgeChars = pick(isLast, "└·", "├·")
 				}
 			}
 		}
 	}
 
-	if edgeChars != "" {
-		// Replace last part of prefix with edge chars
-		prefixRunes := []rune(prefix)
-		edgeRunes := []rune(edgeChars)
-		if len(prefixRunes) >= len(edgeRunes) {
-			copy(prefixRunes[len(prefixRunes)-len(edgeRunes):], edgeRunes)
-			prefix = string(prefixRunes)
-		}
+	if edgeChars != "" && n >= 2 {
+		r0, sz := utf8.DecodeRuneInString(edgeChars)
+		r1, _ := utf8.DecodeRuneInString(edgeChars[sz:])
+		buf[n-2] = r0
+		buf[n-1] = r1
 	}
+	return buf
+}
 
-	return prefix
+func pick(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
 }
 
 func (t *GraphTree) findParentNode(child *GraphTreeNode) *GraphTreeNode {
@@ -398,20 +399,27 @@ func (t *GraphTree) isLastChild(parent *GraphTreeNode, childID string) bool {
 	return parent.Children[len(parent.Children)-1] == childID
 }
 
+// statusEqual compares status case-insensitively without the strings.ToLower
+// allocation (this runs per node per frame).
+func statusEqual(status string, names ...string) bool {
+	for _, n := range names {
+		if strings.EqualFold(status, n) {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *GraphTree) getStatusColor(status string) tcell.Color {
 	th := t.th()
-	switch strings.ToLower(status) {
-	case "running":
+	switch {
+	case statusEqual(status, "running"):
 		return th.Info()
-	case "completed":
+	case statusEqual(status, "completed"):
 		return th.Success()
-	case "failed":
+	case statusEqual(status, "failed", "terminated"):
 		return th.Error()
-	case "canceled", "cancelled":
-		return th.Warning()
-	case "terminated":
-		return th.Error()
-	case "timedout", "timed_out":
+	case statusEqual(status, "canceled", "cancelled", "timedout", "timed_out"):
 		return th.Warning()
 	default:
 		return th.FgDim()
@@ -419,18 +427,18 @@ func (t *GraphTree) getStatusColor(status string) tcell.Color {
 }
 
 func (t *GraphTree) getStatusIcon(status string) string {
-	switch strings.ToLower(status) {
-	case "running":
+	switch {
+	case statusEqual(status, "running"):
 		return "●"
-	case "completed":
+	case statusEqual(status, "completed"):
 		return "✓"
-	case "failed":
+	case statusEqual(status, "failed"):
 		return "✗"
-	case "canceled", "cancelled":
+	case statusEqual(status, "canceled", "cancelled"):
 		return "⊘"
-	case "terminated":
+	case statusEqual(status, "terminated"):
 		return "⊗"
-	case "timedout", "timed_out":
+	case statusEqual(status, "timedout", "timed_out"):
 		return "⏱"
 	default:
 		return "○"

@@ -1,8 +1,6 @@
 package components
 
 import (
-	"fmt"
-
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -25,8 +23,12 @@ func (g *ERDGraph) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Precompute the set of tables connected to the focused table.
-	activeNeighbors := make(map[string]bool)
+	// Tables connected to the focused one. Map reused (cleared, not reallocated).
+	if g.activeNb == nil {
+		g.activeNb = make(map[string]bool)
+	}
+	activeNeighbors := g.activeNb
+	clear(activeNeighbors)
 	focusID := g.data.focusID
 	for _, rel := range g.data.relations {
 		if rel.FromTable == focusID {
@@ -409,62 +411,76 @@ func (g *ERDGraph) drawFKInfoPanel(screen tcell.Screen, vx, vy, vw, vh int) {
 		return
 	}
 
-	// Collect FK lines: outbound and inbound relations involving the focused table.
-	type fkLine struct {
-		text  string
-		color tcell.Color
-	}
-	var lines []fkLine
-
+	// Build the panel lines into the reused rune arena (no per-line strings):
+	// add() appends a line's runes, commit() records the line with its style.
 	th := g.th()
 	accentColor := th.Accent()
 	infoColor := th.Info()
 
+	g.fkRunes = g.fkRunes[:0]
+	g.fkEntries = g.fkEntries[:0]
+	start := 0
+	add := func(s string) {
+		for _, r := range s {
+			g.fkRunes = append(g.fkRunes, r)
+		}
+	}
+	commit := func(color tcell.Color, bold bool) {
+		g.fkEntries = append(g.fkEntries, fkEntry{start: start, end: len(g.fkRunes), color: color, bold: bold})
+		start = len(g.fkRunes)
+	}
+
+	// Header is line 0.
+	add(" ")
+	add(focused.Name)
+	add(" — Foreign Keys ")
+	commit(th.Fg(), true)
+
 	for _, rel := range g.data.relations {
-		if rel.FromTable == focusID {
-			target := g.data.tables[rel.ToTable]
-			dirHint := g.offscreenHint(target, vx, vy, vw, vh)
-			text := fmt.Sprintf(" → %s.%s", rel.ToTable, rel.ToColumn)
-			if dirHint != "" {
-				text += " " + dirHint
+		switch focusID {
+		case rel.FromTable:
+			hint := g.offscreenHint(g.data.tables[rel.ToTable], vx, vy, vw, vh)
+			add(" ")
+			add(rel.FromColumn)
+			add(" → ")
+			add(rel.ToTable)
+			add(".")
+			add(rel.ToColumn)
+			if hint != "" {
+				add(" ")
+				add(hint)
 			}
-			lines = append(lines, fkLine{
-				text:  fmt.Sprintf(" %s%s", rel.FromColumn, text),
-				color: accentColor,
-			})
-		} else if rel.ToTable == focusID {
-			source := g.data.tables[rel.FromTable]
-			dirHint := g.offscreenHint(source, vx, vy, vw, vh)
-			text := fmt.Sprintf(" ← %s.%s", rel.FromTable, rel.FromColumn)
-			if dirHint != "" {
-				text += " " + dirHint
+			commit(accentColor, false)
+		case rel.ToTable:
+			hint := g.offscreenHint(g.data.tables[rel.FromTable], vx, vy, vw, vh)
+			add(" ")
+			add(rel.ToColumn)
+			add(" ← ")
+			add(rel.FromTable)
+			add(".")
+			add(rel.FromColumn)
+			if hint != "" {
+				add(" ")
+				add(hint)
 			}
-			lines = append(lines, fkLine{
-				text:  fmt.Sprintf(" %s%s", rel.ToColumn, text),
-				color: infoColor,
-			})
+			commit(infoColor, false)
 		}
 	}
 
-	if len(lines) == 0 {
+	// Only the header means no relations.
+	if len(g.fkEntries) <= 1 {
 		return
 	}
 
-	// Add header.
-	headerLine := fmt.Sprintf(" %s — Foreign Keys ", focused.Name)
-	allLines := make([]fkLine, 0, len(lines)+1)
-	allLines = append(allLines, fkLine{text: headerLine, color: th.Fg()})
-	allLines = append(allLines, lines...)
-
 	// Compute panel dimensions.
 	panelW := 0
-	for _, l := range allLines {
-		rw := len([]rune(l.text)) + 1 // +1 trailing space
+	for _, e := range g.fkEntries {
+		rw := (e.end - e.start) + 1 // +1 trailing space
 		if rw > panelW {
 			panelW = rw
 		}
 	}
-	panelH := len(allLines)
+	panelH := len(g.fkEntries)
 
 	// Position: bottom-right of the viewport, 1 cell margin.
 	px := vx + vw - panelW - 1
@@ -481,13 +497,13 @@ func (g *ERDGraph) drawFKInfoPanel(screen tcell.Screen, vx, vy, vw, vh int) {
 	bgStyle := tcell.StyleDefault.Background(bgColor).Foreground(borderColor)
 
 	// Draw panel background and text.
-	for row, l := range allLines {
+	for row, e := range g.fkEntries {
 		sy := py + row
-		style := tcell.StyleDefault.Background(bgColor).Foreground(l.color)
-		if row == 0 {
+		style := tcell.StyleDefault.Background(bgColor).Foreground(e.color)
+		if e.bold {
 			style = style.Bold(true)
 		}
-		runes := []rune(l.text)
+		runes := g.fkRunes[e.start:e.end]
 		for col := 0; col < panelW; col++ {
 			ch := ' '
 			if col < len(runes) {
@@ -529,16 +545,26 @@ func (g *ERDGraph) offscreenHint(t *ERDTable, vx, vy, vw, vh int) string {
 	dx := nodeCX - centerX
 	dy := nodeCY - centerY
 
-	arrow := ""
-	if dy < 0 {
-		arrow += "↑"
-	} else if dy > 0 {
-		arrow += "↓"
+	// Constant string per direction combo — no per-call concat allocation.
+	up, down := dy < 0, dy > 0
+	left, right := dx < 0, dx > 0
+	switch {
+	case up && left:
+		return "↑←"
+	case up && right:
+		return "↑→"
+	case down && left:
+		return "↓←"
+	case down && right:
+		return "↓→"
+	case up:
+		return "↑"
+	case down:
+		return "↓"
+	case left:
+		return "←"
+	case right:
+		return "→"
 	}
-	if dx < 0 {
-		arrow += "←"
-	} else if dx > 0 {
-		arrow += "→"
-	}
-	return arrow
+	return ""
 }
