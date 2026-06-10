@@ -75,6 +75,10 @@ type Table struct {
 	fixedCols         int
 	separator         rune
 	rowOffset         int
+
+	// Scratch for computeColumnWidths, reused each Draw; not retained by callers.
+	colWidthBuf []int
+	colExpBuf   []int
 }
 
 // NewTable returns an empty Table.
@@ -312,13 +316,26 @@ func (t *Table) Draw(screen tcell.Screen) {
 	}
 }
 
+// scratch returns a zeroed slice of length t.cols backed by *buf, growing the
+// backing array only when the column count increases. Reused across draws.
+func (t *Table) scratch(buf *[]int) []int {
+	if cap(*buf) < t.cols {
+		*buf = make([]int, t.cols)
+	}
+	s := (*buf)[:t.cols]
+	for i := range s {
+		s[i] = 0
+	}
+	return s
+}
+
 // computeColumnWidths returns the rendered width of each column. Natural widths
 // come from cell content (capped by MaxWidth); any leftover horizontal space is
 // distributed to columns whose cells request Expansion, and overflow is taken
 // back from the widest columns so the row never exceeds the available width.
 func (t *Table) computeColumnWidths(avail int) []int {
-	widths := make([]int, t.cols)
-	expansion := make([]int, t.cols)
+	widths := t.scratch(&t.colWidthBuf)
+	expansion := t.scratch(&t.colExpBuf)
 	if t.cols == 0 {
 		return widths
 	}
