@@ -100,6 +100,7 @@ type LogViewer struct {
 	showLevel     bool
 	showSource    bool
 	timestampFmt  string
+	tsBuf         []byte // reused timestamp formatting scratch (Draw only)
 	wrapLines     bool
 
 	// Scroll state
@@ -536,10 +537,12 @@ func (v *LogViewer) Draw(screen tcell.Screen) {
 
 		// Timestamp
 		if v.showTimestamp {
-			ts := entry.Timestamp.Format(v.timestampFmt)
+			// AppendFormat into a reused buffer; no per-entry string alloc.
+			// Timestamp formats are ASCII.
+			v.tsBuf = entry.Timestamp.AppendFormat(v.tsBuf[:0], v.timestampFmt)
 			tsStyle := tcell.StyleDefault.Background(rowBg).Foreground(fgDimColor)
-			for _, r := range ts {
-				vp.SetContent(screen, col, rowIdx, r, tsStyle)
+			for _, b := range v.tsBuf {
+				vp.SetContent(screen, col, rowIdx, rune(b), tsStyle)
 				col++
 			}
 			col++ // space

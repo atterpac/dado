@@ -561,18 +561,28 @@ func (c *CodeView) Draw(screen tcell.Screen) {
 			fillLine(screen, x, rowY, width, highlightStyle)
 		}
 
-		// Draw line number
+		// Right-aligned line number, written digit-by-digit to avoid an itoa
+		// string alloc per visible line.
 		if c.showLineNumbers {
-			numStr := itoa(lineIdx + 1)
 			numStyle := lineNumStyle
 			if isHighlighted {
 				numStyle = tcell.StyleDefault.Background(rowBg).Foreground(fgColor)
 			}
-			for j := 0; j < lineNumWidth-2-len(numStr); j++ {
+			var buf [20]byte
+			n := lineIdx + 1
+			bi := len(buf)
+			for n > 0 {
+				bi--
+				buf[bi] = byte('0' + n%10)
+				n /= 10
+			}
+			digits := buf[bi:]
+			pad := lineNumWidth - 2 - len(digits)
+			for j := 0; j < pad; j++ {
 				screen.SetContent(x+j, rowY, ' ', nil, numStyle)
 			}
-			for j, r := range numStr {
-				screen.SetContent(x+lineNumWidth-2-len(numStr)+j, rowY, r, nil, numStyle)
+			for j, d := range digits {
+				screen.SetContent(x+pad+j, rowY, rune(d), nil, numStyle)
 			}
 			screen.SetContent(x+lineNumWidth-1, rowY, ' ', nil, numStyle)
 		}
