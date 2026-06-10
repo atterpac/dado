@@ -34,6 +34,8 @@ type App struct {
 	onResize     func(w, h int)
 	afterDraw    func(screen tcell.Screen)
 
+	keyPath []Widget // reused by dispatchKey for the focused→root ancestor chain
+
 	// cursor holds the terminal cursor request for the current frame. It is
 	// reset to hidden at the start of every draw(), so a widget that wants the
 	// hardware cursor must re-assert it via App.ShowCursor during its Draw.
@@ -325,19 +327,52 @@ func (a *App) draw() {
 	a.screen.Show()
 }
 
-// dispatchKey walks from the focused widget up through Container parents
-// until the event is consumed or the root is reached.
+// dispatchKey offers the event to the focused widget, then each ancestor up to
+// the root, stopping when one consumes it. The chain is collected in a single
+// tree pass, so dispatch is O(N) per event rather than O(depth*N).
 func (a *App) dispatchKey(ev *tcell.EventKey) {
 	w := a.focus.Focused()
 	if w == nil {
 		w = a.root
 	}
-	for w != nil {
-		if kh, ok := w.(KeyHandler); ok && kh.HandleKey(ev) {
+	if w == nil {
+		return
+	}
+	path, found := appendPathRev(a.keyPath[:0], a.root, w)
+	a.keyPath = path
+	if !found {
+		// Focused widget is not under root (or root is nil): just offer it.
+		if kh, ok := w.(KeyHandler); ok {
+			kh.HandleKey(ev)
+		}
+		return
+	}
+	// path is leaf-first (target, parent, …, root) — the dispatch order.
+	for _, p := range path {
+		if kh, ok := p.(KeyHandler); ok && kh.HandleKey(ev) {
 			return
 		}
-		w = findParent(a.root, w)
 	}
+}
+
+// appendPathRev appends target and then its ancestors up to root (leaf-first)
+// onto dst, returning the slice and whether target was found. A single tree
+// pass replaces the previous per-level findParent re-search.
+func appendPathRev(dst []Widget, node, target Widget) ([]Widget, bool) {
+	if node == nil {
+		return dst, false
+	}
+	if node == target {
+		return append(dst, node), true
+	}
+	if c, ok := node.(Container); ok {
+		for _, child := range c.Children() {
+			if out, ok := appendPathRev(dst, child, target); ok {
+				return append(out, node), true
+			}
+		}
+	}
+	return dst, false
 }
 
 // dispatchMouse routes a mouse event and returns whether a redraw was requested
@@ -395,23 +430,6 @@ func (a *App) dispatchPaste(text string) {
 	if ph, ok := w.(PasteHandler); ok {
 		ph.HandlePaste(text)
 	}
-}
-
-func findParent(root, target Widget) Widget {
-	if root == target {
-		return nil
-	}
-	if c, ok := root.(Container); ok {
-		for _, child := range c.Children() {
-			if child == target {
-				return root
-			}
-			if p := findParent(child, target); p != nil {
-				return p
-			}
-		}
-	}
-	return nil
 }
 
 // tcellMouseAction maps a tcell.EventMouse to a core.MouseAction.

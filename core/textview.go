@@ -2,16 +2,29 @@ package core
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 )
 
 // TextView displays multi-line scrollable text with optional ANSI color tag parsing.
+// lineSpan indexes one wrapped line's spans within TextView.spanArena by integer
+// range (not pointer/sub-slice), so the arena can grow mid-reflow without
+// invalidating earlier lines.
+type lineSpan struct {
+	start, end int // half-open range into spanArena
+	width      int // visible columns (rune count) for alignment
+}
+
 type TextView struct {
 	Box
-	text       string
-	lines      []*Text // cached wrapped lines (styled spans)
-	scrollY    int
+	text string
+	// Wrapped-line cache, rebuilt by reflow: spanArena holds all spans
+	// contiguously, lineSpans indexes it. Both reused (reset to [:0]) across
+	// reflows, so a resize allocates nothing once capacity fits.
+	spanArena []Span
+	lineSpans []lineSpan
+	scrollY   int
 	scrollX    int
 	scrollable bool
 	dynamic    bool        // parse [color] tags
@@ -27,7 +40,7 @@ func NewTextView() *TextView { return &TextView{textAlign: AlignLeft} }
 // SetText sets the displayed text and resets scroll.
 func (tv *TextView) SetText(s string) *TextView {
 	tv.text = s
-	tv.lines = nil // invalidate cache
+	tv.lineSpans = tv.lineSpans[:0] // invalidate cache; len 0 forces reflow
 	tv.scrollY = 0
 	return tv
 }
@@ -70,10 +83,10 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 		return
 	}
 	w, _ := vp.Size()
-	if len(tv.lines) == 0 || tv.wrapWidth != w {
+	if len(tv.lineSpans) == 0 || tv.wrapWidth != w {
 		tv.reflow(w)
 	}
-	vp.SetContentSize(w, len(tv.lines))
+	vp.SetContentSize(w, len(tv.lineSpans))
 	vp.SetOffset(0, tv.scrollY)
 	// Write the clamped offset back so scrollY never lands past the last line.
 	_, tv.scrollY = vp.Offset()
@@ -86,8 +99,9 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 
 	first, last := vp.VisibleRows()
 	for lineIdx := first; lineIdx < last; lineIdx++ {
+		ls := tv.lineSpans[lineIdx]
 		// Compute line width for alignment
-		lineRunes := tv.lines[lineIdx].Width()
+		lineRunes := ls.width
 		startCol := 0
 		switch tv.textAlign {
 		case AlignCenter:
@@ -103,7 +117,7 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 		for ; col < startCol; col++ {
 			vp.SetContent(screen, col, lineIdx, ' ', clearStyle)
 		}
-		for _, seg := range tv.lines[lineIdx].Spans() {
+		for _, seg := range tv.spanArena[ls.start:ls.end] {
 			segStyle := seg.Style
 			// Apply base fg if segment is using default foreground
 			fg, bg, _ := segStyle.Decompose()
@@ -131,30 +145,89 @@ func (tv *TextView) Draw(screen tcell.Screen) {
 	}
 }
 
-// reflow wraps tv.text into lines of maxWidth, parsing color tags if dynamic.
+// reflow wraps tv.text into lines of maxWidth (parsing color tags if dynamic),
+// writing into the reused spanArena/lineSpans buffers. IndexByte splits on '\n'
+// to avoid strings.Split's per-call []string allocation.
 func (tv *TextView) reflow(maxWidth int) {
 	tv.wrapWidth = maxWidth
-	tv.lines = nil
+	tv.spanArena = tv.spanArena[:0]
+	tv.lineSpans = tv.lineSpans[:0]
 
-	rawLines := strings.Split(tv.text, "\n")
-	for _, raw := range rawLines {
-		if tv.dynamic {
-			tv.lines = append(tv.lines, tv.parseColorLine(raw, maxWidth)...)
-		} else {
-			tv.lines = append(tv.lines, tv.wrapPlain(raw, maxWidth)...)
+	text := tv.text
+	for {
+		nl := strings.IndexByte(text, '\n')
+		if nl < 0 {
+			tv.wrapLineInto(text, maxWidth)
+			return
 		}
+		tv.wrapLineInto(text[:nl], maxWidth)
+		text = text[nl+1:]
 	}
 }
 
-func (tv *TextView) wrapPlain(text string, width int) []*Text {
-	return NewText().Append(text, tcell.StyleDefault).splitWidth(width)
-}
+// wrapLineInto parses one raw line (color tags if tv.dynamic) and hard-wraps it
+// to width, appending spans to spanArena and one lineSpan per output line. Each
+// span's Text slices raw (no copy). Matches ParseTagged+splitWidth semantics:
+// strict column breaks, no word wrap.
+func (tv *TextView) wrapLineInto(raw string, width int) {
+	// Rare "[[" escape (literal "[" != source bytes): defer this one line to the
+	// allocating ParseTagged path and copy its spans in.
+	if tv.dynamic && strings.Contains(raw, "[[") {
+		for _, ln := range ParseTagged(raw, tcell.StyleDefault).splitWidth(width) {
+			start := len(tv.spanArena)
+			tv.spanArena = append(tv.spanArena, ln.Spans()...)
+			tv.lineSpans = append(tv.lineSpans, lineSpan{start, len(tv.spanArena), ln.Width()})
+		}
+		return
+	}
 
-// parseColorLine parses a line that may contain [color] tags into styled spans,
-// then hard-wraps it to width. Supports: [#rrggbb], [red], [-], [fg:bg:attrs],
-// [::b], [-:-:-], etc. Tag parsing and span merging are handled by ParseTagged.
-func (tv *TextView) parseColorLine(text string, width int) []*Text {
-	return ParseTagged(text, tcell.StyleDefault).splitWidth(width)
+	nowrap := width <= 0
+	style := tcell.StyleDefault
+	spanStart := len(tv.spanArena) // first span of the current output line
+	segStart := 0                  // byte offset in raw where the pending span begins
+	col := 0                       // visible columns in the current output line
+	emitted := false               // whether this raw produced any output line yet
+
+	flush := func(end int) {
+		if end > segStart {
+			tv.spanArena = append(tv.spanArena, Span{Text: raw[segStart:end], Style: style})
+		}
+	}
+	endLine := func(end int) {
+		flush(end)
+		tv.lineSpans = append(tv.lineSpans, lineSpan{spanStart, len(tv.spanArena), col})
+		spanStart = len(tv.spanArena)
+		segStart = end
+		col = 0
+		emitted = true
+	}
+
+	i := 0
+	for i < len(raw) {
+		if tv.dynamic && raw[i] == '[' {
+			if end := strings.IndexByte(raw[i:], ']'); end > 0 {
+				end += i
+				if newStyle, ok := parseTag(raw[i+1:end], style, tcell.StyleDefault); ok {
+					flush(i)
+					style = newStyle
+					i = end + 1
+					segStart = i
+					continue
+				}
+			}
+		}
+		_, size := utf8.DecodeRuneInString(raw[i:])
+		i += size
+		col++
+		if !nowrap && col >= width {
+			endLine(i)
+		}
+	}
+	// Trailing partial line, or a single (possibly empty) line that never wrapped.
+	if col > 0 || !emitted {
+		flush(i)
+		tv.lineSpans = append(tv.lineSpans, lineSpan{spanStart, len(tv.spanArena), col})
+	}
 }
 
 // parseTag parses a [color] tag and returns the updated style.
@@ -172,25 +245,27 @@ func parseTag(tag string, current, base tcell.Style) (tcell.Style, bool) {
 		return base, true
 	}
 
-	// Split into up to 3 parts: fg:bg:attrs
-	parts := strings.SplitN(tag, ":", 3)
-	fgPart := parts[0]
+	// Split into fg:bg:attrs manually — strings.SplitN would allocate a slice
+	// per tag, per frame.
+	fgPart := tag
 	bgPart := ""
 	attrPart := ""
-	if len(parts) >= 2 {
-		bgPart = parts[1]
-	}
-	if len(parts) >= 3 {
-		attrPart = parts[2]
+	bgProvided := false
+	if i := strings.IndexByte(tag, ':'); i >= 0 {
+		fgPart = tag[:i]
+		bgProvided = true
+		rest := tag[i+1:]
+		if j := strings.IndexByte(rest, ':'); j >= 0 {
+			bgPart = rest[:j]
+			attrPart = rest[j+1:]
+		} else {
+			bgPart = rest
+		}
 	}
 
 	// If all parts are empty or dash with no valid color, not a tag
 	fgColor, fgOK := resolveColor(fgPart)
 	bgColor, bgOK := resolveColor(bgPart)
-
-	// A background part that was never supplied (no colon in the tag) defaults to
-	// "" and resolves to ColorDefault
-	bgProvided := len(parts) >= 2
 
 	// Must have at least one recognized part to be a color tag
 	if !fgOK && !(bgProvided && bgOK) && attrPart == "" {
@@ -333,7 +408,7 @@ func (tv *TextView) HandleKey(ev *tcell.EventKey) bool {
 		return false
 	}
 	_, _, w, h := tv.InnerRect()
-	if len(tv.lines) == 0 || tv.wrapWidth != w {
+	if len(tv.lineSpans) == 0 || tv.wrapWidth != w {
 		tv.reflow(w)
 	}
 	switch ev.Key() {
@@ -359,5 +434,5 @@ func (tv *TextView) HandleKey(ev *tcell.EventKey) bool {
 // maxScrollY is the largest valid top row for a viewport of height h: never
 // negative, and zero when the content fits.
 func (tv *TextView) maxScrollY(h int) int {
-	return max(0, len(tv.lines)-h)
+	return max(0, len(tv.lineSpans)-h)
 }

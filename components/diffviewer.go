@@ -373,6 +373,37 @@ func (d *DiffViewer) ensureVisible() {
 }
 
 // Draw renders the diff viewer
+// drawLineNum writes n right-aligned in a min 4-column field at (col, y),
+// clipped to end, returning the next column. n <= 0 renders blank. Matches
+// "%4d" without the Sprintf allocation.
+func drawLineNum(screen tcell.Screen, col, y, n int, style tcell.Style, end int) int {
+	var buf [20]byte
+	w := 0
+	if n > 0 {
+		i := len(buf)
+		for n > 0 {
+			i--
+			buf[i] = byte('0' + n%10)
+			n /= 10
+		}
+		w = len(buf) - i
+		copy(buf[:], buf[i:])
+	}
+	for pad := 4 - w; pad > 0; pad-- {
+		if col < end {
+			screen.SetContent(col, y, ' ', nil, style)
+			col++
+		}
+	}
+	for j := 0; j < w; j++ {
+		if col < end {
+			screen.SetContent(col, y, rune(buf[j]), nil, style)
+			col++
+		}
+	}
+	return col
+}
+
 func (d *DiffViewer) Draw(screen tcell.Screen) {
 	d.Box.DrawForSubclass(screen)
 	x, y, width, height := d.GetInnerRect()
@@ -465,21 +496,21 @@ func (d *DiffViewer) Draw(screen tcell.Screen) {
 				numStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 			}
 
-			oldNum := "    "
-			newNum := "    "
-			if line.OldLineNo > 0 {
-				oldNum = fmt.Sprintf("%4d", line.OldLineNo)
+			// "%4d %4d │" written straight to cells — no per-line Sprintf/concat.
+			end := x + width
+			col = drawLineNum(screen, col, rowY, line.OldLineNo, numStyle, end)
+			if col < end {
+				screen.SetContent(col, rowY, ' ', nil, numStyle)
+				col++
 			}
-			if line.NewLineNo > 0 {
-				newNum = fmt.Sprintf("%4d", line.NewLineNo)
+			col = drawLineNum(screen, col, rowY, line.NewLineNo, numStyle, end)
+			if col < end {
+				screen.SetContent(col, rowY, ' ', nil, numStyle)
+				col++
 			}
-
-			numStr := oldNum + " " + newNum + " │"
-			for _, ch := range numStr {
-				if col < x+width {
-					screen.SetContent(col, rowY, ch, nil, numStyle)
-					col++
-				}
+			if col < end {
+				screen.SetContent(col, rowY, '│', nil, numStyle)
+				col++
 			}
 		} else if d.showLineNumbers {
 			// Header/file lines - just show spaces for alignment

@@ -104,13 +104,23 @@ type Viewport struct {
 
 // computeColumnWidths calculates the rendered width of each column.
 // It auto-sizes columns based on header names and visible cell content.
-func computeColumnWidths(source DataGridSource, vp *Viewport, availWidth int, showRowNumbers bool) []int {
+// computeColumnWidths fills buf with each column's rendered width, reusing buf's
+// backing array across draws and growing it only when the column count rises.
+func computeColumnWidths(source DataGridSource, vp *Viewport, availWidth int, showRowNumbers bool, buf []int) []int {
 	cols := source.Columns()
 	if len(cols) == 0 {
-		return nil
+		return buf[:0]
 	}
 
-	widths := make([]int, len(cols))
+	var widths []int
+	if cap(buf) < len(cols) {
+		widths = make([]int, len(cols))
+	} else {
+		widths = buf[:len(cols)]
+		for i := range widths {
+			widths[i] = 0
+		}
+	}
 
 	// Start with header name widths
 	for i, col := range cols {

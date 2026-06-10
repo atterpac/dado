@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/atterpac/dado/theme"
 	"github.com/gdamore/tcell/v2"
@@ -139,12 +140,32 @@ func (g *GitGraphData) LayoutGraph() {
 	}
 
 	numRows := len(g.Commits)
-	states := make([]map[int]*gitLaneState, numRows)
+	// Per-row lane state stored as dense fixed-width (columnCap) slices carved
+	// from one backing array, instead of a map per row. Lane indices are always
+	// < columnCap, so indexing is safe and this avoids numRows map allocations
+	// plus per-cell hashing.
+	statesBacking := make([]*gitLaneState, numRows*columnCap)
+	states := make([][]*gitLaneState, numRows)
+	for i := range states {
+		states[i] = statesBacking[i*columnCap : (i+1)*columnCap : (i+1)*columnCap]
+	}
 	// active: column -> parent hash the lane is currently flowing toward.
 	active := make(map[int]string)
+	// incoming is reused across rows to avoid a per-row slice allocation.
+	var incoming []int
 
+	// Arena for gitLaneState. Layout allocates one state per live lane per row
+	// plus one per empty cell when materializing the dense grid; for a 500-commit
+	// graph that is thousands of tiny allocations. Handing out pointers into
+	// reusable blocks collapses them to one allocation per ~512 states. The
+	// blocks are never grown after a pointer is taken, so the pointers stay valid.
+	var arena []gitLaneState
 	newState := func() *gitLaneState {
-		return &gitLaneState{mergeFrom: -1, mergeTo: -1, branchFrom: -1, branchInto: -1}
+		if len(arena) == cap(arena) {
+			arena = make([]gitLaneState, 0, 512)
+		}
+		arena = append(arena, gitLaneState{mergeFrom: -1, mergeTo: -1, branchFrom: -1, branchInto: -1})
+		return &arena[len(arena)-1]
 	}
 
 	// Line-identity coloring: lineID maps an active column to the color id of
@@ -159,8 +180,7 @@ func (g *GitGraphData) LayoutGraph() {
 
 	for i, commit := range g.Commits {
 		commit.Row = i
-		row := make(map[int]*gitLaneState)
-		states[i] = row
+		row := states[i]
 		st := func(lane int) *gitLaneState {
 			s := row[lane]
 			if s == nil {
@@ -172,7 +192,7 @@ func (g *GitGraphData) LayoutGraph() {
 
 		// Collect every lane currently expecting this commit, sorted so the
 		// choice of column is deterministic regardless of map iteration order.
-		var incoming []int
+		incoming = incoming[:0]
 		for lane, h := range active {
 			if h == commit.Hash {
 				incoming = append(incoming, lane)
@@ -283,8 +303,8 @@ func (g *GitGraphData) LayoutGraph() {
 		}
 
 		// Track the widest column seen, in either this row or the live lanes.
-		for lane := range row {
-			if lane > g.MaxColumn {
+		for lane := 0; lane < len(row); lane++ {
+			if row[lane] != nil && lane > g.MaxColumn {
 				g.MaxColumn = lane
 			}
 		}
@@ -299,20 +319,18 @@ func (g *GitGraphData) LayoutGraph() {
 		g.MaxColumn = columnCap - 1
 	}
 
-	// Materialize each row's sparse lane map into a dense slice indexed
-	// 0..MaxColumn (no nil entries). The renderer indexes lanes directly and
-	// iterates them every frame, so slices avoid per-cell map hashing.
+	// Fill empty cells in place and trim each row to MaxColumn+1. The backing
+	// array is already dense (columnCap wide), so no second allocation/copy is
+	// needed; the renderer reads rowStates[i][0..MaxColumn] with no nils.
 	dense := make([][]*gitLaneState, numRows)
-	for i, row := range states {
-		laneSlice := make([]*gitLaneState, g.MaxColumn+1)
+	for i := range states {
+		row := states[i]
 		for lane := 0; lane <= g.MaxColumn; lane++ {
-			if s := row[lane]; s != nil {
-				laneSlice[lane] = s
-			} else {
-				laneSlice[lane] = newState()
+			if row[lane] == nil {
+				row[lane] = newState()
 			}
 		}
-		dense[i] = laneSlice
+		dense[i] = row[:g.MaxColumn+1]
 	}
 	g.rowStates = dense
 
@@ -409,6 +427,16 @@ type GitGraph struct {
 	// commit row. It is width-independent, so it is built once and reused across
 	// frames; nil means it needs rebuilding (after SetGraph or a showRefs change).
 	refTextCache []string
+
+	// dateBuf is a reusable scratch buffer for formatting commit dates during
+	// Draw, so date.AppendFormat reuses storage instead of allocating a fresh
+	// string per visible row each frame.
+	dateBuf []byte
+
+	// laneColorBuf is a reusable buffer for the default lane palette, rebuilt
+	// (in place) from the theme each frame only when no custom colors are set,
+	// so the fallback path no longer allocates a slice every Draw.
+	laneColorBuf []tcell.Color
 
 	// Style options
 	showRefs   bool
@@ -747,7 +775,10 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 
 	laneColors := g.laneColors
 	if len(laneColors) == 0 {
-		laneColors = []tcell.Color{
+		// Rebuild the default palette into the reused buffer rather than
+		// allocating a new slice every frame (keeps Draw allocation-free while
+		// still tracking theme changes).
+		g.laneColorBuf = append(g.laneColorBuf[:0],
 			th.Accent(),
 			th.Success(),
 			th.Warning(),
@@ -755,7 +786,8 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			th.Error(),
 			tcell.ColorMediumPurple,
 			tcell.ColorDarkCyan,
-		}
+		)
+		laneColors = g.laneColorBuf
 	}
 
 	if g.selectedIndex < g.offset {
@@ -824,7 +856,7 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 		}
 
 		// Calculate how much space each element needs
-		refSpace := len([]rune(refText))
+		refSpace := utf8.RuneCountInString(refText)
 		if refSpace == 0 && branchDisplay != "" {
 			refSpace = len(" " + branchDisplay + " ")
 		}
@@ -850,15 +882,19 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			rightReserved = refSpace
 			msgSpace = availableSpace - rightReserved
 		}
-		msgRunes := []rune(commit.Message)
-
 		msgStyle := rowStyle
 		if msgSpace > 0 {
-			if len(msgRunes) > msgSpace {
-				// Truncate with ellipsis
-				for i := 0; i < msgSpace-1 && col < x+width; i++ {
-					screen.SetContent(col, rowY, msgRunes[i], nil, msgStyle)
+			if utf8.RuneCountInString(commit.Message) > msgSpace {
+				// Truncate with ellipsis. Range over the string (alloc-free)
+				// rather than converting to []rune.
+				n := 0
+				for _, ch := range commit.Message {
+					if n >= msgSpace-1 || col >= x+width {
+						break
+					}
+					screen.SetContent(col, rowY, ch, nil, msgStyle)
 					col++
+					n++
 				}
 				if col < x+width {
 					screen.SetContent(col, rowY, '…', nil, msgStyle)
@@ -880,16 +916,40 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			if !isSelected {
 				authorStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 			}
-			authorText := " - " + commit.Author
-			authorRunes := []rune(authorText)
-			// Truncate if needed
-			if len(authorRunes) > authorSpace {
-				authorRunes = append(authorRunes[:authorSpace-1], '…')
+			// Stream " - " then the author name, truncating to authorSpace runes
+			// with a trailing ellipsis. Done inline (no []rune, no concat) to
+			// keep Draw allocation-free.
+			trunc := 3+utf8.RuneCountInString(commit.Author) > authorSpace // " - " is 3 runes
+			n := 0
+			done := false
+			for _, ch := range " - " {
+				if col >= x+width-rightReserved {
+					done = true
+					break
+				}
+				if trunc && n == authorSpace-1 {
+					screen.SetContent(col, rowY, '…', nil, authorStyle)
+					col++
+					done = true
+					break
+				}
+				screen.SetContent(col, rowY, ch, nil, authorStyle)
+				col++
+				n++
 			}
-			for _, ch := range authorRunes {
-				if col < x+width-rightReserved {
+			if !done {
+				for _, ch := range commit.Author {
+					if col >= x+width-rightReserved {
+						break
+					}
+					if trunc && n == authorSpace-1 {
+						screen.SetContent(col, rowY, '…', nil, authorStyle)
+						col++
+						break
+					}
 					screen.SetContent(col, rowY, ch, nil, authorStyle)
 					col++
+					n++
 				}
 			}
 		}
@@ -899,10 +959,18 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			if !isSelected {
 				dateStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 			}
-			dateText := " " + commit.Date.Format(g.dateFormat)
-			for _, ch := range dateText {
+			if col < x+width {
+				screen.SetContent(col, rowY, ' ', nil, dateStyle)
+				col++
+			}
+			// AppendFormat reuses dateBuf; decode runes from the bytes without
+			// allocating an intermediate string.
+			g.dateBuf = commit.Date.AppendFormat(g.dateBuf[:0], g.dateFormat)
+			for bi := 0; bi < len(g.dateBuf); {
+				r, sz := utf8.DecodeRune(g.dateBuf[bi:])
+				bi += sz
 				if col < x+width {
-					screen.SetContent(col, rowY, ch, nil, dateStyle)
+					screen.SetContent(col, rowY, r, nil, dateStyle)
 					col++
 				}
 			}
@@ -913,8 +981,11 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 			if !isSelected {
 				hashStyle = tcell.StyleDefault.Background(bgColor).Foreground(fgDimColor)
 			}
-			hashText := " " + commit.ShortHash
-			for _, ch := range hashText {
+			if col < x+width-refSpace {
+				screen.SetContent(col, rowY, ' ', nil, hashStyle)
+				col++
+			}
+			for _, ch := range commit.ShortHash {
 				if col < x+width-refSpace {
 					screen.SetContent(col, rowY, ch, nil, hashStyle)
 					col++
@@ -924,7 +995,7 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 
 		// Right-aligned refs with lane color matching (refText already built above)
 		if refText != "" {
-			refLen := len([]rune(refText))
+			refLen := utf8.RuneCountInString(refText)
 			refStartCol := x + width - refLen
 
 			// Always render refs - they take priority. Match the commit's line
@@ -943,72 +1014,81 @@ func (g *GitGraph) Draw(screen tcell.Screen) {
 				}
 			}
 		} else if isSelected && branchDisplay != "" {
-			// For selected rows without refs, show the branch name dimmed
-			branchText := " " + branchDisplay + " "
-			branchLen := len([]rune(branchText))
+			// For selected rows without refs, show the branch name dimmed,
+			// padded with a space on each side. Written piecewise to avoid the
+			// " "+branch+" " concat and []rune conversion.
+			branchLen := utf8.RuneCountInString(branchDisplay) + 2
 			branchStartCol := x + width - branchLen
 
 			branchStyle := tcell.StyleDefault.Background(accentColor).Foreground(bgColor).Dim(true)
 
 			branchCol := branchStartCol
-			for _, ch := range branchText {
+			if branchCol < x+width {
+				screen.SetContent(branchCol, rowY, ' ', nil, branchStyle)
+				branchCol++
+			}
+			for _, ch := range branchDisplay {
 				if branchCol < x+width {
 					screen.SetContent(branchCol, rowY, ch, nil, branchStyle)
 					branchCol++
 				}
+			}
+			if branchCol < x+width {
+				screen.SetContent(branchCol, rowY, ' ', nil, branchStyle)
+				branchCol++
 			}
 		}
 	}
 }
 
 // getLaneChars returns the 3 characters to draw for a lane
-func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState, allStates []*gitLaneState, rowIndex int, allRowStates [][]*gitLaneState) []rune {
+func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState, allStates []*gitLaneState, rowIndex int, allRowStates [][]*gitLaneState) [3]rune {
 	if state != nil && (state.mergeFrom != -1 || state.mergeTo != -1) {
 		if state.hasNode {
 			node := g.getNodeChar(commit)
 			if state.mergeFrom != -1 {
 				if state.mergeFrom < lane {
-					return []rune{gitHoriz, node, ' '}
+					return [3]rune{gitHoriz, node, ' '}
 				} else if state.mergeFrom > lane {
-					return []rune{' ', node, gitHoriz}
+					return [3]rune{' ', node, gitHoriz}
 				}
 			}
 			if state.mergeTo != -1 {
 				if state.mergeTo < lane {
-					return []rune{gitHoriz, node, ' '}
+					return [3]rune{gitHoriz, node, ' '}
 				} else if state.mergeTo > lane {
-					return []rune{' ', node, gitHoriz}
+					return [3]rune{' ', node, gitHoriz}
 				}
 			}
-			return []rune{' ', node, ' '}
+			return [3]rune{' ', node, ' '}
 		}
 
 		if state.mergeTo != -1 {
 			if state.mergeTo < lane {
 				if state.hasLine {
-					return []rune{gitHoriz, gitVertLeft, ' '}
+					return [3]rune{gitHoriz, gitVertLeft, ' '}
 				}
-				return []rune{gitHoriz, gitTopRight, ' '}
+				return [3]rune{gitHoriz, gitTopRight, ' '}
 			} else if state.mergeTo > lane {
 				if state.hasLine {
-					return []rune{' ', gitVertRight, gitHoriz}
+					return [3]rune{' ', gitVertRight, gitHoriz}
 				}
-				return []rune{' ', gitTopLeft, gitHoriz}
+				return [3]rune{' ', gitTopLeft, gitHoriz}
 			}
 		}
 
 		if state.hasLine {
-			return []rune{' ', gitVert, ' '}
+			return [3]rune{' ', gitVert, ' '}
 		}
-		return []rune{' ', ' ', ' '}
+		return [3]rune{' ', ' ', ' '}
 	}
 
 	// Branch point: this lane curves down into another column toward its parent.
 	if state != nil && state.branchInto != -1 {
 		if state.branchInto < lane {
-			return []rune{gitHoriz, gitBotRight, ' '} // ─╯
+			return [3]rune{gitHoriz, gitBotRight, ' '} // ─╯
 		}
-		return []rune{' ', gitBotLeft, gitHoriz} // ╰─
+		return [3]rune{' ', gitBotLeft, gitHoriz} // ╰─
 	}
 
 	if commit.IsMerge && lane == commit.Column {
@@ -1024,7 +1104,7 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 				right = gitHoriz
 			}
 		}
-		return []rune{left, node, right}
+		return [3]rune{left, node, right}
 	}
 
 	if state.hasNode {
@@ -1040,7 +1120,7 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 				}
 			}
 		}
-		return []rune{left, node, right}
+		return [3]rune{left, node, right}
 	}
 
 	// Span horizontally across columns between a branch point and its target.
@@ -1054,9 +1134,9 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 		}
 		if lane > lo && lane < hi {
 			if state != nil && state.hasLine {
-				return []rune{gitHoriz, gitCross, gitHoriz}
+				return [3]rune{gitHoriz, gitCross, gitHoriz}
 			}
-			return []rune{gitHoriz, gitHoriz, gitHoriz}
+			return [3]rune{gitHoriz, gitHoriz, gitHoriz}
 		}
 	}
 
@@ -1080,40 +1160,40 @@ func (g *GitGraph) getLaneChars(commit *GitCommit, lane int, state *gitLaneState
 			if isSec {
 				if lane < commit.Column {
 					if state.hasLine {
-						return []rune{' ', gitVertRight, gitHoriz}
+						return [3]rune{' ', gitVertRight, gitHoriz}
 					}
-					return []rune{' ', gitTopLeft, gitHoriz}
+					return [3]rune{' ', gitTopLeft, gitHoriz}
 				}
 				if state.hasLine {
-					return []rune{gitHoriz, gitVertLeft, ' '}
+					return [3]rune{gitHoriz, gitVertLeft, ' '}
 				}
-				return []rune{gitHoriz, gitTopRight, ' '}
+				return [3]rune{gitHoriz, gitTopRight, ' '}
 			}
 
 			if lane > minLane && lane < maxLane {
 				if state.hasLine {
-					return []rune{gitHoriz, gitCross, gitHoriz}
+					return [3]rune{gitHoriz, gitCross, gitHoriz}
 				}
-				return []rune{gitHoriz, gitHoriz, gitHoriz}
+				return [3]rune{gitHoriz, gitHoriz, gitHoriz}
 			}
 		}
 	}
 
 	if state != nil && state.hasLine {
-		return []rune{' ', gitVert, ' '}
+		return [3]rune{' ', gitVert, ' '}
 	}
 
 	if state != nil && state.isStartOfLine {
 		if state.branchFrom != -1 {
 			if state.branchFrom < lane {
-				return []rune{gitHoriz, gitTopRight, ' '}
+				return [3]rune{gitHoriz, gitTopRight, ' '}
 			} else {
-				return []rune{' ', gitTopLeft, gitHoriz}
+				return [3]rune{' ', gitTopLeft, gitHoriz}
 			}
 		}
 	}
 
-	return []rune{' ', ' ', ' '}
+	return [3]rune{' ', ' ', ' '}
 }
 
 // secondaryParentCols returns the assigned columns of all merge-source parents

@@ -2,6 +2,7 @@ package components
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -48,6 +49,7 @@ type Tree struct {
 	showLines  bool
 	showIcons  bool
 	indentSize int
+	prefixBuf  []rune // reused tree-line prefix scratch (Draw only)
 
 	// Callbacks
 	onSelect    func(node *TreeNode)
@@ -367,13 +369,8 @@ func (t *Tree) Draw(screen tcell.Screen) {
 		// Clear row
 		fillLine(screen, x, rowY, width, style)
 
-		// Build line prefix
-		var prefix string
-		if t.showLines && node.level > 0 {
-			prefix = t.buildLinePrefix(node)
-		} else {
-			prefix = strings.Repeat(" ", node.level*t.indentSize)
-		}
+		// Build line prefix into the reusable buffer
+		prefix := t.linePrefix(node)
 
 		// Expand/collapse indicator
 		var indicator string
@@ -436,41 +433,47 @@ func (t *Tree) Draw(screen tcell.Screen) {
 	}
 }
 
-func (t *Tree) buildLinePrefix(node *TreeNode) string {
-	if node.level == 0 {
-		return ""
+// linePrefix fills the reused buffer with node's tree-line indentation and
+// returns it. Each level is indentSize columns (a connector rune then spaces).
+// The reused []rune avoids the per-node parts slice + Repeat + Join.
+func (t *Tree) linePrefix(node *TreeNode) []rune {
+	n := node.level * t.indentSize
+	if cap(t.prefixBuf) < n {
+		t.prefixBuf = make([]rune, n)
+	}
+	buf := t.prefixBuf[:n]
+	for i := range buf {
+		buf[i] = ' '
+	}
+	if !t.showLines || node.level == 0 {
+		return buf
 	}
 
-	// Build from current node up to root
-	parts := make([]string, node.level)
 	current := node
-
 	for i := node.level - 1; i >= 0; i-- {
 		parent := current.parent
-		if parent == nil {
-			parts[i] = strings.Repeat(" ", t.indentSize)
-		} else {
+		if parent != nil {
 			isLast := current == parent.Children[len(parent.Children)-1]
+			var icon string
 			if i == node.level-1 {
 				// Direct connection to this node
 				if isLast {
-					parts[i] = theme.IconTreeLast + strings.Repeat(" ", t.indentSize-1)
+					icon = theme.IconTreeLast
 				} else {
-					parts[i] = theme.IconTreeBranch + strings.Repeat(" ", t.indentSize-1)
+					icon = theme.IconTreeBranch
 				}
-			} else {
-				// Vertical line or space
-				if isLast {
-					parts[i] = strings.Repeat(" ", t.indentSize)
-				} else {
-					parts[i] = theme.IconTreeVert + strings.Repeat(" ", t.indentSize-1)
-				}
+			} else if !isLast {
+				// Vertical line continuing through this level
+				icon = theme.IconTreeVert
+			}
+			if icon != "" {
+				r, _ := utf8.DecodeRuneInString(icon)
+				buf[i*t.indentSize] = r
 			}
 		}
 		current = parent
 	}
-
-	return strings.Join(parts, "")
+	return buf
 }
 
 // HandleKey processes a key event for the Tree.

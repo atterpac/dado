@@ -92,7 +92,7 @@ func (dg *DataGrid) prepareDrawLocked(width, height int) (drawSnapshot, bool) {
 	snap.contentWidth = width - snap.gutterWidth - scrollWidth
 
 	dg.viewport.VisRows = snap.dataHeight
-	dg.colWidths = computeColumnWidths(dg.source, &dg.viewport, snap.contentWidth, dg.showRowNumbers)
+	dg.colWidths = computeColumnWidths(dg.source, &dg.viewport, snap.contentWidth, dg.showRowNumbers, dg.colWidths)
 	snap.cols = dg.source.Columns()
 
 	dg.ensureCursorColVisible(snap.contentWidth)

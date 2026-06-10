@@ -220,36 +220,56 @@ func appendRuns(t *Text, runes []styledRune) {
 func ParseTagged(markup string, baseStyle tcell.Style) *Text {
 	t := NewText()
 	style := baseStyle
+
+	// Presize spans (a boundary only occurs at a '[') so it grows in one alloc.
+	if markup != "" {
+		t.spans = make([]Span, 0, strings.Count(markup, "[")+1)
+	}
+
+	// A span's text is normally a verbatim slice of markup, emitted directly with
+	// no copy. A "[[" escape is the exception (literal "[" != source), so a span
+	// containing one falls back to the builder.
+	spanStart := 0 // byte offset where the current span's text begins
 	var b strings.Builder
-	flush := func() {
-		if b.Len() > 0 {
+	escaped := false // current span contains an escape, so b holds its text
+
+	flush := func(end int) {
+		if escaped {
+			b.WriteString(markup[spanStart:end])
 			t.Append(b.String(), style)
 			b.Reset()
+			escaped = false
+		} else if end > spanStart {
+			t.Append(markup[spanStart:end], style)
 		}
 	}
-	rest := markup
-	for len(rest) > 0 {
-		if rest[0] == '[' {
+
+	i := 0
+	for i < len(markup) {
+		if markup[i] == '[' {
 			// "[[" escapes a literal "["
-			if len(rest) > 1 && rest[1] == '[' {
+			if i+1 < len(markup) && markup[i+1] == '[' {
+				b.WriteString(markup[spanStart:i])
 				b.WriteByte('[')
-				rest = rest[2:]
+				escaped = true
+				i += 2
+				spanStart = i
 				continue
 			}
-			if end := strings.Index(rest, "]"); end > 0 {
-				if newStyle, ok := parseTag(rest[1:end], style, baseStyle); ok {
-					flush()
+			if end := strings.IndexByte(markup[i:], ']'); end > 0 {
+				end += i
+				if newStyle, ok := parseTag(markup[i+1:end], style, baseStyle); ok {
+					flush(i)
 					style = newStyle
-					rest = rest[end+1:]
+					i = end + 1
+					spanStart = i
 					continue
 				}
 			}
 		}
-		r, size := utf8.DecodeRuneInString(rest)
-		b.WriteRune(r)
-		rest = rest[size:]
+		i++
 	}
-	flush()
+	flush(len(markup))
 	return t
 }
 

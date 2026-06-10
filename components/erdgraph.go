@@ -1,5 +1,6 @@
 package components
 
+import "github.com/gdamore/tcell/v2"
 
 // ERDCardinality describes the cardinality of a relationship.
 type ERDCardinality int
@@ -78,8 +79,20 @@ type ERDGraph struct {
 	// Focus state
 	focused bool
 
+	// Reused scratch for the FK info panel and neighbor set (Draw only).
+	fkRunes   []rune
+	fkEntries []fkEntry
+	activeNb  map[string]bool
+
 	// Callbacks
 	onSelect func(table *ERDTable)
+}
+
+// fkEntry indexes one FK-panel line's runes within ERDGraph.fkRunes.
+type fkEntry struct {
+	start, end int
+	color      tcell.Color
+	bold       bool
 }
 
 // NewERDGraph creates a new ERDGraph component.
