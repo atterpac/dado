@@ -104,7 +104,7 @@ func TaggedWidth(text string) int {
 	w := 0
 	for len(text) > 0 {
 		if text[0] == '[' {
-			// "[[" is an escaped literal "[" — one visible column.
+			// "[[" escapes a literal "[" — one visible column
 			if len(text) > 1 && text[1] == '[' {
 				w++
 				text = text[2:]
@@ -149,7 +149,7 @@ func printTagged(screen tcell.Screen, text string, x, y, maxWidth int, baseStyle
 			break
 		}
 		if text[0] == '[' {
-			// "[[" is an escaped literal "[" — draw one bracket, consume both.
+			// "[[" escapes a literal "["
 			if len(text) > 1 && text[1] == '[' {
 				screen.SetContent(x+col, y, '[', nil, style)
 				col++

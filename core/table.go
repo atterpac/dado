@@ -256,8 +256,8 @@ func (t *Table) Draw(screen tcell.Screen) {
 		// the full width (including inter-column gaps and trailing space) so the
 		// highlight covers the whole row, not just the cell contents.
 		rowStyle := tcell.StyleDefault
-		if t.backgroundColor != tcell.ColorDefault {
-			rowStyle = rowStyle.Background(t.backgroundColor)
+		if bg := t.bg(); bg != tcell.ColorDefault {
+			rowStyle = rowStyle.Background(bg)
 		}
 		selStyle := rowStyle
 		if rowSelected {

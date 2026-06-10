@@ -230,7 +230,7 @@ func ParseTagged(markup string, baseStyle tcell.Style) *Text {
 	rest := markup
 	for len(rest) > 0 {
 		if rest[0] == '[' {
-			// "[[" is an escaped literal "[" — emit one bracket, consume both
+			// "[[" escapes a literal "["
 			if len(rest) > 1 && rest[1] == '[' {
 				b.WriteByte('[')
 				rest = rest[2:]
@@ -253,10 +253,8 @@ func ParseTagged(markup string, baseStyle tcell.Style) *Text {
 	return t
 }
 
-// EscapeMarkup escapes a string so ParseTagged / PrintTagged render it verbatim,
-// turning every "[" into the escaped literal "[[". Use it for arbitrary text
-// (source code, file contents, user input) that may contain "[" sequences which
-// would otherwise be mistaken for color tags.
+// EscapeMarkup escapes "[" as "[[" so arbitrary text (source code, user input)
+// renders verbatim instead of being parsed as color tags.
 func EscapeMarkup(s string) string {
 	return strings.ReplaceAll(s, "[", "[[")
 }
