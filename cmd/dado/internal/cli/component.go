@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/atterpac/dado/cmd/dado/internal/ui"
+	ui "github.com/atterpac/dado/inline"
 )
 
 // ComponentInfo contains component metadata.

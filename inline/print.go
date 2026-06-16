@@ -1,4 +1,4 @@
-package ui
+package inline
 
 import (
 	"fmt"
@@ -50,11 +50,10 @@ func PrintFileCreated(path string) {
 
 // PrintCommand prints a command in help output.
 func PrintCommand(name, args, desc string) {
-	if args != "" {
-		fmt.Printf("    %s%-12s%s %s%-16s%s %s%s%s\n", Cyan, name, Reset, Dim, args, Reset, White, desc, Reset)
-	} else {
-		fmt.Printf("    %s%-12s%s %s%-16s%s %s%s%s\n", Cyan, name, Reset, "", "", Reset, White, desc, Reset)
-	}
+	fmt.Printf("    %s%s%s %s%s%s %s%s%s\n",
+		Cyan, padRight(name, 12), Reset,
+		Dim, padRight(args, 16), Reset,
+		White, desc, Reset)
 }
 
 // PrintSection prints a section header.
@@ -67,8 +66,8 @@ func PrintBox(title string, lines []string) {
 	// Find the longest line
 	maxLineLen := 0
 	for _, line := range lines {
-		if len(line) > maxLineLen {
-			maxLineLen = len(line)
+		if w := displayWidth(line); w > maxLineLen {
+			maxLineLen = w
 		}
 	}
 
@@ -76,12 +75,12 @@ func PrintBox(title string, lines []string) {
 	innerWidth := maxLineLen + 5
 
 	// Make sure title fits
-	if len(title)+4 > innerWidth {
-		innerWidth = len(title) + 4
+	if displayWidth(title)+4 > innerWidth {
+		innerWidth = displayWidth(title) + 4
 	}
 
 	// Top border
-	titlePadding := innerWidth - len(title) - 2
+	titlePadding := innerWidth - displayWidth(title) - 3
 	fmt.Printf("  %s╭─%s %s%s%s %s%s╮%s\n",
 		Dim, Reset,
 		Bold, title, Reset,
@@ -89,7 +88,7 @@ func PrintBox(title string, lines []string) {
 
 	// Content rows
 	for i, line := range lines {
-		linePadding := maxLineLen - len(line)
+		linePadding := maxLineLen - displayWidth(line)
 		fmt.Printf("  %s│%s %s%d.%s %s%s %s│%s\n",
 			Dim, Reset,
 			Cyan, i+1, Reset,

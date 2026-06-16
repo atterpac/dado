@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/atterpac/dado/cmd/dado/internal/ui"
+	ui "github.com/atterpac/dado/inline"
 )
 
 // Run is the main entry point for the CLI.

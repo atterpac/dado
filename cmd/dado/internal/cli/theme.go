@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/atterpac/dado/cmd/dado/internal/ui"
+	ui "github.com/atterpac/dado/inline"
 )
 
 // ThemeInfo contains theme metadata for display.
