@@ -34,10 +34,13 @@ func displayWidth(s string) int {
 	return w
 }
 
-// termWidth returns the terminal width in columns, defaulting to 80.
+// termWidth returns the terminal width in columns, defaulting to 80. It
+// sizes off the current output writer when that writer is a terminal.
 func termWidth() int {
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
-		return w
+	if f, ok := out.(*os.File); ok {
+		if w, _, err := term.GetSize(int(f.Fd())); err == nil && w > 0 {
+			return w
+		}
 	}
 	return 80
 }
@@ -101,6 +104,14 @@ func isWide(r rune) bool {
 	return false
 }
 
+// DisplayWidth returns the number of terminal cells a string occupies,
+// ignoring ANSI escape codes and accounting for wide/zero-width runes.
+// Use it instead of len() when aligning columns by hand.
+func DisplayWidth(s string) int { return displayWidth(s) }
+
+// Pad right-pads s with spaces to the given display width (cell-accurate).
+func Pad(s string, width int) string { return padRight(s, width) }
+
 // padRight pads s with spaces to the given display width.
 func padRight(s string, width int) string {
 	if pad := width - displayWidth(s); pad > 0 {
@@ -111,7 +122,7 @@ func padRight(s string, width int) string {
 
 // PrintWarning prints a warning message.
 func PrintWarning(msg string) {
-	fmt.Printf("  %s%s⚠%s %s%s%s\n", Bold, Yellow, Reset, Yellow, msg, Reset)
+	fmt.Fprintf(out, "  %s%s⚠%s %s%s%s\n", Bold, Yellow, Reset, Yellow, msg, Reset)
 }
 
 // PrintKV prints aligned key/value pairs.
@@ -123,7 +134,7 @@ func PrintKV(pairs ...[2]string) {
 		}
 	}
 	for _, p := range pairs {
-		fmt.Printf("    %s%s%s %s:%s %s\n",
+		fmt.Fprintf(out, "    %s%s%s %s:%s %s\n",
 			Cyan, padRight(p[0], keyWidth), Reset,
 			Dim, Reset, p[1])
 	}
@@ -132,7 +143,7 @@ func PrintKV(pairs ...[2]string) {
 // PrintList prints a bulleted list.
 func PrintList(items ...string) {
 	for _, item := range items {
-		fmt.Printf("    %s•%s %s\n", Dim, Reset, item)
+		fmt.Fprintf(out, "    %s•%s %s\n", Dim, Reset, item)
 	}
 }
 
@@ -178,30 +189,30 @@ func PrintTable(headers []string, rows [][]string) {
 	}
 
 	// Header
-	fmt.Print("    ")
+	fmt.Fprint(out, "    ")
 	for i, h := range headers {
-		fmt.Printf("%s%s%s%s  ", Bold, BrightWhite, padRight(truncate(h, widths[i]), widths[i]), Reset)
+		fmt.Fprintf(out, "%s%s%s%s  ", Bold, BrightWhite, padRight(truncate(h, widths[i]), widths[i]), Reset)
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	// Separator
-	fmt.Print("    ")
+	fmt.Fprint(out, "    ")
 	for _, w := range widths {
-		fmt.Printf("%s%s%s  ", Dim, strings.Repeat("─", w), Reset)
+		fmt.Fprintf(out, "%s%s%s  ", Dim, strings.Repeat("─", w), Reset)
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 
 	// Rows
 	for _, row := range rows {
-		fmt.Print("    ")
+		fmt.Fprint(out, "    ")
 		for i := range headers {
 			cell := ""
 			if i < len(row) {
 				cell = row[i]
 			}
-			fmt.Printf("%s  ", padRight(truncate(cell, widths[i]), widths[i]))
+			fmt.Fprintf(out, "%s  ", padRight(truncate(cell, widths[i]), widths[i]))
 		}
-		fmt.Println()
+		fmt.Fprintln(out)
 	}
 }
 
@@ -233,7 +244,7 @@ func printTreeNodes(nodes []TreeNode, prefix string) {
 			branch = "└─"
 			childPrefix = prefix + "   "
 		}
-		fmt.Printf("    %s%s%s%s %s\n", Dim, prefix, branch, Reset, n.Label)
+		fmt.Fprintf(out, "    %s%s%s%s %s\n", Dim, prefix, branch, Reset, n.Label)
 		if len(n.Children) > 0 {
 			printTreeNodes(n.Children, childPrefix)
 		}
@@ -254,16 +265,16 @@ func ProgressBar(label string, pct float64, done bool) {
 	// final line so logs stay clean.
 	if !stdoutIsTTY {
 		if done {
-			fmt.Printf("  %s %3.0f%%\n", label, pct*100)
+			fmt.Fprintf(out, "  %s %3.0f%%\n", label, pct*100)
 		}
 		return
 	}
 	const width = 24
 	filled := int(pct * width)
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	fmt.Printf("\r  %s%s%s [%s%s%s] %3.0f%%", Bold, label, Reset, Cyan, bar, Reset, pct*100)
+	fmt.Fprintf(out, "\r  %s%s%s [%s%s%s] %3.0f%%", Bold, label, Reset, Cyan, bar, Reset, pct*100)
 	if done {
-		fmt.Println()
+		fmt.Fprintln(out)
 	}
 }
 
@@ -301,7 +312,7 @@ func (s *Spinner) Start() {
 				return
 			case <-t.C:
 				s.mu.Lock()
-				fmt.Printf("\r  %s%s%s %s", Cyan, s.frames[i%len(s.frames)], Reset, s.label)
+				fmt.Fprintf(out, "\r  %s%s%s %s", Cyan, s.frames[i%len(s.frames)], Reset, s.label)
 				s.mu.Unlock()
 				i++
 			}
@@ -314,7 +325,7 @@ func (s *Spinner) Stop(msg string) {
 	if s.done != nil {
 		close(s.done)
 		s.mu.Lock()
-		fmt.Fprint(os.Stdout, "\r\033[K") // carriage return + clear to EOL
+		fmt.Fprint(out, "\r\033[K") // carriage return + clear to EOL
 		s.mu.Unlock()
 	}
 	PrintSuccess(msg)
@@ -330,7 +341,7 @@ func Confirm(prompt string, def bool) bool {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return def
 	}
-	fmt.Printf("  %s%s?%s %s %s%s%s ", Bold, Yellow, Reset, prompt, Dim, hint, Reset)
+	fmt.Fprintf(out, "  %s%s?%s %s %s%s%s ", Bold, Yellow, Reset, prompt, Dim, hint, Reset)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":
@@ -352,7 +363,7 @@ func Input(prompt, def string) string {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return def
 	}
-	fmt.Printf("  %s%s?%s %s%s %s›%s ", Bold, Yellow, Reset, prompt, hint, Cyan, Reset)
+	fmt.Fprintf(out, "  %s%s?%s %s%s %s›%s ", Bold, Yellow, Reset, prompt, hint, Cyan, Reset)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	if s := strings.TrimSpace(line); s != "" {
 		return s
@@ -366,11 +377,11 @@ func PrintDiff(old, new []string) {
 	for _, line := range diffLines(old, new) {
 		switch line.kind {
 		case diffDel:
-			fmt.Printf("    %s-%s %s%s%s\n", Red, Reset, Red, line.text, Reset)
+			fmt.Fprintf(out, "    %s-%s %s%s%s\n", Red, Reset, Red, line.text, Reset)
 		case diffAdd:
-			fmt.Printf("    %s+%s %s%s%s\n", Green, Reset, Green, line.text, Reset)
+			fmt.Fprintf(out, "    %s+%s %s%s%s\n", Green, Reset, Green, line.text, Reset)
 		default:
-			fmt.Printf("    %s %s%s\n", Dim, Reset, line.text)
+			fmt.Fprintf(out, "    %s %s%s\n", Dim, Reset, line.text)
 		}
 	}
 }
@@ -478,7 +489,7 @@ func (s *StatusList) Set(i int, state stepState) {
 	// pending/running churn so logs stay clean.
 	if state == StepDone || state == StepFailed {
 		marker, _ := stepMarker(state)
-		fmt.Printf("  %s %s\n", marker, s.steps[i].label)
+		fmt.Fprintf(out, "  %s %s\n", marker, s.steps[i].label)
 	}
 }
 
@@ -498,10 +509,10 @@ func stepMarker(state stepState) (string, string) {
 func (s *StatusList) render(redraw bool) {
 	// Move the cursor up to overwrite the previous render (TTY only).
 	if redraw {
-		fmt.Printf("\033[%dA", len(s.steps))
+		fmt.Fprintf(out, "\033[%dA", len(s.steps))
 	}
 	for _, st := range s.steps {
 		marker, color := stepMarker(st.state)
-		fmt.Printf("  %s%s%s %s\033[K\n", color, marker, Reset, st.label)
+		fmt.Fprintf(out, "  %s%s%s %s\033[K\n", color, marker, Reset, st.label)
 	}
 }
