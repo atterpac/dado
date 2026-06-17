@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/atterpac/dado/cmd/dado/internal/ui"
+	ui "github.com/atterpac/dado/inline"
 )
 
 // ThemeInfo contains theme metadata for display.
@@ -106,9 +106,9 @@ func printThemeList() {
 
 	for _, t := range themeList {
 		if t.IsDefault {
-			fmt.Printf("  %s%s●%s %s%-12s%s %s(default)%s\n", ui.Bold, ui.Cyan, ui.Reset, ui.Bold, t.Name, ui.Reset, ui.Dim, ui.Reset)
+			fmt.Printf("  %s%s●%s %s%s%s %s(default)%s\n", ui.Bold, ui.Cyan, ui.Reset, ui.Bold, ui.Pad(t.Name, 12), ui.Reset, ui.Dim, ui.Reset)
 		} else {
-			fmt.Printf("  %s○%s %s%-12s%s\n", ui.Dim, ui.Reset, ui.White, t.Name, ui.Reset)
+			fmt.Printf("  %s○%s %s%s%s\n", ui.Dim, ui.Reset, ui.White, ui.Pad(t.Name, 12), ui.Reset)
 		}
 		fmt.Printf("    %s%s%s\n", ui.Dim, t.Desc, ui.Reset)
 
@@ -147,10 +147,11 @@ func previewTheme(name string) {
 
 	// Title bar
 	title := fmt.Sprintf(" %s Theme Preview ", strings.Title(name))
-	padding := (width - 2 - len(title)) / 2
+	titleW := ui.DisplayWidth(title)
+	padding := (width - 2 - titleW) / 2
 	fmt.Printf("  %s%s│%s%s%s%s%s%s│%s\n",
 		bg, border,
-		strings.Repeat(" ", padding), accent, title, fg, strings.Repeat(" ", width-2-len(title)-padding),
+		strings.Repeat(" ", padding), accent, title, fg, strings.Repeat(" ", width-2-titleW-padding),
 		border, ui.Reset)
 
 	// Separator

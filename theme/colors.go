@@ -87,6 +87,46 @@ func ColorToHex(c tcell.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
+// Lerp linearly interpolates between two colors in RGB space. t is clamped to
+// [0,1]: t=0 returns a, t=1 returns b. This is the building block for fades,
+// gradients and glow/pulse animations.
+//
+// Interpolation is per-channel in sRGB, which is cheap and good enough for UI
+// transitions; it is not perceptually uniform.
+func Lerp(a, b tcell.Color, t float64) tcell.Color {
+	if t <= 0 {
+		return a
+	}
+	if t >= 1 {
+		return b
+	}
+	ar, ag, ab := a.RGB()
+	br, bg, bb := b.RGB()
+	lerp := func(x, y int32) int32 { return x + int32(float64(y-x)*t) }
+	return tcell.NewRGBColor(lerp(ar, br), lerp(ag, bg), lerp(ab, bb))
+}
+
+// Gradient interpolates across an ordered list of stops, mapping t in [0,1]
+// onto the full sequence. With <2 stops it returns the single stop (or the
+// fallback Fg when empty). Useful for multi-color shimmer and heat maps.
+func Gradient(t float64, stops ...tcell.Color) tcell.Color {
+	switch len(stops) {
+	case 0:
+		return Fg()
+	case 1:
+		return stops[0]
+	}
+	if t <= 0 {
+		return stops[0]
+	}
+	if t >= 1 {
+		return stops[len(stops)-1]
+	}
+	scaled := t * float64(len(stops)-1)
+	i := int(scaled)
+	return Lerp(stops[i], stops[i+1], scaled-float64(i))
+}
+
 // Selection colors - high contrast for readability
 
 // SelectionBg returns the background color for selected items.

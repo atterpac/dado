@@ -126,6 +126,10 @@ func (a *App) SetInputCapture(fn func(*tcell.EventKey) *tcell.EventKey) *App {
 // SetOnResize sets a callback invoked on terminal resize.
 func (a *App) SetOnResize(fn func(w, h int)) *App { a.onResize = fn; return a }
 
+// OnResize returns the currently installed resize callback (nil if none). Useful
+// for chaining a new handler onto an existing one.
+func (a *App) OnResize() func(w, h int) { return a.onResize }
+
 // SetAfterDrawFunc installs a callback invoked after the root widget is drawn
 // each frame, before the screen is shown. Use it to paint screen-wide overlays
 // (e.g. toasts) on top of all content.

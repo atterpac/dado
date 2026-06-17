@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/atterpac/dado/cmd/dado/internal/ui"
+	ui "github.com/atterpac/dado/inline"
 )
 
 // ComponentInfo contains component metadata.
@@ -79,9 +79,10 @@ func printComponentList() {
 	fmt.Printf("  %sAvailable components%s\n", ui.Dim, ui.Reset)
 
 	for _, section := range componentSections {
-		fmt.Printf("\n  %s%s%s%s\n", ui.Bold, ui.BrightWhite, section.Name, ui.Reset)
+		fmt.Println()
+		ui.PrintSection(section.Name)
 		for _, comp := range section.Components {
-			fmt.Printf("    %s%-14s%s %s%s%s\n", ui.Cyan, comp.Name, ui.Reset, ui.Dim, comp.Desc, ui.Reset)
+			fmt.Printf("    %s%s%s %s%s%s\n", ui.Cyan, ui.Pad(comp.Name, 14), ui.Reset, ui.Dim, comp.Desc, ui.Reset)
 		}
 	}
 
