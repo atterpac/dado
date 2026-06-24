@@ -615,14 +615,16 @@ func (m *MasterDetailView) Draw(screen tcell.Screen) {
 
 // HandleKey processes a key event for the MasterDetailView.
 func (m *MasterDetailView) HandleKey(ev *tcell.EventKey) bool {
+	// Return whether the key was consumed. Reporting false while still
+	// forwarding the event causes ancestor dispatchers (e.g. nav.Pages,
+	// which re-dispatches to its current page) to deliver the same key a
+	// second time — producing a double "jump" on list navigation.
 	if m.showDetail {
 		// Delegate to split (handles Tab, Ctrl+arrows, etc.)
-		m.split.HandleKey(ev)
-	} else {
-		// Only master panel visible
-		m.masterPanel.HandleKey(ev)
+		return m.split.HandleKey(ev)
 	}
-	return false
+	// Only master panel visible
+	return m.masterPanel.HandleKey(ev)
 }
 
 // Focus handles focus.

@@ -316,6 +316,12 @@ func (g *LineGraph) recalculateRange() {
 	found := false
 	for _, s := range g.series {
 		for _, v := range s.Values {
+			// Ignore non-finite samples (e.g. a rate computed from a
+			// counter reset). A single Inf/NaN would otherwise poison the
+			// axis range and overflow the integer tick math in Draw.
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				continue
+			}
 			found = true
 			if v < g.minValue {
 				g.minValue = v
@@ -451,8 +457,20 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 	// For integer format, snap to nice integer boundaries to avoid duplicate labels.
 	g.tickValues = g.tickValues[:0]
 	if format == "%.0f" {
-		intMin := int(math.Floor(g.minValue))
-		intMax := int(math.Ceil(g.maxValue))
+		// Clamp to a sane integer window first. Converting a float larger
+		// than maxint to int is undefined and can yield a negative/garbage
+		// bound, which would make the tick loop below never terminate.
+		const tickLimit = 1 << 30
+		fMin := math.Floor(g.minValue)
+		fMax := math.Ceil(g.maxValue)
+		if math.IsNaN(fMin) || fMin < -tickLimit {
+			fMin = -tickLimit
+		}
+		if math.IsNaN(fMax) || fMax > tickLimit {
+			fMax = tickLimit
+		}
+		intMin := int(fMin)
+		intMax := int(fMax)
 		if intMax <= intMin {
 			intMax = intMin + 1
 		}
@@ -460,6 +478,9 @@ func (g *LineGraph) Draw(screen tcell.Screen) {
 		step := 1
 		if intRange > labelCount {
 			step = (intRange + labelCount - 1) / labelCount
+		}
+		if step < 1 {
+			step = 1
 		}
 		for v := intMax; v >= intMin; v -= step {
 			g.tickValues = append(g.tickValues, float64(v))

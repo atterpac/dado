@@ -320,7 +320,7 @@ func (s *Split) HandleKey(ev *tcell.EventKey) bool {
 
 	if focusedContent != nil {
 		if kh, ok := focusedContent.(core.KeyHandler); ok {
-			kh.HandleKey(ev)
+			return kh.HandleKey(ev)
 		}
 	}
 	return false

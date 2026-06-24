@@ -331,12 +331,27 @@ func (b *TableBinding[T]) applyFilter() {
 }
 
 // rebuildTable clears and repopulates the table from filtered data.
+//
+// Selection is preserved across the rebuild: the cursor stays on the same
+// item (matched by key), and any multi-selection marks are restored. Without
+// this, a periodic refresh would snap the user back to the top of the list.
 func (b *TableBinding[T]) rebuildTable() {
+	// Capture the current selection BEFORE ClearRows (and before taking the
+	// RLock below — GetSelectedValue/GetSelectedKeys lock internally).
+	var prevKey string
+	hadKey := false
+	if b.keyMapper != nil {
+		if v, ok := b.GetSelectedValue(); ok {
+			prevKey, hadKey = b.keyMapper(v), true
+		}
+	}
+	prevRow := b.table.SelectedRow()
+	prevMarked := b.table.GetSelectedKeys()
+
 	b.table.ClearRows()
 
 	b.mu.RLock()
-	defer b.mu.RUnlock()
-
+	newRow := -1
 	for i, item := range b.filtered {
 		if b.mapper != nil {
 			cells := b.mapper(item)
@@ -348,9 +363,36 @@ func (b *TableBinding[T]) rebuildTable() {
 			}
 			// Set row key if keyMapper is provided
 			if b.keyMapper != nil {
-				b.table.SetRowKey(i, b.keyMapper(item))
+				key := b.keyMapper(item)
+				b.table.SetRowKey(i, key)
+				if hadKey && key == prevKey {
+					newRow = i
+				}
 			}
 		}
+	}
+	n := len(b.filtered)
+	b.mu.RUnlock()
+
+	// Restore multi-selection marks for keys that still exist.
+	for _, k := range prevMarked {
+		b.table.SelectByKey(k)
+	}
+
+	// Restore the cursor. Prefer the same item by key; if it's gone, hold the
+	// previous index position (clamped to the new bounds).
+	if n > 0 {
+		target := newRow
+		if target < 0 {
+			target = prevRow
+		}
+		if target < 0 {
+			target = 0
+		}
+		if target >= n {
+			target = n - 1
+		}
+		b.table.SelectRow(target)
 	}
 }
 
