@@ -14,6 +14,7 @@ type flexItem struct {
 	widget     Widget
 	fixedSize  int
 	proportion int
+	focus      bool
 }
 
 // Flex is a linear layout that divides space between children using fixed sizes
@@ -39,9 +40,42 @@ func (f *Flex) SetDirection(d Direction) *Flex { f.direction = d; return f }
 
 // AddItem appends a child. fixedSize > 0 gives exact cells; proportion > 0
 // shares remaining space proportionally.
-func (f *Flex) AddItem(w Widget, fixedSize, proportion int, _ bool) *Flex {
-	f.items = append(f.items, flexItem{w, fixedSize, proportion})
+func (f *Flex) AddItem(w Widget, fixedSize, proportion int, focus bool) *Flex {
+	f.items = append(f.items, flexItem{w, fixedSize, proportion, focus})
 	return f
+}
+
+// Focus directs focus to the child flagged with focus=true in AddItem (the
+// last such child wins). Without this, a parent focusing the Flex would leave
+// focus on the Flex's own Box and key events would never reach any child.
+func (f *Flex) Focus() {
+	if t := f.focusTarget(); t != nil {
+		t.Focus()
+		return
+	}
+	f.Box.Focus()
+}
+
+// HasFocus reports whether any descendant currently holds focus.
+func (f *Flex) HasFocus() bool {
+	for _, it := range f.items {
+		if it.widget.HasFocus() {
+			return true
+		}
+	}
+	return f.Box.HasFocus()
+}
+
+// focusTarget returns the child that should receive focus, or nil if none is
+// flagged. The last item added with focus=true takes precedence.
+func (f *Flex) focusTarget() Widget {
+	var target Widget
+	for _, it := range f.items {
+		if it.focus {
+			target = it.widget
+		}
+	}
+	return target
 }
 
 // RemoveItem removes the first occurrence of w from the item list.
@@ -125,13 +159,26 @@ func isLastProp(items []flexItem) bool {
 	return true
 }
 
-// HandleKey routes the event to the focused child.
+// HandleKey routes the event to the focused child, falling back to the
+// focus-flagged child when no descendant holds tcell focus.
+//
+// In manually-dispatched key trees (e.g. nav.Pages → component → Split →
+// Panel → Flex) tcell focus rests on an ancestor and never reaches a leaf,
+// so HasFocus() is false for every child. Without the fallback the event
+// would be dropped here and navigation keys would never reach the child that
+// was added with focus=true.
 func (f *Flex) HandleKey(ev *tcell.EventKey) bool {
 	for _, it := range f.items {
 		if it.widget.HasFocus() {
 			if kh, ok := it.widget.(KeyHandler); ok {
 				return kh.HandleKey(ev)
 			}
+			return false
+		}
+	}
+	if t := f.focusTarget(); t != nil {
+		if kh, ok := t.(KeyHandler); ok {
+			return kh.HandleKey(ev)
 		}
 	}
 	return false
