@@ -69,6 +69,12 @@ type ERDGraph struct {
 	hSpacing  int // horizontal spacing between grid cells
 	vSpacing  int // vertical spacing between grid cells
 
+	// detailCols is the incremental zoom level: the maximum number of column
+	// rows rendered per node. -1 means "all columns" (fully zoomed in); 0 means
+	// name-only boxes (fully zoomed out). Zooming steps this one column at a
+	// time, recomputing node sizes and layout so the graph re-packs.
+	detailCols int
+
 	// Viewport offset for panning
 	offsetX, offsetY int
 
@@ -98,9 +104,10 @@ type fkEntry struct {
 // NewERDGraph creates a new ERDGraph component.
 func NewERDGraph() *ERDGraph {
 	g := &ERDGraph{
-		nodeWidth: 30,
-		hSpacing:  4,
-		vSpacing:  2,
+		nodeWidth:  30,
+		hSpacing:   4,
+		vSpacing:   2,
+		detailCols: -1, // all columns visible by default
 	}
 	g.initWidget()
 	return g
@@ -154,6 +161,109 @@ func (g *ERDGraph) SetFit(fit bool) *ERDGraph {
 func (g *ERDGraph) SetOnSelect(fn func(table *ERDTable)) *ERDGraph {
 	g.onSelect = fn
 	return g
+}
+
+// --- Incremental zoom (level of detail) ---
+
+// ZoomIn reveals one more column row per node (zooms in toward full detail) and
+// re-lays-out and re-centers the graph. Returns the receiver for chaining.
+func (g *ERDGraph) ZoomIn() *ERDGraph { return g.SetDetail(g.effectiveDetail() + 1) }
+
+// ZoomOut hides one column row per node (zooms out toward name-only boxes) and
+// re-lays-out and re-centers the graph. Returns the receiver for chaining.
+func (g *ERDGraph) ZoomOut() *ERDGraph { return g.SetDetail(g.effectiveDetail() - 1) }
+
+// SetDetail sets the maximum number of column rows shown per node. Values are
+// clamped to [0, maxColumns]; reaching or exceeding the largest table's column
+// count is stored as -1 ("all columns"). Recomputes layout and re-centers on
+// the focused node when the level changes.
+func (g *ERDGraph) SetDetail(cols int) *ERDGraph {
+	maxCols := g.maxColumnCount()
+	switch {
+	case cols < 0:
+		cols = 0
+	case cols >= maxCols:
+		cols = -1 // all
+	}
+	if cols == g.detailCols {
+		return g
+	}
+	g.detailCols = cols
+	if g.data != nil {
+		g.computeLayout()
+		g.centerOnFocused()
+	}
+	return g
+}
+
+// Detail returns the number of column rows currently shown per node (the
+// largest table's full column count when fully zoomed in).
+func (g *ERDGraph) Detail() int { return g.effectiveDetail() }
+
+// MaxDetail returns the maximum meaningful detail level: the largest column
+// count across all tables. Detail at this level shows every column.
+func (g *ERDGraph) MaxDetail() int { return g.maxColumnCount() }
+
+// effectiveDetail resolves the -1 ("all") sentinel to a concrete column count.
+func (g *ERDGraph) effectiveDetail() int {
+	if g.detailCols < 0 {
+		return g.maxColumnCount()
+	}
+	return g.detailCols
+}
+
+// maxColumnCount returns the largest column count across all tables.
+func (g *ERDGraph) maxColumnCount() int {
+	if g.data == nil {
+		return 0
+	}
+	max := 0
+	for _, t := range g.data.tables {
+		if n := len(t.Columns); n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// visibleColumns returns the columns rendered for t at the current zoom level.
+// When truncating, primary- and foreign-key columns are kept first (they carry
+// the relationships), then remaining columns fill the budget in declared order;
+// the result preserves the original column order for stable rendering.
+func (g *ERDGraph) visibleColumns(t *ERDTable) []ERDColumn {
+	if g.detailCols < 0 || g.detailCols >= len(t.Columns) {
+		return t.Columns
+	}
+	if g.detailCols == 0 {
+		return nil
+	}
+	keep := make([]bool, len(t.Columns))
+	budget := g.detailCols
+	for i, c := range t.Columns {
+		if budget == 0 {
+			break
+		}
+		if c.IsPK || c.IsFK {
+			keep[i] = true
+			budget--
+		}
+	}
+	for i := range t.Columns {
+		if budget == 0 {
+			break
+		}
+		if !keep[i] {
+			keep[i] = true
+			budget--
+		}
+	}
+	out := make([]ERDColumn, 0, g.detailCols)
+	for i, c := range t.Columns {
+		if keep[i] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // FocusedTable returns the currently focused table, or nil.

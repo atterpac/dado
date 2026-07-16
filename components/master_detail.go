@@ -627,6 +627,23 @@ func (m *MasterDetailView) HandleKey(ev *tcell.EventKey) bool {
 	return m.masterPanel.HandleKey(ev)
 }
 
+// HandleMouse forwards mouse input to the visible panes. When the detail pane
+// is shown it delegates to the internal Split (which routes to the clicked pane
+// and moves focus there); the master-focused flag is then synced from the
+// Split's focused pane. When collapsed it forwards to the master panel only.
+func (m *MasterDetailView) HandleMouse(action core.MouseAction, ev *tcell.EventMouse) (bool, core.Widget) {
+	mx, my := ev.Position()
+	if !m.InRect(mx, my) {
+		return false, nil
+	}
+	if m.showDetail {
+		consumed, capture := m.split.HandleMouse(action, ev)
+		m.masterFocused = m.split.FocusedPane() == 0
+		return consumed, capture
+	}
+	return m.masterPanel.HandleMouse(action, ev)
+}
+
 // Focus handles focus.
 func (m *MasterDetailView) Focus() {
 	if m.showDetail {

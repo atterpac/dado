@@ -127,12 +127,14 @@ func (g *ERDGraph) computeLayout() {
 	}
 }
 
-// computeNodeSizes calculates width and height for each table based on its columns.
+// computeNodeSizes calculates width and height for each table based on its
+// currently-visible columns (which depend on the zoom / detail level).
 func (g *ERDGraph) computeNodeSizes() {
 	for _, t := range g.data.tables {
-		w := len([]rune(t.Name)) + 4
+		cols := g.visibleColumns(t)
 
-		for _, col := range t.Columns {
+		w := len([]rune(t.Name)) + 4
+		for _, col := range cols {
 			rowW := 2 + 1 + len([]rune(col.Name)) + 2 + len([]rune(col.Type)) + 4
 			if rowW > w {
 				w = rowW
@@ -144,9 +146,12 @@ func (g *ERDGraph) computeNodeSizes() {
 		}
 		t.width = w
 
-		t.height = 3 + len(t.Columns)
-		if t.height < 4 {
-			t.height = 4
+		// No visible columns → a compact name-only box (top, header, bottom);
+		// otherwise a header/separator row plus one row per visible column.
+		if len(cols) == 0 {
+			t.height = 3
+		} else {
+			t.height = 3 + len(cols)
 		}
 	}
 }

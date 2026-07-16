@@ -44,7 +44,8 @@ type DataGrid struct {
 	overscan       int  // Rows to pre-fetch outside visible area
 
 	// Computed layout (recalculated each Draw)
-	colWidths []int // Rendered width of each column
+	colWidths   []int // Rendered width of each column
+	gutterWidth int   // Row-number gutter width, retained for mouse hit-testing
 
 	// Callbacks
 	onCellSelect      func(pos CellPosition, cell GridCell)
@@ -66,6 +67,14 @@ type DataGrid struct {
 
 	// gPressed tracks the 'g' key for the gg sequence in normal mode.
 	gPressed bool
+
+	// Drag-to-select state. A left press "arms" a drag at the pressed row;
+	// dragging engages once the pointer moves to a different row, at which
+	// point the row range from the anchor is selected. A plain click (no
+	// row change) never engages, so it leaves any existing selection intact.
+	dragArmed     bool
+	dragging      bool
+	dragAnchorRow int
 }
 
 // NewDataGrid creates a new DataGrid component with default settings.

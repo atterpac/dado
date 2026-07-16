@@ -138,20 +138,26 @@ func (g *ERDGraph) drawNode(screen tcell.Screen, vx, vy, vw, vh int, t *ERDTable
 	}
 	setIfVisible(screen, sx+t.width-1, headerY, vx, vy, vw, vh, '│', borderStyle)
 
-	// Separator row: ├───────────────────┤
-	sepY := sy + 2
-	setIfVisible(screen, sx, sepY, vx, vy, vw, vh, '├', borderStyle)
-	for c := 1; c < t.width-1; c++ {
-		setIfVisible(screen, sx+c, sepY, vx, vy, vw, vh, '─', borderStyle)
+	// Visible columns depend on the current zoom / detail level. When there are
+	// none (name-only box) skip the separator and column rows entirely.
+	cols := g.visibleColumns(t)
+
+	if len(cols) > 0 {
+		// Separator row: ├───────────────────┤
+		sepY := sy + 2
+		setIfVisible(screen, sx, sepY, vx, vy, vw, vh, '├', borderStyle)
+		for c := 1; c < t.width-1; c++ {
+			setIfVisible(screen, sx+c, sepY, vx, vy, vw, vh, '─', borderStyle)
+		}
+		setIfVisible(screen, sx+t.width-1, sepY, vx, vy, vw, vh, '┤', borderStyle)
 	}
-	setIfVisible(screen, sx+t.width-1, sepY, vx, vy, vw, vh, '┤', borderStyle)
 
 	// Column rows
 	pkColor := th.Warning()
 	fkColor := th.Info()
 	dimColor := th.FgDim()
 
-	for i, col := range t.Columns {
+	for i, col := range cols {
 		rowY := sy + 3 + i
 
 		setIfVisible(screen, sx, rowY, vx, vy, vw, vh, '│', borderStyle)
@@ -373,10 +379,12 @@ func (g *ERDGraph) drawEdge(screen tcell.Screen, vx, vy, vw, vh int, rel *ERDRel
 	g.drawCardinalityLabel(screen, vx, vy, vw, vh, toX, toY, toCardLabel, edgeStyle)
 }
 
-// columnRow returns the screen row offset within the table for the given column name.
-// Returns the header row offset if the column is not found.
+// columnRow returns the screen row offset within the table for the given column
+// name, among the currently-visible columns. Returns the header row offset when
+// the column is hidden at the current zoom level or not found, so edges attach
+// to the node header instead of a clipped row.
 func (g *ERDGraph) columnRow(t *ERDTable, colName string) int {
-	for i, col := range t.Columns {
+	for i, col := range g.visibleColumns(t) {
 		if col.Name == colName {
 			return 3 + i // top border + header + separator + index
 		}

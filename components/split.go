@@ -326,6 +326,35 @@ func (s *Split) HandleKey(ev *tcell.EventKey) bool {
 	return false
 }
 
+// HandleMouse routes mouse input to the pane under the cursor. A left click in
+// a pane also moves keyboard focus to it (matching Tab/Ctrl+W). Pane rects are
+// those set on the child during the last Draw, so this is accurate only after
+// the Split has been drawn at least once.
+func (s *Split) HandleMouse(action core.MouseAction, ev *tcell.EventMouse) (bool, core.Widget) {
+	mx, my := ev.Position()
+	for i, pane := range [2]core.Widget{s.first, s.second} {
+		if pane == nil {
+			continue
+		}
+		px, py, pw, ph := pane.Rect()
+		if mx < px || mx >= px+pw || my < py || my >= py+ph {
+			continue
+		}
+		if action == core.MouseLeftClick || action == core.MouseLeftDoubleClick {
+			if s.focusedPane != i {
+				s.focusedPane = i
+				s.Blur()
+				pane.Focus()
+			}
+		}
+		if mh, ok := pane.(core.MouseHandler); ok {
+			return mh.HandleMouse(action, ev)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (s *Split) adjustRatio(delta float64) {
 	newRatio := s.ratio + delta
 	if newRatio < 0.1 {

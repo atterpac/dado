@@ -190,6 +190,22 @@ func (p *Panel) HasFocus() bool {
 	return false
 }
 
+// HandleMouse forwards mouse input to the panel content when the event falls
+// within the panel and the content accepts mouse events.
+func (p *Panel) HandleMouse(action core.MouseAction, ev *tcell.EventMouse) (bool, core.Widget) {
+	if p.content == nil {
+		return false, nil
+	}
+	mx, my := ev.Position()
+	if !p.InRect(mx, my) {
+		return false, nil
+	}
+	if mh, ok := p.content.(core.MouseHandler); ok {
+		return mh.HandleMouse(action, ev)
+	}
+	return false, nil
+}
+
 // HandleKey processes a key event for the Panel.
 func (p *Panel) HandleKey(ev *tcell.EventKey) bool {
 	if p.content != nil {

@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -24,6 +25,15 @@ type App struct {
 
 	mouseX, mouseY int
 	mouseObserver  func(action MouseAction, ev *tcell.EventMouse) bool
+
+	// Mouse click synthesis. tcell reports raw button state, not click
+	// gestures, so the App tracks press/release transitions to emit
+	// MouseLeftClick and MouseLeftDoubleClick. Touched only on the event-loop
+	// goroutine (dispatchMouse), so no lock is needed.
+	prevButtons            tcell.ButtonMask
+	pressX, pressY         int
+	lastClickTime          time.Time
+	lastClickX, lastClickY int
 
 	// dirty marks that a redraw is needed before the loop blocks again.
 	// Set on the event-loop goroutine only (by handled events and drained
@@ -379,9 +389,11 @@ func appendPathRev(dst []Widget, node, target Widget) ([]Widget, bool) {
 	return dst, false
 }
 
-// dispatchMouse routes a mouse event and returns whether a redraw was requested
-// (by the mouse observer). It records the cursor position and notifies the
-// observer before normal capture/hit-test dispatch.
+// dispatchMouse routes a mouse event and returns whether a redraw is needed —
+// either because the mouse observer requested one or because a widget consumed
+// the event (a consumed click/scroll typically changes selection or focus and
+// must repaint). It records the cursor position and notifies the observer
+// before normal capture/hit-test dispatch.
 func (a *App) dispatchMouse(ev *tcell.EventMouse) (redraw bool) {
 	a.mouseX, a.mouseY = ev.Position()
 
@@ -389,7 +401,7 @@ func (a *App) dispatchMouse(ev *tcell.EventMouse) (redraw bool) {
 	cap := a.mouseCapture
 	a.mu.Unlock()
 
-	action := tcellMouseAction(ev)
+	action := a.resolveMouseAction(ev)
 
 	if a.mouseObserver != nil {
 		redraw = a.mouseObserver(action, ev)
@@ -398,6 +410,9 @@ func (a *App) dispatchMouse(ev *tcell.EventMouse) (redraw bool) {
 	if cap != nil {
 		if mh, ok := cap.(MouseHandler); ok {
 			consumed, next := mh.HandleMouse(action, ev)
+			if consumed {
+				redraw = true
+			}
 			if !consumed || next == nil {
 				a.mu.Lock()
 				a.mouseCapture = nil
@@ -421,7 +436,7 @@ func (a *App) dispatchMouse(ev *tcell.EventMouse) (redraw bool) {
 					a.mu.Unlock()
 				}
 				if consumed {
-					return
+					return true
 				}
 			}
 		}
@@ -436,25 +451,72 @@ func (a *App) dispatchPaste(text string) {
 	}
 }
 
-// tcellMouseAction maps a tcell.EventMouse to a core.MouseAction.
-func tcellMouseAction(ev *tcell.EventMouse) MouseAction {
-	switch ev.Buttons() {
-	case tcell.ButtonNone:
-		return MouseMove
-	case tcell.Button1:
-		return MouseLeftDown
-	case tcell.Button2:
-		return MouseMiddleDown
-	case tcell.Button3:
-		return MouseRightDown
-	case tcell.WheelUp:
+// doubleClickInterval is the maximum time between two clicks (at the same cell)
+// for the second to be reported as a MouseLeftDoubleClick.
+const doubleClickInterval = 500 * time.Millisecond
+
+// resolveMouseAction maps a raw tcell.EventMouse to a core.MouseAction,
+// synthesizing click and double-click gestures from press/release transitions.
+// tcell only reports which buttons are currently held, so the App tracks the
+// previous button mask and the last click to derive higher-level actions.
+//
+// A left press emits MouseLeftDown; the matching release emits MouseLeftClick
+// when it lands within one cell of the press (else MouseLeftUp). A second click
+// at the same cell within doubleClickInterval emits MouseLeftDoubleClick.
+func (a *App) resolveMouseAction(ev *tcell.EventMouse) MouseAction {
+	btns := ev.Buttons()
+	x, y := ev.Position()
+
+	// Wheel events carry no persistent button state to track.
+	switch {
+	case btns&tcell.WheelUp != 0:
 		return MouseScrollUp
-	case tcell.WheelDown:
+	case btns&tcell.WheelDown != 0:
 		return MouseScrollDown
-	case tcell.WheelLeft:
+	case btns&tcell.WheelLeft != 0:
 		return MouseScrollLeft
-	case tcell.WheelRight:
+	case btns&tcell.WheelRight != 0:
 		return MouseScrollRight
 	}
+
+	prev := a.prevButtons
+	a.prevButtons = btns
+	pressed := btns &^ prev  // buttons newly down this event
+	released := prev &^ btns // buttons newly up this event
+
+	switch {
+	case pressed&tcell.Button1 != 0:
+		a.pressX, a.pressY = x, y
+		return MouseLeftDown
+	case pressed&tcell.Button2 != 0:
+		return MouseMiddleDown
+	case pressed&tcell.Button3 != 0:
+		return MouseRightDown
+	case released&tcell.Button1 != 0:
+		if absInt(x-a.pressX) <= 1 && absInt(y-a.pressY) <= 1 {
+			when := ev.When()
+			if !a.lastClickTime.IsZero() && x == a.lastClickX && y == a.lastClickY &&
+				when.Sub(a.lastClickTime) <= doubleClickInterval {
+				a.lastClickTime = time.Time{} // reset so a third click starts fresh
+				return MouseLeftDoubleClick
+			}
+			a.lastClickTime = when
+			a.lastClickX, a.lastClickY = x, y
+			return MouseLeftClick
+		}
+		return MouseLeftUp
+	case released&tcell.Button2 != 0:
+		return MouseMiddleUp
+	case released&tcell.Button3 != 0:
+		return MouseRightUp
+	}
+
 	return MouseMove
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

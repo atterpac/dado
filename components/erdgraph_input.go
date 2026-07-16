@@ -45,6 +45,10 @@ func (g *ERDGraph) HandleKey(ev *tcell.EventKey) bool {
 			g.jumpNearest(1, 0)
 		case 'c':
 			g.centerOnFocused()
+		case '+', '=':
+			g.ZoomIn()
+		case '-', '_':
+			g.ZoomOut()
 		default:
 			return false
 		}

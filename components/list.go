@@ -211,6 +211,41 @@ func (l *List) MoveToBottom() {
 	}
 }
 
+// HandleMouse processes mouse input for the List: single-click selects the item
+// under the cursor (firing the change callback), double-click activates it
+// (Enter-equivalent), and the scroll wheel moves the selection.
+func (l *List) HandleMouse(action core.MouseAction, ev *tcell.EventMouse) (bool, core.Widget) {
+	mx, my := ev.Position()
+	if !l.List.InRect(mx, my) {
+		return false, nil
+	}
+
+	switch action {
+	case core.MouseLeftClick:
+		if idx, ok := l.List.ItemAt(my); ok {
+			l.List.SelectIndex(idx)
+		}
+		return true, nil
+
+	case core.MouseLeftDoubleClick:
+		if idx, ok := l.List.ItemAt(my); ok {
+			l.List.SetCurrentItem(idx)
+			l.List.Activate()
+		}
+		return true, nil
+
+	case core.MouseScrollUp:
+		l.MoveUp()
+		return true, nil
+
+	case core.MouseScrollDown:
+		l.MoveDown()
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // HandleKey processes a key event for the List, supporting vim-style navigation.
 func (l *List) HandleKey(ev *tcell.EventKey) bool {
 	switch ev.Key() {

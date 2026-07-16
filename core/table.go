@@ -228,6 +228,32 @@ func (t *Table) GetInnerRect() (x, y, width, height int) {
 	return t.InnerRect()
 }
 
+// RowAt maps a screen Y coordinate to a table row index, accounting for the
+// current scroll offset (synced on each Draw). It returns ok=false when y falls
+// outside the inner rect or maps beyond the populated rows. The returned row is
+// a table row (header included); callers distinguishing header from data rows
+// should convert it themselves.
+func (t *Table) RowAt(screenY int) (row int, ok bool) {
+	_, iy, _, ih := t.InnerRect()
+	if ih <= 0 || screenY < iy || screenY >= iy+ih {
+		return 0, false
+	}
+	row = t.rowOffset + (screenY - iy)
+	if row < 0 || row >= t.rows {
+		return 0, false
+	}
+	return row, true
+}
+
+// Activate fires the selected callback for the current selection. It is the
+// Enter-key equivalent, exposed so mouse handlers (double-click) can trigger
+// activation without synthesizing a key event.
+func (t *Table) Activate() {
+	if t.onSelect != nil {
+		t.onSelect(t.selRow, t.selCol)
+	}
+}
+
 // Draw renders visible rows and columns.
 func (t *Table) Draw(screen tcell.Screen) {
 	t.Box.Draw(screen)
@@ -453,9 +479,7 @@ func (t *Table) HandleKey(ev *tcell.EventKey) bool {
 		}
 		return true
 	case tcell.KeyEnter:
-		if t.onSelect != nil {
-			t.onSelect(t.selRow, t.selCol)
-		}
+		t.Activate()
 		return true
 	}
 	return false

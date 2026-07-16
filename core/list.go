@@ -147,6 +147,36 @@ func (l *List) HandleKey(ev *tcell.EventKey) bool {
 	return false
 }
 
+// ItemAt maps a screen Y coordinate to an item index, accounting for the
+// current scroll offset (synced on each Draw). Returns ok=false when y falls
+// outside the inner rect or maps beyond the item list.
+func (l *List) ItemAt(screenY int) (idx int, ok bool) {
+	_, iy, _, ih := l.InnerRect()
+	if ih <= 0 || screenY < iy || screenY >= iy+ih {
+		return 0, false
+	}
+	idx = l.offset + (screenY - iy)
+	if idx < 0 || idx >= len(l.items) {
+		return 0, false
+	}
+	return idx, true
+}
+
+// SelectIndex moves the selection to idx and fires the change callback, matching
+// arrow-key navigation. Out-of-range indices are ignored.
+func (l *List) SelectIndex(idx int) {
+	if idx < 0 || idx >= len(l.items) {
+		return
+	}
+	prev := l.current
+	l.current = idx
+	l.fireChange(prev)
+}
+
+// Activate fires the selected callback for the current item (Enter-equivalent),
+// exposed so mouse handlers (double-click) can trigger activation.
+func (l *List) Activate() { l.activate() }
+
 func (l *List) fireChange(prev int) {
 	if l.onChange != nil && l.current != prev {
 		item := l.items[l.current]
