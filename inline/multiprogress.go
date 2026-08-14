@@ -165,15 +165,12 @@ func (m *MultiProgress) Set(id string, current int64) error {
 			return
 		}
 		startTask(task, now)
-		if current < 0 {
-			current = 0
-		}
-		if task.Total > 0 && current >= task.Total {
-			task.Current = task.Total
+		current, complete := clampProgress(current, task.Total)
+		task.Current = current
+		if complete {
 			finishTask(task, TaskComplete, now, "", "")
 			return
 		}
-		task.Current = current
 	})
 }
 
@@ -184,13 +181,12 @@ func (m *MultiProgress) Advance(id string, delta int64) error {
 			return
 		}
 		startTask(task, now)
-		current := max(task.Current+delta, 0)
-		if task.Total > 0 && current >= task.Total {
-			task.Current = task.Total
+		current, complete := clampProgress(task.Current+delta, task.Total)
+		task.Current = current
+		if complete {
 			finishTask(task, TaskComplete, now, "", "")
 			return
 		}
-		task.Current = current
 	})
 }
 
@@ -201,8 +197,8 @@ func (m *MultiProgress) SetTotal(id string, total int64) error {
 			return
 		}
 		task.Total = max(total, 0)
-		if task.Total > 0 && task.Current >= task.Total {
-			task.Current = task.Total
+		if current, complete := clampProgress(task.Current, task.Total); complete {
+			task.Current = current
 			finishTask(task, TaskComplete, now, "", "")
 		}
 	})
@@ -330,7 +326,7 @@ func finishTask(task *TaskSnapshot, state TaskState, now time.Time, failure, det
 }
 
 func taskFinished(state TaskState) bool {
-	return state == TaskComplete || state == TaskFailed || state == TaskSkipped || state == TaskCancelled
+	return semanticFinished(taskSemanticStatus(state))
 }
 
 type taskRow struct {
@@ -382,7 +378,9 @@ func drawAggregateRow(frame *Frame, y, width int, tasks []TaskSnapshot, theme St
 		if task.State == TaskComplete || task.State == TaskSkipped {
 			completed++
 		}
-		if task.Total > 0 {
+		// Skipped work is complete for the task count but contributes neither
+		// unfinished work nor a zero-valued total to the aggregate percentage.
+		if task.Total > 0 && task.State != TaskSkipped {
 			total += task.Total
 			current += min(task.Current, task.Total)
 		}
@@ -433,19 +431,23 @@ func drawTaskRow(frame *Frame, y, width int, row taskRow, now time.Time, theme S
 }
 
 func taskAppearance(task TaskSnapshot, now time.Time, theme StatusTheme) (marker string, style tcell.Style, status string) {
-	switch task.State {
+	return semanticAppearance(taskSemanticStatus(task.State), true, theme, now.UnixMilli())
+}
+
+func taskSemanticStatus(state TaskState) semanticStatus {
+	switch state {
 	case TaskRunning:
-		return spinnerFrame(theme, now.UnixMilli()), theme.ActiveStyle, "running"
+		return statusActive
 	case TaskComplete:
-		return theme.SuccessMarker, theme.SuccessStyle, "done"
+		return statusSucceeded
 	case TaskFailed:
-		return theme.FailureMarker, theme.FailureStyle, "failed"
+		return statusFailed
 	case TaskSkipped:
-		return theme.SkippedMarker, theme.PendingStyle, "skipped"
+		return statusSkipped
 	case TaskCancelled:
-		return theme.CancelledMarker, theme.CancelledStyle, "cancelled"
+		return statusCancelled
 	default:
-		return theme.PendingMarker, theme.PendingStyle, "pending"
+		return statusPending
 	}
 }
 

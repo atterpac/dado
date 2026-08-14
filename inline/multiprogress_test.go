@@ -99,6 +99,19 @@ func TestMultiProgressCollapsedCompletedSummary(t *testing.T) {
 	assert.Contains(t, lines[0], "2 completed")
 }
 
+func TestMultiProgressAggregateExcludesSkippedTotals(t *testing.T) {
+	t.Parallel()
+	progress := NewMultiProgress("")
+	require.NoError(t, progress.Add("done", "Done", 100))
+	require.NoError(t, progress.Add("skip", "Skipped", 100))
+	require.NoError(t, progress.Complete("done"))
+	require.NoError(t, progress.Skip("skip", "not needed"))
+
+	aggregate := plainFrameLines(progress.Frame(48))[0]
+	assert.Contains(t, aggregate, "Overall 2/2")
+	assert.Contains(t, aggregate, "100%")
+}
+
 func TestMultiProgressNarrowFramesStayWithinWidth(t *testing.T) {
 	t.Parallel()
 

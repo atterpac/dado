@@ -2,6 +2,50 @@ package inline
 
 import "github.com/gdamore/tcell/v2"
 
+type semanticStatus uint8
+
+const (
+	statusPending semanticStatus = iota
+	statusActive
+	statusSucceeded
+	statusFailed
+	statusSkipped
+	statusCancelled
+)
+
+func semanticAppearance(status semanticStatus, animated bool, theme StatusTheme, nowMillis int64) (string, tcell.Style, string) {
+	switch status {
+	case statusActive:
+		marker := theme.ActiveMarker
+		if animated {
+			marker = spinnerFrame(theme, nowMillis)
+		}
+		return marker, theme.ActiveStyle, "running"
+	case statusSucceeded:
+		return theme.SuccessMarker, theme.SuccessStyle, "done"
+	case statusFailed:
+		return theme.FailureMarker, theme.FailureStyle, "failed"
+	case statusSkipped:
+		return theme.SkippedMarker, theme.PendingStyle, "skipped"
+	case statusCancelled:
+		return theme.CancelledMarker, theme.CancelledStyle, "cancelled"
+	default:
+		return theme.PendingMarker, theme.PendingStyle, "pending"
+	}
+}
+
+func semanticFinished(status semanticStatus) bool {
+	return status == statusSucceeded || status == statusFailed || status == statusSkipped || status == statusCancelled
+}
+
+func clampProgress(current, total int64) (int64, bool) {
+	current = max(current, 0)
+	if total > 0 && current >= total {
+		return total, true
+	}
+	return current, false
+}
+
 // StatusTheme contains the semantic styles and glyphs shared by renderer-native
 // activity components. Zero-value fields are filled from DefaultStatusTheme.
 type StatusTheme struct {
@@ -103,5 +147,9 @@ func spinnerFrame(theme StatusTheme, nowMillis int64) string {
 	if len(frames) == 0 {
 		frames = DefaultStatusTheme().SpinnerFrames
 	}
-	return frames[(nowMillis/80)%int64(len(frames))]
+	index := (nowMillis / 80) % int64(len(frames))
+	if index < 0 {
+		index += int64(len(frames))
+	}
+	return frames[index]
 }

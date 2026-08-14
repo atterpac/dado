@@ -126,9 +126,9 @@ func (p *Progress) Set(current int64) {
 		return
 	}
 	p.state = ProgressActive
-	p.current = max(current, 0)
-	if p.total > 0 && p.current >= p.total {
-		p.current = p.total
+	current, complete := clampProgress(current, p.total)
+	p.current = current
+	if complete {
 		p.state = ProgressSucceeded
 	}
 }
@@ -141,9 +141,9 @@ func (p *Progress) Advance(delta int64) {
 		return
 	}
 	p.state = ProgressActive
-	p.current = max(p.current+delta, 0)
-	if p.total > 0 && p.current >= p.total {
-		p.current = p.total
+	current, complete := clampProgress(p.current+delta, p.total)
+	p.current = current
+	if complete {
 		p.state = ProgressSucceeded
 	}
 }
@@ -157,8 +157,8 @@ func (p *Progress) SetTotal(total int64) {
 		return
 	}
 	p.total = max(total, 0)
-	if p.total > 0 && p.current >= p.total {
-		p.current = p.total
+	if current, complete := clampProgress(p.current, p.total); complete {
+		p.current = current
 		p.state = ProgressSucceeded
 	}
 }
@@ -257,22 +257,26 @@ func (p *Progress) Frame(width int) *Frame {
 }
 
 func progressAppearance(snapshot ProgressSnapshot, theme StatusTheme, now time.Time) (string, tcell.Style, string) {
-	switch snapshot.State {
+	return semanticAppearance(progressSemanticStatus(snapshot.State), true, theme, now.UnixMilli())
+}
+
+func progressSemanticStatus(state ProgressState) semanticStatus {
+	switch state {
 	case ProgressActive:
-		return spinnerFrame(theme, now.UnixMilli()), theme.ActiveStyle, "running"
+		return statusActive
 	case ProgressSucceeded:
-		return theme.SuccessMarker, theme.SuccessStyle, "done"
+		return statusSucceeded
 	case ProgressFailed:
-		return theme.FailureMarker, theme.FailureStyle, "failed"
+		return statusFailed
 	case ProgressCancelled:
-		return theme.CancelledMarker, theme.CancelledStyle, "cancelled"
+		return statusCancelled
 	default:
-		return theme.PendingMarker, theme.PendingStyle, "pending"
+		return statusPending
 	}
 }
 
 func progressFinished(state ProgressState) bool {
-	return state == ProgressSucceeded || state == ProgressFailed || state == ProgressCancelled
+	return semanticFinished(progressSemanticStatus(state))
 }
 
 func formatProgressPercent(fraction float64) string {

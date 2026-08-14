@@ -171,17 +171,21 @@ func (s *Spinner) Frame(width int) *Frame {
 }
 
 func spinnerAppearance(state SpinnerState, theme StatusTheme, now time.Time) (string, tcell.Style, string) {
+	return semanticAppearance(spinnerSemanticStatus(state), true, theme, now.UnixMilli())
+}
+
+func spinnerSemanticStatus(state SpinnerState) semanticStatus {
 	switch state {
 	case SpinnerActive:
-		return spinnerFrame(theme, now.UnixMilli()), theme.ActiveStyle, "running"
+		return statusActive
 	case SpinnerSucceeded:
-		return theme.SuccessMarker, theme.SuccessStyle, "done"
+		return statusSucceeded
 	case SpinnerFailed:
-		return theme.FailureMarker, theme.FailureStyle, "failed"
+		return statusFailed
 	case SpinnerCancelled:
-		return theme.CancelledMarker, theme.CancelledStyle, "cancelled"
+		return statusCancelled
 	default:
-		return theme.PendingMarker, theme.PendingStyle, "pending"
+		return statusPending
 	}
 }
 

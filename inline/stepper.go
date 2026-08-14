@@ -437,17 +437,22 @@ func stepDetail(step StepSnapshot, visible bool) string {
 }
 
 func stepAppearance(state StepState, theme StatusTheme) (string, tcell.Style) {
+	marker, style, _ := semanticAppearance(stepSemanticStatus(state), false, theme, 0)
+	return marker, style
+}
+
+func stepSemanticStatus(state StepState) semanticStatus {
 	switch state {
 	case StepActive:
-		return theme.ActiveMarker, theme.ActiveStyle
+		return statusActive
 	case StepComplete:
-		return theme.SuccessMarker, theme.SuccessStyle
+		return statusSucceeded
 	case StepFailed:
-		return theme.FailureMarker, theme.FailureStyle
+		return statusFailed
 	case StepSkipped:
-		return theme.SkippedMarker, theme.PendingStyle
+		return statusSkipped
 	default:
-		return theme.PendingMarker, theme.PendingStyle
+		return statusPending
 	}
 }
 
