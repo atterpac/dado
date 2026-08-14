@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
+	"golang.org/x/term"
 )
 
 var (
@@ -31,8 +32,7 @@ const (
 // RendererOption configures a Renderer.
 type RendererOption func(*Renderer)
 
-// WithOutput sets the renderer's destination. It does not change the
-// package-level destination used by the static Print helpers.
+// WithOutput sets the renderer's destination.
 func WithOutput(w io.Writer) RendererOption {
 	return func(r *Renderer) {
 		if w != nil {
@@ -76,10 +76,9 @@ type Renderer struct {
 }
 
 // NewRenderer constructs an independent inline renderer. By default it writes
-// to the package's current Output destination and detects whether that writer
-// is a terminal.
+// to standard output and detects whether that writer is a terminal.
 func NewRenderer(options ...RendererOption) *Renderer {
-	r := &Renderer{out: Output()}
+	r := &Renderer{out: os.Stdout}
 	for _, option := range options {
 		if option != nil {
 			option(r)
@@ -411,7 +410,7 @@ func splitLines(text string) []string {
 
 func writerIsTerminal(w io.Writer) bool {
 	file, ok := w.(*os.File)
-	return ok && fdIsTTY(file)
+	return ok && term.IsTerminal(int(file.Fd()))
 }
 
 func writeAll(w io.Writer, data []byte) error {

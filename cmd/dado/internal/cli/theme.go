@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	ui "github.com/atterpac/dado/inline"
+	"github.com/gdamore/tcell/v2"
 )
 
 // ThemeInfo contains theme metadata for display.
@@ -17,16 +17,7 @@ type ThemeInfo struct {
 
 // ThemeColors contains full color definitions for a theme.
 type ThemeColors struct {
-	Bg        string
-	Fg        string
-	FgDim     string
-	Accent    string
-	Success   string
-	Warning   string
-	Error     string
-	Info      string
-	Border    string
-	Highlight string
+	Bg, Fg, FgDim, Accent, Success, Warning, Error, Info, Border, Highlight string
 }
 
 var themeList = []ThemeInfo{
@@ -38,31 +29,11 @@ var themeList = []ThemeInfo{
 }
 
 var themeColors = map[string]ThemeColors{
-	"dark": {
-		Bg: "#1a1b26", Fg: "#c0caf5", FgDim: "#565f89", Accent: "#7aa2f7",
-		Success: "#9ece6a", Warning: "#e0af68", Error: "#f7768e", Info: "#7dcfff",
-		Border: "#3b4261", Highlight: "#33467c",
-	},
-	"light": {
-		Bg: "#ffffff", Fg: "#1a1b26", FgDim: "#6c7086", Accent: "#1e66f5",
-		Success: "#40a02b", Warning: "#df8e1d", Error: "#d20f39", Info: "#04a5e5",
-		Border: "#ccd0da", Highlight: "#e6e9ef",
-	},
-	"catppuccin": {
-		Bg: "#1e1e2e", Fg: "#cdd6f4", FgDim: "#6c7086", Accent: "#89b4fa",
-		Success: "#a6e3a1", Warning: "#f9e2af", Error: "#f38ba8", Info: "#89dceb",
-		Border: "#45475a", Highlight: "#313244",
-	},
-	"nord": {
-		Bg: "#2e3440", Fg: "#eceff4", FgDim: "#4c566a", Accent: "#88c0d0",
-		Success: "#a3be8c", Warning: "#ebcb8b", Error: "#bf616a", Info: "#81a1c1",
-		Border: "#4c566a", Highlight: "#3b4252",
-	},
-	"dracula": {
-		Bg: "#282a36", Fg: "#f8f8f2", FgDim: "#6272a4", Accent: "#bd93f9",
-		Success: "#50fa7b", Warning: "#f1fa8c", Error: "#ff5555", Info: "#8be9fd",
-		Border: "#44475a", Highlight: "#44475a",
-	},
+	"dark":       {"#1a1b26", "#c0caf5", "#565f89", "#7aa2f7", "#9ece6a", "#e0af68", "#f7768e", "#7dcfff", "#3b4261", "#33467c"},
+	"light":      {"#ffffff", "#1a1b26", "#6c7086", "#1e66f5", "#40a02b", "#df8e1d", "#d20f39", "#04a5e5", "#ccd0da", "#e6e9ef"},
+	"catppuccin": {"#1e1e2e", "#cdd6f4", "#6c7086", "#89b4fa", "#a6e3a1", "#f9e2af", "#f38ba8", "#89dceb", "#45475a", "#313244"},
+	"nord":       {"#2e3440", "#eceff4", "#4c566a", "#88c0d0", "#a3be8c", "#ebcb8b", "#bf616a", "#81a1c1", "#4c566a", "#3b4252"},
+	"dracula":    {"#282a36", "#f8f8f2", "#6272a4", "#bd93f9", "#50fa7b", "#f1fa8c", "#ff5555", "#8be9fd", "#44475a", "#44475a"},
 }
 
 // RunTheme handles the "theme" command.
@@ -71,123 +42,100 @@ func RunTheme(args []string) {
 		printThemeUsage()
 		return
 	}
-
 	switch args[0] {
 	case "list":
 		printThemeList()
 	case "preview":
 		if len(args) < 2 {
-			ui.PrintError("Missing theme name")
-			fmt.Printf("\n  %sUsage:%s dado theme preview <theme-name>\n\n", ui.Dim, ui.Reset)
+			renderCLILines([]cliLine{errorLine("Missing theme name"), blank(), line(styled("  Usage: ", cliMuted), text("dado theme preview <theme-name>")), blank()})
 			return
 		}
 		previewTheme(args[1])
 	default:
-		ui.PrintError(fmt.Sprintf("Unknown theme command: %s", args[0]))
+		renderCLILines([]cliLine{errorLine(fmt.Sprintf("Unknown theme command: %s", args[0]))})
 	}
 }
 
 func printThemeUsage() {
-	fmt.Println()
-	ui.PrintLogo()
-	fmt.Printf("  %sTheme management commands%s\n\n", ui.Dim, ui.Reset)
-	fmt.Printf("  %s%sUSAGE%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	fmt.Printf("    %sdado theme%s <command>\n\n", ui.Cyan, ui.Reset)
-	fmt.Printf("  %s%sCOMMANDS%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	ui.PrintCommand("list", "", "List all available themes")
-	ui.PrintCommand("preview", "<name>", "Preview a theme's colors")
-	fmt.Println()
+	lines := append([]cliLine{blank()}, logoLines()...)
+	lines = append(lines,
+		line(styled("  Theme management commands", cliMuted)), blank(), sectionLine("USAGE"),
+		line(styled("    dado theme", cliAccent), text(" <command>")), blank(), sectionLine("COMMANDS"),
+		commandLine("list", "", "List all available themes"),
+		commandLine("preview", "<name>", "Preview a theme's colors"), blank(),
+	)
+	renderCLILines(lines)
 }
 
 func printThemeList() {
-	fmt.Println()
-	ui.PrintLogo()
-	fmt.Printf("  %sAvailable themes%s\n\n", ui.Dim, ui.Reset)
-
-	for _, t := range themeList {
-		if t.IsDefault {
-			fmt.Printf("  %s%s●%s %s%s%s %s(default)%s\n", ui.Bold, ui.Cyan, ui.Reset, ui.Bold, ui.Pad(t.Name, 12), ui.Reset, ui.Dim, ui.Reset)
-		} else {
-			fmt.Printf("  %s○%s %s%s%s\n", ui.Dim, ui.Reset, ui.White, ui.Pad(t.Name, 12), ui.Reset)
+	lines := append([]cliLine{blank()}, logoLines()...)
+	lines = append(lines, line(styled("  Available themes", cliMuted)), blank())
+	for _, theme := range themeList {
+		marker := "○"
+		markerStyle := cliMuted
+		suffix := ""
+		if theme.IsDefault {
+			marker, markerStyle, suffix = "●", cliAccent.Bold(true), " (default)"
 		}
-		fmt.Printf("    %s%s%s\n", ui.Dim, t.Desc, ui.Reset)
-
-		// Color swatches
-		fmt.Print("    ")
-		for _, c := range t.Colors {
-			fmt.Printf("%s  %s", ui.ColorBg(c), ui.Reset)
+		lines = append(lines,
+			line(styled("  "+marker+" ", markerStyle), styled(padASCII(theme.Name, 12), cliText.Bold(theme.IsDefault)), styled(suffix, cliMuted)),
+			line(styled("    "+theme.Desc, cliMuted)),
+		)
+		swatches := cliLine{styled("    ", cliText)}
+		for _, color := range theme.Colors {
+			swatches = append(swatches, styled("  ", tcell.StyleDefault.Background(terminalColor(color))), text(" "))
 		}
-		fmt.Println()
-		fmt.Println()
+		lines = append(lines, swatches, blank())
 	}
-
-	fmt.Printf("  %sTip:%s Run %sdado theme preview <name>%s for detailed view\n\n", ui.Dim, ui.Reset, ui.Cyan, ui.Reset)
+	lines = append(lines, line(styled("  Tip: ", cliMuted), text("Run "), styled("dado theme preview <name>", cliAccent), text(" for detailed view")), blank())
+	renderCLILines(lines)
 }
 
 func previewTheme(name string) {
-	t, ok := themeColors[name]
+	theme, ok := themeColors[name]
 	if !ok {
-		ui.PrintError(fmt.Sprintf("Unknown theme: %s", name))
-		fmt.Printf("\n  %sAvailable themes:%s dark, light, catppuccin, nord, dracula\n\n", ui.Dim, ui.Reset)
+		renderCLILines([]cliLine{errorLine(fmt.Sprintf("Unknown theme: %s", name)), blank(), line(styled("  Available themes: ", cliMuted), text("dark, light, catppuccin, nord, dracula")), blank()})
 		return
 	}
 
-	fmt.Println()
+	const width = 50
+	background := terminalColor(theme.Bg)
+	foreground := terminalColor(theme.Fg)
+	dimmed := terminalColor(theme.FgDim)
+	accent := terminalColor(theme.Accent)
+	border := terminalColor(theme.Border)
+	bgStyle := tcell.StyleDefault.Foreground(foreground).Background(background)
+	borderStyle := bgStyle.Foreground(border)
 
-	bg := ui.ColorBg(t.Bg)
-	fg := ui.ColorFg(t.Fg)
-	fgDim := ui.ColorFg(t.FgDim)
-	accent := ui.ColorFg(t.Accent)
-	border := ui.ColorFg(t.Border)
-
-	width := 50
-
-	// Top border
-	fmt.Printf("  %s%s╭%s╮%s\n", bg, border, strings.Repeat("─", width-2), ui.Reset)
-
-	// Title bar
-	title := fmt.Sprintf(" %s Theme Preview ", strings.Title(name))
-	titleW := ui.DisplayWidth(title)
-	padding := (width - 2 - titleW) / 2
-	fmt.Printf("  %s%s│%s%s%s%s%s%s│%s\n",
-		bg, border,
-		strings.Repeat(" ", padding), accent, title, fg, strings.Repeat(" ", width-2-titleW-padding),
-		border, ui.Reset)
-
-	// Separator
-	fmt.Printf("  %s%s├%s┤%s\n", bg, border, strings.Repeat("─", width-2), ui.Reset)
-
-	// Color entries
-	colorOrder := []struct {
-		key   string
-		label string
-		value string
-	}{
-		{"bg", "Background", t.Bg},
-		{"fg", "Foreground", t.Fg},
-		{"fg_dim", "Dimmed", t.FgDim},
-		{"accent", "Accent", t.Accent},
-		{"border", "Border", t.Border},
-		{"highlight", "Highlight", t.Highlight},
-		{"success", "Success", t.Success},
-		{"warning", "Warning", t.Warning},
-		{"error", "Error", t.Error},
-		{"info", "Info", t.Info},
+	titleName := name
+	if titleName != "" {
+		titleName = strings.ToUpper(titleName[:1]) + titleName[1:]
 	}
-
-	for _, c := range colorOrder {
-		swatch := ui.ColorBg(c.value)
-		labelColor := fg
-		if c.key == "bg" || c.key == "fg_dim" || c.key == "border" || c.key == "highlight" {
-			labelColor = fgDim
+	title := " " + titleName + " Theme Preview "
+	left := (width - 2 - len(title)) / 2
+	right := width - 2 - len(title) - left
+	lines := []cliLine{blank(),
+		line(text("  "), styled("╭"+strings.Repeat("─", width-2)+"╮", borderStyle)),
+		line(text("  "), styled("│"+strings.Repeat(" ", left), borderStyle), styled(title, bgStyle.Foreground(accent).Bold(true)), styled(strings.Repeat(" ", right)+"│", borderStyle)),
+		line(text("  "), styled("├"+strings.Repeat("─", width-2)+"┤", borderStyle)),
+	}
+	colors := []struct{ label, value string }{
+		{"Background", theme.Bg}, {"Foreground", theme.Fg}, {"Dimmed", theme.FgDim},
+		{"Accent", theme.Accent}, {"Border", theme.Border}, {"Highlight", theme.Highlight},
+		{"Success", theme.Success}, {"Warning", theme.Warning}, {"Error", theme.Error}, {"Info", theme.Info},
+	}
+	for _, color := range colors {
+		labelStyle := bgStyle
+		if color.label == "Background" || color.label == "Dimmed" || color.label == "Border" || color.label == "Highlight" {
+			labelStyle = bgStyle.Foreground(dimmed)
 		}
-
-		line := fmt.Sprintf(" %s%-12s%s %s  %s %s", labelColor, c.label, fg, swatch, ui.Reset+bg, c.value)
-		padLen := width - 2 - 12 - 1 - 2 - 1 - 7 - 1
-		fmt.Printf("  %s%s│%s%s│%s\n", bg, border, line, strings.Repeat(" ", padLen), ui.Reset)
+		contentWidth := 1 + 12 + 1 + 2 + 1 + len(color.value)
+		lines = append(lines, line(
+			text("  "), styled("│", borderStyle), styled(" "+padASCII(color.label, 12)+" ", labelStyle),
+			styled("  ", tcell.StyleDefault.Background(terminalColor(color.value))), styled(" "+color.value, bgStyle),
+			styled(strings.Repeat(" ", width-2-contentWidth)+"│", borderStyle),
+		))
 	}
-
-	// Bottom border
-	fmt.Printf("  %s%s╰%s╯%s\n", bg, border, strings.Repeat("─", width-2), ui.Reset)
-	fmt.Println()
+	lines = append(lines, line(text("  "), styled("╰"+strings.Repeat("─", width-2)+"╯", borderStyle)), blank())
+	renderCLILines(lines)
 }
