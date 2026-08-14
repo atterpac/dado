@@ -1,13 +1,10 @@
 package inline
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
-	"sync"
-	"time"
 	"unicode"
 
 	"golang.org/x/term"
@@ -251,126 +248,6 @@ func printTreeNodes(nodes []TreeNode, prefix string) {
 	}
 }
 
-// ProgressBar renders a single-line progress bar. Call repeatedly with
-// increasing pct (0.0–1.0); it redraws in place. Pass done=true on the
-// final call to move to the next line.
-func ProgressBar(label string, pct float64, done bool) {
-	if pct < 0 {
-		pct = 0
-	}
-	if pct > 1 {
-		pct = 1
-	}
-	// Without a TTY, in-place redraws are meaningless; emit only the
-	// final line so logs stay clean.
-	if !stdoutIsTTY {
-		if done {
-			fmt.Fprintf(out, "  %s %3.0f%%\n", label, pct*100)
-		}
-		return
-	}
-	const width = 24
-	filled := int(pct * width)
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	fmt.Fprintf(out, "\r  %s%s%s [%s%s%s] %3.0f%%", Bold, label, Reset, Cyan, bar, Reset, pct*100)
-	if done {
-		fmt.Fprintln(out)
-	}
-}
-
-// Spinner is an animated single-line loading indicator.
-type Spinner struct {
-	frames []string
-	mu     sync.Mutex
-	done   chan struct{}
-	label  string
-}
-
-// NewSpinner creates a spinner with the given label.
-func NewSpinner(label string) *Spinner {
-	return &Spinner{
-		frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-		label:  label,
-	}
-}
-
-// Start begins animating the spinner in a background goroutine. On a
-// non-TTY it prints a single static "step" line instead of animating.
-func (s *Spinner) Start() {
-	if !stdoutIsTTY {
-		PrintStep(s.label)
-		return
-	}
-	s.done = make(chan struct{})
-	go func() {
-		i := 0
-		t := time.NewTicker(80 * time.Millisecond)
-		defer t.Stop()
-		for {
-			select {
-			case <-s.done:
-				return
-			case <-t.C:
-				s.mu.Lock()
-				fmt.Fprintf(out, "\r  %s%s%s %s", Cyan, s.frames[i%len(s.frames)], Reset, s.label)
-				s.mu.Unlock()
-				i++
-			}
-		}
-	}()
-}
-
-// Stop halts the spinner and clears its line, then prints a success line.
-func (s *Spinner) Stop(msg string) {
-	if s.done != nil {
-		close(s.done)
-		s.mu.Lock()
-		fmt.Fprint(out, "\r\033[K") // carriage return + clear to EOL
-		s.mu.Unlock()
-	}
-	PrintSuccess(msg)
-}
-
-// Confirm asks a yes/no question and returns the answer. Defaults to def
-// on an empty response. Returns def directly when stdin is not a terminal.
-func Confirm(prompt string, def bool) bool {
-	hint := "[y/N]"
-	if def {
-		hint = "[Y/n]"
-	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return def
-	}
-	fmt.Fprintf(out, "  %s%s?%s %s %s%s%s ", Bold, Yellow, Reset, prompt, Dim, hint, Reset)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true
-	case "n", "no":
-		return false
-	default:
-		return def
-	}
-}
-
-// Input prompts for a line of text, returning def if the response is empty
-// or stdin is not a terminal.
-func Input(prompt, def string) string {
-	hint := ""
-	if def != "" {
-		hint = fmt.Sprintf(" %s(%s)%s", Dim, def, Reset)
-	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return def
-	}
-	fmt.Fprintf(out, "  %s%s?%s %s%s %s›%s ", Bold, Yellow, Reset, prompt, hint, Cyan, Reset)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	if s := strings.TrimSpace(line); s != "" {
-		return s
-	}
-	return def
-}
-
 // PrintDiff prints a unified-style line diff: removed lines in red with
 // "-", added lines in green with "+", context unchanged.
 func PrintDiff(old, new []string) {
@@ -440,79 +317,4 @@ func diffLines(a, b []string) []diffLine {
 		out = append(out, diffLine{diffAdd, b[j]})
 	}
 	return out
-}
-
-// StatusList tracks a sequence of steps, redrawing each with a pending /
-// running / done / failed marker. Use for multi-phase work where one
-// spinner isn't enough.
-type StatusList struct {
-	steps []statusStep
-}
-
-type stepState int
-
-const (
-	StepPending stepState = iota
-	StepRunning
-	StepDone
-	StepFailed
-)
-
-type statusStep struct {
-	label string
-	state stepState
-}
-
-// NewStatusList creates a status list from step labels (all pending).
-func NewStatusList(labels ...string) *StatusList {
-	s := &StatusList{}
-	for _, l := range labels {
-		s.steps = append(s.steps, statusStep{label: l, state: StepPending})
-	}
-	if stdoutIsTTY {
-		s.render(false)
-	}
-	return s
-}
-
-// Set updates the i-th step's state and redraws.
-func (s *StatusList) Set(i int, state stepState) {
-	if i < 0 || i >= len(s.steps) {
-		return
-	}
-	s.steps[i].state = state
-	if stdoutIsTTY {
-		s.render(true)
-		return
-	}
-	// Non-TTY: emit one stable line per terminal transition; skip the
-	// pending/running churn so logs stay clean.
-	if state == StepDone || state == StepFailed {
-		marker, _ := stepMarker(state)
-		fmt.Fprintf(out, "  %s %s\n", marker, s.steps[i].label)
-	}
-}
-
-func stepMarker(state stepState) (string, string) {
-	switch state {
-	case StepRunning:
-		return "▸", Cyan
-	case StepDone:
-		return "✓", Green
-	case StepFailed:
-		return "✗", Red
-	default:
-		return "○", Dim
-	}
-}
-
-func (s *StatusList) render(redraw bool) {
-	// Move the cursor up to overwrite the previous render (TTY only).
-	if redraw {
-		fmt.Fprintf(out, "\033[%dA", len(s.steps))
-	}
-	for _, st := range s.steps {
-		marker, color := stepMarker(st.state)
-		fmt.Fprintf(out, "  %s%s%s %s\033[K\n", color, marker, Reset, st.label)
-	}
 }
