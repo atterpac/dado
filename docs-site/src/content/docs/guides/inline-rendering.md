@@ -69,6 +69,39 @@ return renderer.Render(frame)
 The capture bridge is useful while components adopt a smaller shared drawing
 surface. Input handling remains the application's responsibility.
 
+## Trees and tables
+
+`Tree` and `Table` are native inline components: they produce frames and never
+write to a global output stream.
+
+```go
+tree := inline.NewTree("Workspace",
+    inline.TreeNode{Label: "cmd", Children: []inline.TreeNode{
+        {Label: "dado", Detail: "CLI entrypoint"},
+    }},
+    inline.TreeNode{Label: "go.mod", Detail: "module definition"},
+)
+renderer.Render(tree.Frame(width))
+```
+
+Tables infer column widths, shrink wide columns to fit the requested frame,
+support left, center, and right alignment, and can summarize hidden rows:
+
+```go
+table := inline.NewTable("Release targets",
+    inline.TableColumn{Header: "Target", MinWidth: 6},
+    inline.TableColumn{Header: "Artifact"},
+    inline.TableColumn{Header: "Size", Align: inline.AlignRight},
+).SetMaxRows(4).SetRows(
+    []string{"linux/amd64", "dado-linux", "8.4 MB"},
+    []string{"darwin/arm64", "dado-darwin", "8.1 MB"},
+)
+renderer.Render(table.Frame(width))
+```
+
+Both components can be updated while another goroutine snapshots frames. Use
+`SetTheme` to apply the rounded, square, or ASCII preset.
+
 ## Progress and activity
 
 Use `Progress` for one determinate or indeterminate operation. It is safe to
@@ -261,8 +294,8 @@ known-compatible terminal with `inline.WithSynchronizedOutput(true)`.
 
 ## Run the demos
 
-All inline showcases live in one command. Run the renderer, native progress and
-spinner, concurrent task group, and stepper sequentially:
+All inline showcases live in one command. Run the renderer, progress and forms,
+concurrent task group, stepper, tree, and table sequentially:
 
 ```sh
 go run ./cmd/inlinerenderdemo -demo all
@@ -280,6 +313,8 @@ go run ./cmd/inlinerenderdemo -demo text
 go run ./cmd/inlinerenderdemo -demo select
 go run ./cmd/inlinerenderdemo -demo multiselect
 go run ./cmd/inlinerenderdemo -demo form
+go run ./cmd/inlinerenderdemo -demo tree
+go run ./cmd/inlinerenderdemo -demo table
 ```
 
 Use `-width` to cap the rendered width and `-delay` to adjust animation speed.
