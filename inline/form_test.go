@@ -34,6 +34,18 @@ func TestTextFieldScrollsToKeepCursorVisible(t *testing.T) {
 	assert.Contains(t, strings.Join(plainFrameLines(frame), "\n"), "p")
 }
 
+func TestTextFieldEditsGraphemeClusters(t *testing.T) {
+	t.Parallel()
+	field := NewTextField("name", "Name").SetValue("a\u0301👨‍👩‍👧‍👦")
+	assert.Equal(t, 2, field.cursor)
+	assert.Equal(t, 3, displayWidth(field.Value().(string)))
+
+	field.handle(tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone))
+	assert.Equal(t, "a\u0301", field.Value())
+	field.handle(tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone))
+	assert.Empty(t, field.Value())
+}
+
 func TestSelectAndMultiSelectFields(t *testing.T) {
 	t.Parallel()
 	choices := []Choice{{Value: "a", Label: "Alpha"}, {Value: "b", Label: "Beta", Disabled: true}, {Value: "c", Label: "Gamma"}}
@@ -166,4 +178,15 @@ func TestFormThemePresets(t *testing.T) {
 			assert.True(t, strings.HasPrefix(plainFrameLines(form.Frame(30))[0], test.prefix))
 		})
 	}
+}
+
+func TestFormRejectsMalformedFields(t *testing.T) {
+	t.Parallel()
+	assert.ErrorIs(t, NewForm("Empty").validateStructure(), ErrFormHasNoFields)
+	assert.ErrorIs(t, NewForm("Nil").Add((*TextField)(nil)).validateStructure(), ErrNilFormField)
+	assert.ErrorIs(t, NewForm("Blank").Add(NewTextField("", "Name")).validateStructure(), ErrInvalidFieldID)
+	assert.ErrorIs(t, NewForm("Duplicate").Add(
+		NewTextField("name", "Name"),
+		NewSelectField("name", "Other", NewChoice("x", "X")),
+	).validateStructure(), ErrDuplicateField)
 }

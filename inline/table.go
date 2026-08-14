@@ -218,29 +218,6 @@ func alignTableCell(text string, width int, alignment TableAlign) string {
 	return strings.Repeat(" ", left) + text + strings.Repeat(" ", padding-left)
 }
 
-func truncateCells(text string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if displayWidth(text) <= width {
-		return text
-	}
-	if width == 1 {
-		return "…"
-	}
-	result := ""
-	used := 0
-	for _, r := range text {
-		runeWidth := runeWidth(r)
-		if used+runeWidth > width-1 {
-			break
-		}
-		result += string(r)
-		used += runeWidth
-	}
-	return result + "…"
-}
-
 func tableHeaders(columns []TableColumn) []string {
 	headers := make([]string, len(columns))
 	for index, column := range columns {

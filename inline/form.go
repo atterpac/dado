@@ -3,13 +3,23 @@ package inline
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 )
 
-var ErrFormCancelled = errors.New("inline: form cancelled")
+var (
+	// ErrFormCancelled is returned when the user cancels an interactive form.
+	ErrFormCancelled = errors.New("inline: form cancelled")
+	// ErrFormHasNoFields is returned when a form has nothing to edit.
+	ErrFormHasNoFields = errors.New("inline: form has no fields")
+	// ErrNilFormField is returned when a form contains a nil field.
+	ErrNilFormField = errors.New("inline: nil form field")
+	// ErrInvalidFieldID is returned when a field ID is blank.
+	ErrInvalidFieldID = errors.New("inline: form field ID cannot be empty")
+	// ErrDuplicateField is returned when multiple fields use the same ID.
+	ErrDuplicateField = errors.New("inline: duplicate form field ID")
+)
 
 // Choice is one selectable value in a SelectField or MultiSelectField.
 type Choice struct {
@@ -31,6 +41,7 @@ type FormField interface {
 	ID() string
 	Value() any
 	draw(*Frame, int, int, bool, InlineTheme) int
+	height(bool) int
 	handle(*tcell.EventKey)
 	validate() error
 	summary() string
@@ -40,7 +51,7 @@ type FormField interface {
 // TextField edits one line of Unicode text.
 type TextField struct {
 	id, label, placeholder string
-	value                  []rune
+	value                  []string
 	cursor                 int
 	required, password     bool
 	validateFn             func(string) error
@@ -49,9 +60,9 @@ type TextField struct {
 
 func NewTextField(id, label string) *TextField { return &TextField{id: id, label: label} }
 func (f *TextField) ID() string                { return f.id }
-func (f *TextField) Value() any                { return string(f.value) }
+func (f *TextField) Value() any                { return strings.Join(f.value, "") }
 func (f *TextField) SetValue(value string) *TextField {
-	f.value = []rune(value)
+	f.value = splitGraphemes(value)
 	f.cursor = len(f.value)
 	return f
 }
@@ -64,16 +75,15 @@ func (f *TextField) handle(event *tcell.EventKey) {
 	f.err = nil
 	switch event.Key() {
 	case tcell.KeyRune:
-		f.value = slices.Insert(f.value, f.cursor, event.Rune())
-		f.cursor++
+		f.insertRune(event.Rune())
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		if f.cursor > 0 {
-			f.value = slices.Delete(f.value, f.cursor-1, f.cursor)
+			f.value = append(f.value[:f.cursor-1], f.value[f.cursor:]...)
 			f.cursor--
 		}
 	case tcell.KeyDelete:
 		if f.cursor < len(f.value) {
-			f.value = slices.Delete(f.value, f.cursor, f.cursor+1)
+			f.value = append(f.value[:f.cursor], f.value[f.cursor+1:]...)
 		}
 	case tcell.KeyLeft:
 		f.cursor = max(f.cursor-1, 0)
@@ -86,8 +96,16 @@ func (f *TextField) handle(event *tcell.EventKey) {
 	}
 }
 
+func (f *TextField) insertRune(value rune) {
+	before := strings.Join(f.value[:f.cursor], "")
+	after := strings.Join(f.value[f.cursor:], "")
+	prefix := before + string(value)
+	f.value = splitGraphemes(prefix + after)
+	f.cursor = len(splitGraphemes(prefix))
+}
+
 func (f *TextField) validate() error {
-	value := string(f.value)
+	value := strings.Join(f.value, "")
 	if f.required && strings.TrimSpace(value) == "" {
 		f.err = errors.New("required")
 	} else if f.validateFn != nil {
@@ -100,18 +118,16 @@ func (f *TextField) validate() error {
 
 func (f *TextField) draw(frame *Frame, y, width int, focused bool, theme InlineTheme) int {
 	drawThemedLabel(frame, y, width, f.label, f.required, focused, theme)
-	display := string(f.value)
+	displayGraphemes := f.value
 	if f.password {
-		display = strings.Repeat("•", len(f.value))
+		displayGraphemes = splitGraphemes(strings.Repeat("•", len(f.value)))
 	}
 	visibleStart := 0
 	available := max(width-4, 0)
-	for visibleStart < f.cursor && displayWidth(string([]rune(display)[visibleStart:f.cursor])) >= available && available > 0 {
+	for visibleStart < f.cursor && graphemesWidth(displayGraphemes[visibleStart:f.cursor]) >= available && available > 0 {
 		visibleStart++
 	}
-	if display != "" {
-		display = string([]rune(display)[visibleStart:])
-	}
+	display := strings.Join(displayGraphemes[visibleStart:], "")
 	style := theme.Text
 	if display == "" {
 		display, style = f.placeholder, theme.Muted
@@ -126,11 +142,8 @@ func (f *TextField) draw(frame *Frame, y, width int, focused bool, theme InlineT
 	}
 	drawClipped(frame, 2, y+2, display, max(width-4, 0), style)
 	if focused {
-		cursorText := string(f.value[visibleStart:f.cursor])
-		if f.password {
-			cursorText = strings.Repeat("•", f.cursor-visibleStart)
-		}
-		frame.ShowCursor(min(2+displayWidth(cursorText), max(width-2, 0)), y+2)
+		cursorWidth := graphemesWidth(displayGraphemes[visibleStart:f.cursor])
+		frame.ShowCursor(min(2+cursorWidth, max(width-2, 0)), y+2)
 	}
 	if f.err != nil {
 		drawClipped(frame, 2, y+4, theme.Glyphs.Error+" "+f.err.Error(), max(width-2, 0), theme.Error)
@@ -143,7 +156,14 @@ func (f *TextField) summary() string {
 	if f.password && len(f.value) > 0 {
 		return strings.Repeat("•", len(f.value))
 	}
-	return string(f.value)
+	return strings.Join(f.value, "")
+}
+
+func (f *TextField) height(_ bool) int {
+	if f.err != nil {
+		return 5
+	}
+	return 4
 }
 
 // SelectField chooses one value.
@@ -188,16 +208,7 @@ func (f *SelectField) handle(event *tcell.EventKey) {
 	}
 }
 func (f *SelectField) nextEnabled(from, direction int) int {
-	if len(f.choices) == 0 {
-		return -1
-	}
-	for offset := 1; offset <= len(f.choices); offset++ {
-		index := (from + direction*offset + len(f.choices)*2) % len(f.choices)
-		if !f.choices[index].Disabled {
-			return index
-		}
-	}
-	return -1
+	return nextEnabledChoice(f.choices, from, direction)
 }
 func (f *SelectField) validate() error {
 	if f.required && f.selected < 0 {
@@ -260,6 +271,18 @@ func (f *SelectField) summary() string {
 		return ""
 	}
 	return f.choices[f.selected].Label
+}
+
+func (f *SelectField) height(focused bool) int {
+	rows := 1
+	if focused {
+		rows = max(len(f.choices), 1)
+	}
+	height := rows + 3
+	if f.err != nil {
+		height++
+	}
+	return height
 }
 
 // MultiSelectField chooses zero or more values.
@@ -326,12 +349,16 @@ func (f *MultiSelectField) Value() any {
 	return values
 }
 func (f *MultiSelectField) nextEnabled(from, direction int) int {
-	if len(f.choices) == 0 {
+	return nextEnabledChoice(f.choices, from, direction)
+}
+
+func nextEnabledChoice(choices []Choice, from, direction int) int {
+	if len(choices) == 0 {
 		return -1
 	}
-	for offset := 1; offset <= len(f.choices); offset++ {
-		index := (from + direction*offset + len(f.choices)*2) % len(f.choices)
-		if !f.choices[index].Disabled {
+	for offset := 1; offset <= len(choices); offset++ {
+		index := (from + direction*offset + len(choices)*2) % len(choices)
+		if !choices[index].Disabled {
 			return index
 		}
 	}
@@ -459,6 +486,18 @@ func (f *MultiSelectField) summary() string {
 	return strings.Join(labels, ", ")
 }
 
+func (f *MultiSelectField) height(focused bool) int {
+	rows := 1
+	if focused {
+		rows = max(len(f.choices), 1)
+	}
+	height := rows + 3
+	if f.err != nil {
+		height++
+	}
+	return height
+}
+
 // Form composes fields, focus traversal, validation, submission, and summary rendering.
 type Form struct {
 	title                string
@@ -472,6 +511,43 @@ type Form struct {
 func NewForm(title string) *Form                 { return &Form{title: title, theme: RoundedInlineTheme()} }
 func (f *Form) Add(fields ...FormField) *Form    { f.fields = append(f.fields, fields...); return f }
 func (f *Form) SetTheme(theme InlineTheme) *Form { f.theme = normalizedInlineTheme(theme); return f }
+
+func (f *Form) validateStructure() error {
+	if len(f.fields) == 0 {
+		return ErrFormHasNoFields
+	}
+	ids := make(map[string]struct{}, len(f.fields))
+	for _, field := range f.fields {
+		if nilFormField(field) {
+			return ErrNilFormField
+		}
+		id := strings.TrimSpace(field.ID())
+		if id == "" {
+			return ErrInvalidFieldID
+		}
+		if _, exists := ids[id]; exists {
+			return fmt.Errorf("%w: %s", ErrDuplicateField, id)
+		}
+		ids[id] = struct{}{}
+	}
+	return nil
+}
+
+func nilFormField(field FormField) bool {
+	if field == nil {
+		return true
+	}
+	switch value := field.(type) {
+	case *TextField:
+		return value == nil
+	case *SelectField:
+		return value == nil
+	case *MultiSelectField:
+		return value == nil
+	default:
+		return false
+	}
+}
 func (f *Form) Result() FormResult {
 	result := make(FormResult, len(f.result))
 	for k, v := range f.result {
@@ -481,7 +557,7 @@ func (f *Form) Result() FormResult {
 }
 func (f *Form) Done() bool { return f.submitted || f.cancelled }
 func (f *Form) HandleKey(event *tcell.EventKey) {
-	if f.Done() || len(f.fields) == 0 {
+	if f.Done() || event == nil || f.validateStructure() != nil {
 		return
 	}
 	switch event.Key() {
@@ -521,6 +597,11 @@ func (f *Form) submit() {
 	f.submitted = true
 }
 func (f *Form) Frame(width int) *Frame {
+	if err := f.validateStructure(); err != nil {
+		frame := NewFrame(max(width, 0), 1)
+		drawClipped(frame, 0, 0, err.Error(), width, f.theme.Error)
+		return frame
+	}
 	if f.submitted {
 		return f.summaryFrame(width)
 	}
@@ -534,7 +615,7 @@ func (f *Form) Frame(width int) *Frame {
 		height = 2
 	}
 	for index, field := range f.fields {
-		height += fieldHeight(field, index == f.focus, f.theme) + f.theme.FieldGap
+		height += field.height(index == f.focus) + f.theme.FieldGap
 	}
 	height++
 	frame := NewFrame(max(width, 0), height)
@@ -562,10 +643,6 @@ func (f *Form) summaryFrame(width int) *Frame {
 	return frame
 }
 
-func fieldHeight(field FormField, focused bool, theme InlineTheme) int {
-	scratch := NewFrame(1, 100)
-	return field.draw(scratch, 0, 1, focused, theme)
-}
 func drawThemedLabel(frame *Frame, y, width int, label string, required, focused bool, theme InlineTheme) {
 	style := theme.Label
 	if focused {

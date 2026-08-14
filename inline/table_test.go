@@ -76,3 +76,10 @@ func TestTableConcurrentUpdatesAndFrames(t *testing.T) {
 	workers.Wait()
 	assert.Len(t, plainFrameLines(table.Frame(20)), 205)
 }
+
+func TestTableTruncatesWholeGraphemeClusters(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 2, displayWidth("👨‍👩‍👧‍👦"))
+	assert.Equal(t, "…", truncateCells("👨‍👩‍👧‍👦x", 1))
+	assert.Equal(t, "👨‍👩‍👧‍👦…", truncateCells("👨‍👩‍👧‍👦xy", 3))
+}

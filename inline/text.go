@@ -2,7 +2,9 @@ package inline
 
 import (
 	"regexp"
-	"unicode"
+	"strings"
+
+	"github.com/rivo/uniseg"
 )
 
 // ansiRE matches SGR sequences and OSC 8 hyperlinks. Renderer persistent
@@ -12,40 +14,47 @@ var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\`)
 func stripANSI(s string) string { return ansiRE.ReplaceAllString(s, "") }
 
 // displayWidth returns the number of terminal cells occupied by s.
-func displayWidth(s string) int {
+func displayWidth(s string) int { return uniseg.StringWidth(stripANSI(s)) }
+
+func splitGraphemes(text string) []string {
+	graphemes := uniseg.NewGraphemes(text)
+	result := make([]string, 0, uniseg.GraphemeClusterCount(text))
+	for graphemes.Next() {
+		result = append(result, graphemes.Str())
+	}
+	return result
+}
+
+func graphemesWidth(graphemes []string) int {
 	width := 0
-	for _, r := range stripANSI(s) {
-		width += runeWidth(r)
+	for _, grapheme := range graphemes {
+		width += uniseg.StringWidth(grapheme)
 	}
 	return width
 }
 
-func runeWidth(r rune) int {
-	if r == 0 || unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) || unicode.Is(unicode.Cf, r) {
-		return 0
+func truncateCells(text string, width int) string {
+	if width <= 0 {
+		return ""
 	}
-	if isWide(r) {
-		return 2
+	if displayWidth(text) <= width {
+		return text
 	}
-	return 1
-}
+	if width == 1 {
+		return "…"
+	}
 
-func isWide(r rune) bool {
-	switch {
-	case r >= 0x1100 && r <= 0x115F,
-		r >= 0x2E80 && r <= 0x303E,
-		r >= 0x3041 && r <= 0x33FF,
-		r >= 0x3400 && r <= 0x4DBF,
-		r >= 0x4E00 && r <= 0x9FFF,
-		r >= 0xA000 && r <= 0xA4CF,
-		r >= 0xAC00 && r <= 0xD7A3,
-		r >= 0xF900 && r <= 0xFAFF,
-		r >= 0xFE30 && r <= 0xFE4F,
-		r >= 0xFF00 && r <= 0xFF60,
-		r >= 0xFFE0 && r <= 0xFFE6,
-		r >= 0x1F300 && r <= 0x1FAFF,
-		r >= 0x20000 && r <= 0x3FFFD:
-		return true
+	var result strings.Builder
+	used := 0
+	graphemes := uniseg.NewGraphemes(text)
+	for graphemes.Next() {
+		clusterWidth := graphemes.Width()
+		if used+clusterWidth > width-1 {
+			break
+		}
+		result.WriteString(graphemes.Str())
+		used += clusterWidth
 	}
-	return false
+	result.WriteString("…")
+	return result.String()
 }

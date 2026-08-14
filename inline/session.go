@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -30,7 +32,10 @@ func WithSessionInput(input io.Reader) SessionOption {
 
 // WithSessionWidth fixes the render width instead of reading terminal size.
 func WithSessionWidth(width int) SessionOption {
-	return func(session *Session) { session.width = max(width, 1) }
+	return func(session *Session) {
+		session.width = max(width, 1)
+		session.widthSet = true
+	}
 }
 
 // Session owns raw input mode and drives a Form through an existing Renderer.
@@ -40,6 +45,7 @@ type Session struct {
 	input    io.Reader
 	inputSet bool
 	width    int
+	widthSet bool
 }
 
 func NewSession(renderer *Renderer, options ...SessionOption) *Session {
@@ -54,22 +60,29 @@ func NewSession(renderer *Renderer, options ...SessionOption) *Session {
 
 // Run renders and drives form until submit, cancellation, input failure, or
 // context cancellation.
-func (s *Session) Run(ctx context.Context, form *Form) (FormResult, error) {
+func (s *Session) Run(ctx context.Context, form *Form) (result FormResult, runErr error) {
 	if s.renderer == nil {
 		return nil, errors.New("inline: nil session renderer")
 	}
 	if form == nil {
 		return nil, errors.New("inline: nil form")
 	}
-	var restore func() error
+	if err := form.validateStructure(); err != nil {
+		return nil, err
+	}
+
 	if file, ok := s.input.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
 		state, err := term.MakeRaw(int(file.Fd()))
 		if err != nil {
 			return nil, err
 		}
-		restore = func() error { return term.Restore(int(file.Fd()), state) }
-		defer restore()
-		if width, _, err := term.GetSize(int(file.Fd())); err == nil && width > 0 && s.width == 80 {
+		defer func() {
+			if err := term.Restore(int(file.Fd()), state); err != nil && runErr == nil {
+				result = nil
+				runErr = fmt.Errorf("inline: restore terminal: %w", err)
+			}
+		}()
+		if width, _, err := term.GetSize(int(file.Fd())); err == nil && width > 0 && !s.widthSet {
 			s.width = max(width-1, 1)
 		}
 	} else if !s.inputSet {
@@ -79,25 +92,15 @@ func (s *Session) Run(ctx context.Context, form *Form) (FormResult, error) {
 	if err := s.renderer.Render(form.Frame(s.width)); err != nil {
 		return nil, err
 	}
-	reader := bufio.NewReader(s.input)
-	type eventResult struct {
-		event *tcell.EventKey
-		err   error
-	}
+	reader := newSessionEventReader(s.input)
 	for !form.Done() {
-		events := make(chan eventResult, 1)
-		go func() { event, err := readSessionEvent(reader); events <- eventResult{event: event, err: err} }()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case result := <-events:
-			if result.err != nil {
-				return nil, result.err
-			}
-			form.HandleKey(result.event)
-			if err := s.renderer.Render(form.Frame(s.width)); err != nil {
-				return nil, err
-			}
+		event, err := reader.readEvent(ctx)
+		if err != nil {
+			return nil, err
+		}
+		form.HandleKey(event)
+		if err := s.renderer.Render(form.Frame(s.width)); err != nil {
+			return nil, err
 		}
 	}
 	if form.cancelled {
@@ -106,8 +109,21 @@ func (s *Session) Run(ctx context.Context, form *Form) (FormResult, error) {
 	return form.Result(), nil
 }
 
-func readSessionEvent(reader *bufio.Reader) (*tcell.EventKey, error) {
-	first, err := reader.ReadByte()
+const escapeSequenceTimeout = 35 * time.Millisecond
+
+type sessionEventReader struct {
+	reader *bufio.Reader
+	file   *os.File
+}
+
+func newSessionEventReader(input io.Reader) *sessionEventReader {
+	reader := &sessionEventReader{reader: bufio.NewReader(input)}
+	reader.file, _ = input.(*os.File)
+	return reader
+}
+
+func (r *sessionEventReader) readEvent(ctx context.Context) (*tcell.EventKey, error) {
+	first, err := r.readByte(ctx, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -121,34 +137,41 @@ func readSessionEvent(reader *bufio.Reader) (*tcell.EventKey, error) {
 	case 8, 127:
 		return tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone), nil
 	case 27:
-		return readEscapeEvent(reader)
+		return r.readEscapeEvent(ctx)
 	}
 	if first < utf8.RuneSelf {
 		return tcell.NewEventKey(tcell.KeyRune, rune(first), tcell.ModNone), nil
 	}
-	if err := reader.UnreadByte(); err != nil {
-		return nil, err
-	}
-	value, _, err := reader.ReadRune()
+	value, err := r.readRune(ctx, first)
 	if err != nil {
 		return nil, err
 	}
 	return tcell.NewEventKey(tcell.KeyRune, value, tcell.ModNone), nil
 }
 
-func readEscapeEvent(reader *bufio.Reader) (*tcell.EventKey, error) {
-	if reader.Buffered() == 0 {
+func (r *sessionEventReader) readEscapeEvent(ctx context.Context) (*tcell.EventKey, error) {
+	next, err := r.readByte(ctx, escapeSequenceTimeout)
+	if errors.Is(err, errSessionInputTimeout) || errors.Is(err, io.EOF) {
 		return tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil
 	}
-	next, err := reader.ReadByte()
 	if err != nil {
-		return tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil
+		return nil, err
 	}
 	if next != '[' {
-		return tcell.NewEventKey(tcell.KeyRune, rune(next), tcell.ModAlt), nil
+		value := rune(next)
+		if next >= utf8.RuneSelf {
+			value, err = r.readRune(ctx, next)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return tcell.NewEventKey(tcell.KeyRune, value, tcell.ModAlt), nil
 	}
-	code, err := reader.ReadByte()
+	code, err := r.readByte(ctx, escapeSequenceTimeout)
 	if err != nil {
+		if errors.Is(err, errSessionInputTimeout) || errors.Is(err, io.EOF) {
+			return tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil
+		}
 		return nil, err
 	}
 	switch code {
@@ -167,9 +190,41 @@ func readEscapeEvent(reader *bufio.Reader) (*tcell.EventKey, error) {
 	case 'Z':
 		return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModShift), nil
 	case '3':
-		if tail, _ := reader.ReadByte(); tail == '~' {
+		if tail, _ := r.readByte(ctx, escapeSequenceTimeout); tail == '~' {
 			return tcell.NewEventKey(tcell.KeyDelete, 0, tcell.ModNone), nil
 		}
 	}
 	return tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil
+}
+
+func (r *sessionEventReader) readByte(ctx context.Context, timeout time.Duration) (byte, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	default:
+	}
+	if r.reader.Buffered() > 0 || r.file == nil {
+		return r.reader.ReadByte()
+	}
+	ready, err := waitForSessionInput(ctx, r.file, timeout)
+	if err != nil {
+		return 0, err
+	}
+	if !ready {
+		return 0, errSessionInputTimeout
+	}
+	return r.reader.ReadByte()
+}
+
+func (r *sessionEventReader) readRune(ctx context.Context, first byte) (rune, error) {
+	encoded := []byte{first}
+	for !utf8.FullRune(encoded) && len(encoded) < utf8.UTFMax {
+		next, err := r.readByte(ctx, 0)
+		if err != nil {
+			return 0, err
+		}
+		encoded = append(encoded, next)
+	}
+	value, _ := utf8.DecodeRune(encoded)
+	return value, nil
 }
