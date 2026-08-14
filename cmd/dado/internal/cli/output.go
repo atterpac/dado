@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/atterpac/dado/inline"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/uniseg"
 )
 
 const cliVersion = "0.1.0"
@@ -62,20 +64,18 @@ func renderCLILines(lines []cliLine) {
 	for y, spans := range lines {
 		x := 0
 		for _, span := range spans {
-			remaining := span.text
-			for remaining != "" {
-				rest, width := frame.Put(x, y, remaining, span.style)
-				if width <= 0 || rest == remaining {
-					break
-				}
-				x += width
-				remaining = rest
-			}
+			frame.DrawString(x, y, span.text, span.style)
+			x += uniseg.StringWidth(span.text)
 		}
 	}
 	renderer := inline.NewRenderer(inline.WithOutput(os.Stdout))
-	_ = renderer.Render(frame)
-	_ = renderer.Close()
+	if err := renderer.Render(frame); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	if err := renderer.Close(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
 }
 
 func padASCII(value string, width int) string {

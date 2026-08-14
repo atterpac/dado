@@ -230,8 +230,7 @@ func runRendererDemo(ctx context.Context, renderer *inline.Renderer, options dem
 	logged := map[int]bool{}
 	for percent := 0; percent <= 100; percent += 2 {
 		if err := contextError(ctx); err != nil {
-			_ = renderer.Println("Build interrupted")
-			return err
+			return errors.Join(err, renderer.Println("Build interrupted"))
 		}
 		progress.SetProgress(float64(percent) / 100)
 		frame, err := rendererDemoFrame(options.width, percent, frames[(percent/2)%len(frames)], progress)
@@ -297,8 +296,7 @@ func runProgressDemo(ctx context.Context, renderer *inline.Renderer, options dem
 		}
 		if err := wait(ctx, options.delay); err != nil {
 			progress.Cancel("interrupted")
-			_ = renderer.Render(progress.Frame(options.width))
-			return err
+			return errors.Join(err, renderer.Render(progress.Frame(options.width)))
 		}
 	}
 	progress.SetDetail("42.8 MB downloaded")
@@ -319,8 +317,7 @@ func runSpinnerDemo(ctx context.Context, renderer *inline.Renderer, options demo
 		}
 		if err := wait(ctx, options.delay*2); err != nil {
 			spinner.Cancel("interrupted")
-			_ = renderer.Render(spinner.Frame(options.width))
-			return err
+			return errors.Join(err, renderer.Render(spinner.Frame(options.width)))
 		}
 	}
 	spinner.Succeed("186 modules resolved")
@@ -377,8 +374,7 @@ func runMultiProgressDemo(ctx context.Context, renderer *inline.Renderer, option
 		select {
 		case <-ctx.Done():
 			cancelBuildTasks(progress)
-			_ = renderer.Render(progress.Frame(options.width))
-			return ctx.Err()
+			return errors.Join(ctx.Err(), renderer.Render(progress.Frame(options.width)))
 		case <-done:
 			return renderer.Render(progress.Frame(options.width))
 		case <-ticker.C:

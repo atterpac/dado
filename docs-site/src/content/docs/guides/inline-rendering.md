@@ -22,7 +22,11 @@ import (
 
 func main() {
     renderer := inline.NewRenderer(inline.WithOutput(os.Stderr))
-    defer renderer.Close()
+    defer func() {
+        if err := renderer.Close(); err != nil {
+            panic(err)
+        }
+    }()
 
     frame := inline.NewFrame(40, 2)
     frame.DrawString(0, 0, "Downloading dependencies", tcell.StyleDefault.Bold(true))
@@ -43,8 +47,12 @@ frames and writes the final frame as plain text during `Close`.
 Use `Println` or `Printf` for messages that should remain in scrollback:
 
 ```go
-renderer.Println("downloaded github.com/gdamore/tcell/v2")
-renderer.Printf("completed %d tasks", completed)
+if err := renderer.Println("downloaded github.com/gdamore/tcell/v2"); err != nil {
+    return err
+}
+if err := renderer.Printf("completed %d tasks", completed); err != nil {
+    return err
+}
 ```
 
 The renderer inserts the message above its managed region and redraws the live
@@ -81,7 +89,7 @@ tree := inline.NewTree("Workspace",
     }},
     inline.TreeNode{Label: "go.mod", Detail: "module definition"},
 )
-renderer.Render(tree.Frame(width))
+return renderer.Render(tree.Frame(width))
 ```
 
 Tables infer column widths, shrink wide columns to fit the requested frame,
@@ -96,7 +104,7 @@ table := inline.NewTable("Release targets",
     []string{"linux/amd64", "dado-linux", "8.4 MB"},
     []string{"darwin/arm64", "dado-darwin", "8.1 MB"},
 )
-renderer.Render(table.Frame(width))
+return renderer.Render(table.Frame(width))
 ```
 
 Both components can be updated while another goroutine snapshots frames. Use
@@ -127,10 +135,12 @@ The existing `Spinner` also supports a renderer-native mode:
 spinner := inline.NewSpinner("Resolve dependency graph")
 spinner.Begin()
 spinner.SetDetail("visiting modules")
-renderer.Render(spinner.Frame(width))
+if err := renderer.Render(spinner.Frame(width)); err != nil {
+    return err
+}
 
 spinner.Succeed("186 modules resolved")
-renderer.Render(spinner.Frame(width))
+return renderer.Render(spinner.Frame(width))
 ```
 
 `Begin` and `Frame` never start a goroutine. Spinner state changes only through
@@ -169,10 +179,12 @@ name := result["name"].(string)
 targets := result["targets"].([]string)
 ```
 
-Text fields support Unicode insertion, cursor movement, deletion, passwords,
+Text fields edit Unicode grapheme clusters, so cursor movement and deletion keep
+combining sequences and joined emoji intact. They also support passwords,
 placeholders, required values, and custom validation. Select fields skip
 disabled choices. Multi-select fields enforce optional minimum and maximum
-counts. `Tab` and `Shift+Tab` move focus; `Escape` and `Ctrl+C` cancel.
+counts. Every field must have a unique, non-blank ID. `Tab` and `Shift+Tab`
+move focus; `Escape` and `Ctrl+C` cancel.
 
 Multi-select markers are bracket-free and configurable independently from the
 layout theme:
@@ -195,7 +207,8 @@ without brackets or leading symbols.
 
 Sessions do not fall back to line-oriented prompts. Non-terminal input returns
 `ErrNonInteractive` unless explicitly supplied with `WithSessionInput`, which
-also enables deterministic tests and scripted demos.
+also enables deterministic tests and scripted demos. Terminal reads honor
+context cancellation without leaving a background input goroutine behind.
 
 ### Visual presets
 
