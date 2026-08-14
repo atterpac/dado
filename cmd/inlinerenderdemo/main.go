@@ -9,6 +9,8 @@
 //	go run ./cmd/inlinerenderdemo -demo multi
 //	go run ./cmd/inlinerenderdemo -demo stepper
 //	go run ./cmd/inlinerenderdemo -demo form
+//	go run ./cmd/inlinerenderdemo -demo tree
+//	go run ./cmd/inlinerenderdemo -demo table
 package main
 
 import (
@@ -43,7 +45,7 @@ type showcase struct {
 }
 
 func main() {
-	selected := flag.String("demo", "all", "showcase: renderer, progress, spinner, multi, stepper, text, select, multiselect, form, or all")
+	selected := flag.String("demo", "all", "showcase: renderer, progress, spinner, multi, stepper, text, select, multiselect, form, tree, table, or all")
 	requestedWidth := flag.Int("width", 64, "maximum demo width in terminal cells")
 	delay := flag.Duration("delay", 35*time.Millisecond, "base animation delay")
 	styleName := flag.String("style", "rounded", "visual preset: rounded, square, or ascii")
@@ -73,6 +75,8 @@ func main() {
 		{name: "select", run: runSelectDemo},
 		{name: "multiselect", run: runMultiSelectDemo},
 		{name: "form", run: runFormDemo},
+		{name: "tree", run: runTreeDemo},
+		{name: "table", run: runTableDemo},
 	}
 	chosen := available
 	if *selected != "all" {
@@ -83,7 +87,7 @@ func main() {
 			}
 		}
 		if len(chosen) == 0 {
-			fmt.Fprintf(os.Stderr, "unknown demo %q; use -demo with renderer, progress, spinner, multi, stepper, text, select, multiselect, form, or all\n", *selected)
+			fmt.Fprintf(os.Stderr, "unknown demo %q; use -demo with renderer, progress, spinner, multi, stepper, text, select, multiselect, form, tree, table, or all\n", *selected)
 			os.Exit(2)
 		}
 	}
@@ -105,6 +109,37 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func runTreeDemo(_ context.Context, renderer *inline.Renderer, options demoOptions) error {
+	tree := inline.NewTree("Release workspace",
+		inline.TreeNode{Label: "cmd", Children: []inline.TreeNode{
+			{Label: "dado", Detail: "CLI entrypoint"},
+			{Label: "inlinerenderdemo", Detail: "showcase"},
+		}},
+		inline.TreeNode{Label: "inline", Children: []inline.TreeNode{
+			{Label: "renderer.go", Detail: "normal-screen lifecycle"},
+			{Label: "table.go", Detail: "renderer-native table"},
+			{Label: "tree.go", Detail: "renderer-native hierarchy"},
+		}},
+		inline.TreeNode{Label: "go.mod", Detail: "module definition"},
+	).SetTheme(options.theme)
+	return renderer.Render(tree.Frame(options.width))
+}
+
+func runTableDemo(_ context.Context, renderer *inline.Renderer, options demoOptions) error {
+	table := inline.NewTable("Release targets",
+		inline.TableColumn{Header: "Target", MinWidth: 6},
+		inline.TableColumn{Header: "Artifact"},
+		inline.TableColumn{Header: "Size", Align: inline.AlignRight, MinWidth: 5},
+	).SetTheme(options.theme).SetMaxRows(4).SetRows(
+		[]string{"linux/amd64", "dado-linux", "8.4 MB"},
+		[]string{"darwin/arm64", "dado-darwin", "8.1 MB"},
+		[]string{"windows/amd64", "dado.exe", "8.7 MB"},
+		[]string{"linux/arm64", "dado-linux-arm64", "8.2 MB"},
+		[]string{"freebsd/amd64", "dado-freebsd", "8.3 MB"},
+	)
+	return renderer.Render(table.Frame(options.width))
 }
 
 func demoTheme(name string) (inline.InlineTheme, bool) {
