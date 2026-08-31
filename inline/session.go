@@ -104,6 +104,9 @@ func (s *Session) Run(ctx context.Context, form *Form) (result FormResult, runEr
 		}
 	}
 	if form.cancelled {
+		if form.interrupted {
+			return nil, ErrFormInterrupted
+		}
 		return nil, ErrFormCancelled
 	}
 	return form.Result(), nil

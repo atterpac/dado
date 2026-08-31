@@ -11,6 +11,10 @@ import (
 var (
 	// ErrFormCancelled is returned when the user cancels an interactive form.
 	ErrFormCancelled = errors.New("inline: form cancelled")
+	// ErrFormInterrupted is returned when the user requests that the enclosing
+	// interactive application exit instead of navigating back from the form. It
+	// unwraps to ErrFormCancelled so callers can handle all aborted forms alike.
+	ErrFormInterrupted error = formInterruptedError{}
 	// ErrFormHasNoFields is returned when a form has nothing to edit.
 	ErrFormHasNoFields = errors.New("inline: form has no fields")
 	// ErrNilFormField is returned when a form contains a nil field.
@@ -645,17 +649,22 @@ func (f *MultiSelectField) height(focused bool) int {
 
 // Form composes fields, focus traversal, validation, submission, and summary rendering.
 type Form struct {
-	title                string
-	fields               []FormField
-	focus                int
-	submitted, cancelled bool
-	result               FormResult
-	theme                InlineTheme
+	title                             string
+	fields                            []FormField
+	focus                             int
+	submitted, cancelled, interrupted bool
+	quitOnQ                           bool
+	result                            FormResult
+	theme                             InlineTheme
 }
 
 func NewForm(title string) *Form                 { return &Form{title: title, theme: RoundedInlineTheme()} }
 func (f *Form) Add(fields ...FormField) *Form    { f.fields = append(f.fields, fields...); return f }
 func (f *Form) SetTheme(theme InlineTheme) *Form { f.theme = normalizedInlineTheme(theme); return f }
+
+// QuitOnQ makes q interrupt the form when the focused field is not accepting
+// text. Text fields and filterable selects continue to receive q as input.
+func (f *Form) QuitOnQ(enabled bool) *Form { f.quitOnQ = enabled; return f }
 
 func (f *Form) validateStructure() error {
 	if len(f.fields) == 0 {
@@ -706,9 +715,19 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 		return
 	}
 	switch event.Key() {
-	case tcell.KeyEscape, tcell.KeyCtrlC:
+	case tcell.KeyCtrlC:
+		f.cancelled = true
+		f.interrupted = true
+		return
+	case tcell.KeyEscape:
 		f.cancelled = true
 		return
+	case tcell.KeyRune:
+		if f.quitOnQ && event.Rune() == 'q' && !formFieldAcceptsText(f.fields[f.focus]) {
+			f.cancelled = true
+			f.interrupted = true
+			return
+		}
 	case tcell.KeyTab:
 		f.focus = (f.focus + 1) % len(f.fields)
 		return
@@ -727,6 +746,17 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 		return
 	}
 	f.fields[f.focus].handle(event)
+}
+
+func formFieldAcceptsText(field FormField) bool {
+	switch typed := field.(type) {
+	case *TextField:
+		return true
+	case *SelectField:
+		return typed.filterable
+	default:
+		return false
+	}
 }
 func (f *Form) submit() {
 	for index, field := range f.fields {

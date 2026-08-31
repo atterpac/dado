@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,14 +34,36 @@ func TestSessionRunsFormFromKeyStream(t *testing.T) {
 	assert.Contains(t, output.String(), "demo")
 }
 
-func TestSessionCancellation(t *testing.T) {
+func TestSessionInterruption(t *testing.T) {
 	t.Parallel()
 	form := NewForm("Cancel").Add(NewTextField("name", "Name"))
 	var output bytes.Buffer
 	renderer := NewRenderer(WithOutput(&output), WithTerminalOutput(false))
 	session := NewSession(renderer, WithSessionInput(bytes.NewReader([]byte{3})), WithSessionWidth(30))
 	_, err := session.Run(context.Background(), form)
+	assert.ErrorIs(t, err, ErrFormInterrupted)
 	assert.ErrorIs(t, err, ErrFormCancelled)
+}
+
+func TestSessionEscapeCancels(t *testing.T) {
+	t.Parallel()
+	form := NewForm("Cancel").Add(NewTextField("name", "Name"))
+	renderer := NewRenderer(WithOutput(io.Discard), WithTerminalOutput(false))
+	_, err := NewSession(renderer, WithSessionInput(bytes.NewBufferString("\x1b")), WithSessionWidth(30)).Run(context.Background(), form)
+	assert.ErrorIs(t, err, ErrFormCancelled)
+}
+
+func TestFormQuitOnQPreservesTextInput(t *testing.T) {
+	t.Parallel()
+	menu := NewForm("Menu").QuitOnQ(true).Add(NewSelectField("choice", "Choice", NewChoice("one", "One")))
+	menu.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone))
+	assert.True(t, menu.interrupted)
+
+	text := NewTextField("name", "Name")
+	form := NewForm("Text").QuitOnQ(true).Add(text)
+	form.HandleKey(tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone))
+	assert.False(t, form.Done())
+	assert.Equal(t, "q", text.Value())
 }
 
 func TestSessionRejectsNilValues(t *testing.T) {
