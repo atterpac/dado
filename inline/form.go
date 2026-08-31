@@ -654,6 +654,8 @@ type Form struct {
 	focus                             int
 	submitted, cancelled, interrupted bool
 	quitOnQ                           bool
+	header                            FrameProvider
+	headerGap                         int
 	result                            FormResult
 	theme                             InlineTheme
 }
@@ -661,6 +663,13 @@ type Form struct {
 func NewForm(title string) *Form                 { return &Form{title: title, theme: RoundedInlineTheme()} }
 func (f *Form) Add(fields ...FormField) *Form    { f.fields = append(f.fields, fields...); return f }
 func (f *Form) SetTheme(theme InlineTheme) *Form { f.theme = normalizedInlineTheme(theme); return f }
+
+// SetHeader renders another inline component above the form. A nil provider
+// removes the header.
+func (f *Form) SetHeader(header FrameProvider) *Form { f.header = header; return f }
+
+// SetHeaderGap controls the blank rows between the header and form.
+func (f *Form) SetHeaderGap(rows int) *Form { f.headerGap = max(rows, 0); return f }
 
 // QuitOnQ makes q interrupt the form when the focused field is not accepting
 // text. Text fields and filterable selects continue to receive q as input.
@@ -772,6 +781,14 @@ func (f *Form) submit() {
 	f.submitted = true
 }
 func (f *Form) Frame(width int) *Frame {
+	body := f.formFrame(width)
+	if f.header == nil {
+		return body
+	}
+	return StackFrames(f.headerGap, f.header.Frame(width), body)
+}
+
+func (f *Form) formFrame(width int) *Frame {
 	if err := f.validateStructure(); err != nil {
 		frame := NewFrame(max(width, 0), 1)
 		drawClipped(frame, 0, 0, err.Error(), width, f.theme.Error)

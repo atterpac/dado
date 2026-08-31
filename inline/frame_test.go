@@ -61,3 +61,18 @@ func TestFrameNegativeDimensionsAreClamped(t *testing.T) {
 	require.Zero(t, w)
 	require.Zero(t, h)
 }
+
+func TestStackFramesPreservesContentAndCursor(t *testing.T) {
+	t.Parallel()
+	top := NewFrame(8, 1)
+	top.DrawString(0, 0, "Steps", tcell.StyleDefault.Bold(true))
+	bottom := NewFrame(6, 1)
+	bottom.DrawString(0, 0, "Field", tcell.StyleDefault)
+	bottom.ShowCursor(3, 0)
+
+	stacked := StackFrames(1, top, bottom)
+	assert.Equal(t, 8, stacked.Width())
+	assert.Equal(t, 3, stacked.Height())
+	assert.Equal(t, []string{"Steps", "", "Field"}, plainFrameLines(stacked))
+	assert.Equal(t, &Cursor{X: 3, Y: 2}, stacked.cursor)
+}

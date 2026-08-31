@@ -248,6 +248,22 @@ func TestFormSubmissionAndSummary(t *testing.T) {
 	assert.Contains(t, plain, "demo")
 }
 
+func TestFormRendersStepperHeader(t *testing.T) {
+	t.Parallel()
+	stepper := NewStepper("Configure", WithStepOrientation(StepHorizontal))
+	require.NoError(t, stepper.Add("source", "Source"))
+	require.NoError(t, stepper.Add("sink", "Sink"))
+	require.NoError(t, stepper.Activate("source"))
+	form := NewForm("Connection").
+		SetHeader(stepper).
+		SetHeaderGap(1).
+		Add(NewTextField("name", "Name"))
+	plain := strings.Join(plainFrameLines(form.Frame(48)), "\n")
+	assert.Contains(t, plain, "Configure")
+	assert.Contains(t, plain, "Source")
+	assert.Contains(t, plain, "Connection")
+}
+
 func TestFormValidationFocusesFirstInvalidField(t *testing.T) {
 	t.Parallel()
 	name := NewTextField("name", "Name").Required()

@@ -26,6 +26,11 @@ type Cursor struct {
 	Y int
 }
 
+// FrameProvider builds a renderer-native frame at a requested width.
+type FrameProvider interface {
+	Frame(width int) *Frame
+}
+
 // NewFrame creates an empty frame. Negative dimensions are treated as zero.
 func NewFrame(width, height int) *Frame {
 	if width < 0 {
@@ -123,4 +128,54 @@ func (f *Frame) HideCursor() { f.cursor = nil }
 
 func (f *Frame) contains(x, y int) bool {
 	return x >= 0 && y >= 0 && x < f.width && y < f.height
+}
+
+// StackFrames composes frames vertically with blank rows between them. The
+// cursor from the last frame that requests one is preserved in the result.
+func StackFrames(gap int, frames ...*Frame) *Frame {
+	gap = max(gap, 0)
+	width, height, count := 0, 0, 0
+	for _, frame := range frames {
+		if frame == nil {
+			continue
+		}
+		width = max(width, frame.Width())
+		height += frame.Height()
+		count++
+	}
+	if count > 1 {
+		height += gap * (count - 1)
+	}
+	result := NewFrame(width, height)
+	offset := 0
+	seen := 0
+	for _, frame := range frames {
+		if frame == nil {
+			continue
+		}
+		if seen > 0 {
+			offset += gap
+		}
+		copyFrame(result, frame, offset)
+		offset += frame.Height()
+		seen++
+	}
+	return result
+}
+
+func copyFrame(target, source *Frame, yOffset int) {
+	for y := 0; y < source.Height(); y++ {
+		for x := 0; x < source.Width(); {
+			text, style, width := source.Cell(x, y)
+			if width < 1 {
+				x++
+				continue
+			}
+			_, _ = target.Put(x, yOffset+y, text, style)
+			x += width
+		}
+	}
+	if source.cursor != nil {
+		target.ShowCursor(source.cursor.X, yOffset+source.cursor.Y)
+	}
 }
