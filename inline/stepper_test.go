@@ -94,7 +94,37 @@ func TestStepperHorizontalFrame(t *testing.T) {
 	assert.Contains(t, lines[1], "✓ PLAN")
 	assert.Contains(t, lines[1], "● APPLY")
 	assert.Contains(t, lines[1], "○ VERIFY")
-	assert.Contains(t, lines[1], "─")
+	assert.Contains(t, lines[1], "Step 2 of 3")
+	assert.NotContains(t, lines[1], "─")
+}
+
+func TestStepperHorizontalFrameUsesCompactWizardHeader(t *testing.T) {
+	t.Parallel()
+
+	stepper := NewStepper("", WithStepOrientation(StepHorizontal))
+	for _, step := range []struct{ id, label string }{
+		{"connector", "Connector"},
+		{"configuration", "Configuration"},
+		{"review", "Review"},
+	} {
+		require.NoError(t, stepper.Add(step.id, step.label))
+	}
+	require.NoError(t, stepper.Activate("connector"))
+
+	line := plainFrameLines(stepper.Frame(64))[0]
+	assert.Equal(t, "● Connector   ○ Configuration   ○ Review             Step 1 of 3", line)
+}
+
+func TestStepperHorizontalCounterTracksFinishedWorkflow(t *testing.T) {
+	t.Parallel()
+
+	stepper := NewStepper("", WithStepOrientation(StepHorizontal))
+	require.NoError(t, stepper.Add("one", "One"))
+	require.NoError(t, stepper.Add("two", "Two"))
+	require.NoError(t, stepper.Complete("one"))
+	require.NoError(t, stepper.Complete("two"))
+
+	assert.Contains(t, plainFrameLines(stepper.Frame(40))[0], "Step 2 of 2")
 }
 
 func TestStepperCustomTheme(t *testing.T) {

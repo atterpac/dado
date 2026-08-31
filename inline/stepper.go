@@ -256,7 +256,7 @@ func (s *Stepper) Frame(width int) *Frame {
 
 	visible, before, after := visibleSteps(steps, maximum)
 	if orientation == StepHorizontal {
-		return horizontalStepperFrame(width, title, visible, before, after, theme)
+		return horizontalStepperFrame(width, title, visible, before, after, currentStep(steps), len(steps), theme)
 	}
 	return verticalStepperFrame(width, title, visible, before, after, showDetails, theme)
 }
@@ -331,6 +331,22 @@ func visibleSteps(steps []StepSnapshot, maximum int) (visible []StepSnapshot, be
 	return steps[start:end], start, len(steps) - end
 }
 
+func currentStep(steps []StepSnapshot) int {
+	if len(steps) == 0 {
+		return 0
+	}
+	current := 1
+	for index, step := range steps {
+		if step.State == StepActive {
+			return index + 1
+		}
+		if step.State != StepPending {
+			current = index + 1
+		}
+	}
+	return current
+}
+
 func verticalStepperFrame(width int, title string, steps []StepSnapshot, before, after int, showDetails bool, theme StatusTheme) *Frame {
 	height := 0
 	if title != "" {
@@ -379,7 +395,7 @@ func verticalStepperFrame(width int, title string, steps []StepSnapshot, before,
 	return frame
 }
 
-func horizontalStepperFrame(width int, title string, steps []StepSnapshot, before, after int, theme StatusTheme) *Frame {
+func horizontalStepperFrame(width int, title string, steps []StepSnapshot, before, after, current, total int, theme StatusTheme) *Frame {
 	height := 1
 	if title != "" {
 		height++
@@ -400,30 +416,94 @@ func horizontalStepperFrame(width int, title string, steps []StepSnapshot, befor
 	if parts == 0 {
 		return frame
 	}
-	separator := " ─ "
-	separatorWidth := displayWidth(separator)
-	partWidth := max((width-separatorWidth*(parts-1))/parts, 1)
-	x := 0
-	drawPart := func(marker, label string, state StepState, style tcell.Style) {
-		if x > 0 {
-			drawClipped(frame, x, y, separator, separatorWidth, tcell.StyleDefault.Dim(true))
-			x += separatorWidth
+
+	contentWidth := width
+	if total > 0 {
+		counter := fmt.Sprintf("Step %d of %d", current, total)
+		counterWidth := displayWidth(counter)
+		// Keep a visual gutter between the stages and the counter. On narrow
+		// frames the stages take precedence over a partially rendered counter.
+		if width >= counterWidth+4 {
+			contentWidth = width - counterWidth - 3
+			drawClipped(frame, width-counterWidth, y, counter, counterWidth, tcell.StyleDefault.Dim(true))
 		}
-		drawClipped(frame, x, y, marker, 1, style)
-		drawClipped(frame, x+2, y, label, max(partWidth-2, 0), stepLabelStyle(state))
-		x += partWidth
 	}
+
+	type horizontalPart struct {
+		marker string
+		label  string
+		state  StepState
+		style  tcell.Style
+	}
+	items := make([]horizontalPart, 0, parts)
 	if before > 0 {
-		drawPart("…", fmt.Sprintf("%d earlier", before), StepPending, tcell.StyleDefault.Dim(true))
+		items = append(items, horizontalPart{"…", fmt.Sprintf("%d earlier", before), StepPending, tcell.StyleDefault.Dim(true)})
 	}
 	for _, step := range steps {
 		marker, style := stepAppearance(step.State, theme)
-		drawPart(marker, step.Label, step.State, style)
+		items = append(items, horizontalPart{marker, step.Label, step.State, style})
 	}
 	if after > 0 {
-		drawPart("…", fmt.Sprintf("%d later", after), StepPending, tcell.StyleDefault.Dim(true))
+		items = append(items, horizontalPart{"…", fmt.Sprintf("%d later", after), StepPending, tcell.StyleDefault.Dim(true)})
+	}
+
+	separatorWidth := horizontalStepGap(contentWidth, len(items))
+	available := max(contentWidth-separatorWidth*(len(items)-1), 0)
+	naturalWidths := make([]int, len(items))
+	for index, item := range items {
+		naturalWidths[index] = 2 + displayWidth(item.label)
+	}
+	partWidths := boundedPartWidths(naturalWidths, available)
+
+	x := 0
+	for index, item := range items {
+		if index > 0 {
+			x += separatorWidth
+		}
+		partWidth := partWidths[index]
+		if partWidth == 0 {
+			continue
+		}
+		drawClipped(frame, x, y, item.marker, 1, item.style)
+		if partWidth > 2 {
+			drawClipped(frame, x+2, y, item.label, partWidth-2, stepLabelStyle(item.state))
+		}
+		x += partWidth
 	}
 	return frame
+}
+
+func horizontalStepGap(width, parts int) int {
+	if parts < 2 {
+		return 0
+	}
+	// Prefer the roomy spacing in a wizard header, but surrender it before
+	// hiding a stage marker on compact terminals.
+	return min(3, max((width-parts)/(parts-1), 0))
+}
+
+func boundedPartWidths(natural []int, available int) []int {
+	widths := make([]int, len(natural))
+	// Grow every part together so long labels cannot crowd later stages out of
+	// the row. Any spare cells remain at the right instead of stretching tabs.
+	for available > 0 {
+		grew := false
+		for index, maximum := range natural {
+			if available == 0 {
+				break
+			}
+			if widths[index] >= maximum {
+				continue
+			}
+			widths[index]++
+			available--
+			grew = true
+		}
+		if !grew {
+			break
+		}
+	}
+	return widths
 }
 
 func stepDetail(step StepSnapshot, visible bool) string {
