@@ -62,6 +62,122 @@ func TestSelectAndMultiSelectFields(t *testing.T) {
 	assert.NoError(t, multi.validate())
 }
 
+func TestSelectUsesNoDefaultIndicators(t *testing.T) {
+	t.Parallel()
+	field := NewSelectField("choice", "Choice", NewChoice("a", "Alpha"), NewChoice("b", "Beta"))
+	plain := strings.Join(plainFrameLines(fieldFrame(field, 36)), "\n")
+	assert.Contains(t, plain, "Alpha")
+	assert.NotContains(t, plain, "◇")
+	assert.NotContains(t, plain, "·")
+	assert.NotContains(t, plain, "✓ Alpha")
+	field.handle(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	plain = strings.Join(plainFrameLines(fieldFrame(field, 36)), "\n")
+	assert.Contains(t, plain, "Alpha")
+	assert.NotContains(t, plain, "✓ Alpha")
+}
+
+func TestSelectChoiceToneUsesSemanticThemeStyle(t *testing.T) {
+	t.Parallel()
+	theme := RoundedInlineTheme()
+	field := NewSelectField("choice", "Choice",
+		NewChoice("create", "+ Create source").WithTone(ChoiceToneSuccess),
+	)
+	frame := NewFrame(36, field.height(true))
+	field.draw(frame, 0, 36, true, theme)
+
+	_, style, _ := frame.Cell(2, 2)
+	foreground, _, _ := style.Decompose()
+	wantForeground, _, _ := theme.Success.Decompose()
+	assert.Equal(t, wantForeground, foreground)
+}
+
+func TestMultiSelectSetSelectedValues(t *testing.T) {
+	t.Parallel()
+	field := NewMultiSelectField("targets", "Targets",
+		NewChoice("linux", "Linux"),
+		NewChoice("darwin", "macOS"),
+	).SetSelectedValues("darwin", "missing")
+	assert.Equal(t, []string{"darwin"}, field.Value())
+	field.SetSelectedValues("linux")
+	assert.Equal(t, []string{"linux"}, field.Value())
+}
+
+func TestFilterableSelectNarrowsAndSelectsChoices(t *testing.T) {
+	t.Parallel()
+	field := NewSelectField("connector", "Connector",
+		Choice{Value: "sample", Label: "Sample"},
+		Choice{Value: "postgres", Label: "PostgreSQL", Description: "Database connector"},
+		Choice{Value: "stdout", Label: "Standard output"},
+	).Filterable(true).Required()
+	for _, value := range "post" {
+		field.handle(tcell.NewEventKey(tcell.KeyRune, value, tcell.ModNone))
+	}
+	assert.Equal(t, []int{1}, field.visibleChoices())
+	field.handle(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	assert.Equal(t, "postgres", field.Value())
+	plain := strings.Join(plainFrameLines(fieldFrame(field, 48)), "\n")
+	assert.Contains(t, plain, "/ post")
+	assert.Contains(t, plain, "PostgreSQL Database connector")
+	assert.NotContains(t, plain, "Sample")
+}
+
+func TestFilterableSelectBackspaceRestoresChoices(t *testing.T) {
+	t.Parallel()
+	field := NewSelectField("connector", "Connector",
+		NewChoice("sample", "Sample"),
+		NewChoice("postgres", "PostgreSQL"),
+	).Filterable(true)
+	for _, value := range "post" {
+		field.handle(tcell.NewEventKey(tcell.KeyRune, value, tcell.ModNone))
+	}
+	for range 4 {
+		field.handle(tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone))
+	}
+	assert.Len(t, field.visibleChoices(), 2)
+	assert.Equal(t, 1, field.cursor)
+}
+
+func TestSelectFieldsSupportVimMovementWithoutCapturingSearchInput(t *testing.T) {
+	t.Parallel()
+	choices := []Choice{NewChoice("a", "Alpha"), NewChoice("b", "Beta"), NewChoice("c", "Gamma")}
+	field := NewSelectField("choice", "Choice", choices...)
+	for _, movement := range []struct {
+		key  rune
+		want int
+	}{{'j', 1}, {'l', 2}, {'k', 1}, {'h', 0}} {
+		field.handle(tcell.NewEventKey(tcell.KeyRune, movement.key, tcell.ModNone))
+		assert.Equal(t, movement.want, field.cursor)
+	}
+
+	filterable := NewSelectField("choice", "Choice", choices...).Filterable(true)
+	for _, key := range "hjkl" {
+		filterable.handle(tcell.NewEventKey(tcell.KeyRune, key, tcell.ModNone))
+	}
+	assert.Equal(t, "hjkl", strings.Join(filterable.query, ""))
+}
+
+func TestMultiSelectSupportsVimMovement(t *testing.T) {
+	t.Parallel()
+	field := NewMultiSelectField("choice", "Choice",
+		NewChoice("a", "Alpha"),
+		NewChoice("b", "Beta"),
+		NewChoice("c", "Gamma"),
+	)
+	for _, movement := range []struct {
+		key  rune
+		want int
+	}{{'j', 1}, {'l', 2}, {'k', 1}, {'h', 0}} {
+		field.handle(tcell.NewEventKey(tcell.KeyRune, movement.key, tcell.ModNone))
+		assert.Equal(t, movement.want, field.cursor)
+	}
+}
+
+func fieldFrame(field *SelectField, width int) *Frame {
+	frame := NewFrame(width, field.height(true))
+	field.draw(frame, 0, width, true, RoundedInlineTheme())
+	return frame
+}
+
 func TestMultiSelectIndicatorPresets(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

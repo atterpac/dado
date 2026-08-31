@@ -37,7 +37,7 @@ func RoundedInlineTheme() InlineTheme {
 		Accent: tcell.StyleDefault.Foreground(accent), Border: tcell.StyleDefault.Foreground(muted), FocusedBorder: tcell.StyleDefault.Foreground(accent).Bold(true),
 		Error: tcell.StyleDefault.Foreground(tcell.NewHexColor(0xfb7185)), Success: tcell.StyleDefault.Foreground(tcell.NewHexColor(0x4ade80)),
 		Borders: BorderSet{"╭", "╮", "╰", "╯", "─", "│"},
-		Glyphs:  FormGlyphs{Focus: "›", Required: "*", Dropdown: "▾", Selected: "◆", Unselected: "◇", Checked: "✓", Unchecked: "○", Disabled: "–", Error: "!", Success: "✓"}, Status: status, FieldGap: 1,
+		Glyphs:  FormGlyphs{Focus: "›", Required: "*", Dropdown: "▾", Checked: "✓", Unchecked: "○", Disabled: "–", Error: "!", Success: "✓"}, Status: status, FieldGap: 1,
 		Tree:  TreeGlyphs{Branch: "├─", Last: "└─", Vertical: "│ ", Space: "  "},
 		Table: TableGlyphs{Top: "┬", Left: "├", Middle: "┼", Right: "┤", Bottom: "┴"},
 	}
@@ -60,7 +60,7 @@ func SquareInlineTheme() InlineTheme {
 func ASCIIInlineTheme() InlineTheme {
 	theme := SquareInlineTheme()
 	theme.Borders = BorderSet{"+", "+", "+", "+", "-", "|"}
-	theme.Glyphs = FormGlyphs{Focus: ">", Required: "*", Dropdown: "v", Selected: "*", Unselected: "o", Checked: "x", Unchecked: ".", Disabled: "-", Error: "!", Success: "+"}
+	theme.Glyphs = FormGlyphs{Focus: ">", Required: "*", Dropdown: "v", Checked: "x", Unchecked: ".", Disabled: "-", Error: "!", Success: "+"}
 	theme.Tree = TreeGlyphs{Branch: "|-", Last: "`-", Vertical: "| ", Space: "  "}
 	theme.Table = TableGlyphs{Top: "+", Left: "+", Middle: "+", Right: "+", Bottom: "+"}
 	theme.Status.PendingMarker = "o"

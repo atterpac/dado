@@ -21,16 +21,51 @@ var (
 	ErrDuplicateField = errors.New("inline: duplicate form field ID")
 )
 
+type formInterruptedError struct{}
+
+func (formInterruptedError) Error() string { return "inline: form interrupted" }
+func (formInterruptedError) Unwrap() error { return ErrFormCancelled }
+
+// ChoiceTone applies a semantic theme color to a choice.
+type ChoiceTone int
+
+const (
+	ChoiceToneDefault ChoiceTone = iota
+	ChoiceToneSuccess
+	ChoiceToneDanger
+	ChoiceToneMuted
+)
+
 // Choice is one selectable value in a SelectField or MultiSelectField.
 type Choice struct {
 	Value       string
 	Label       string
 	Description string
 	Disabled    bool
+	Tone        ChoiceTone
 }
 
 // NewChoice creates an enabled choice.
 func NewChoice(value, label string) Choice { return Choice{Value: value, Label: label} }
+
+// WithTone applies a semantic theme color to the choice.
+func (c Choice) WithTone(tone ChoiceTone) Choice { c.Tone = tone; return c }
+
+func choiceStyle(choice Choice, theme InlineTheme) tcell.Style {
+	if choice.Disabled {
+		return theme.Muted
+	}
+	switch choice.Tone {
+	case ChoiceToneSuccess:
+		return theme.Success
+	case ChoiceToneDanger:
+		return theme.Error
+	case ChoiceToneMuted:
+		return theme.Muted
+	default:
+		return theme.Text
+	}
+}
 
 // FormResult contains typed values keyed by field ID.
 type FormResult map[string]any
@@ -168,12 +203,14 @@ func (f *TextField) height(_ bool) int {
 
 // SelectField chooses one value.
 type SelectField struct {
-	id, label string
-	choices   []Choice
-	cursor    int
-	selected  int
-	required  bool
-	err       error
+	id, label  string
+	choices    []Choice
+	cursor     int
+	selected   int
+	required   bool
+	filterable bool
+	query      []string
+	err        error
 }
 
 func NewSelectField(id, label string, choices ...Choice) *SelectField {
@@ -183,6 +220,17 @@ func NewSelectField(id, label string, choices ...Choice) *SelectField {
 }
 func (f *SelectField) ID() string             { return f.id }
 func (f *SelectField) Required() *SelectField { f.required = true; return f }
+
+// Filterable enables incremental, case-insensitive filtering by choice value,
+// label, and description. Typing updates the query and Backspace removes it.
+func (f *SelectField) Filterable(enabled bool) *SelectField {
+	f.filterable = enabled
+	if !enabled {
+		f.query = nil
+	}
+	f.ensureVisibleCursor()
+	return f
+}
 func (f *SelectField) Value() any {
 	if f.selected < 0 || f.selected >= len(f.choices) {
 		return ""
@@ -196,8 +244,26 @@ func (f *SelectField) handle(event *tcell.EventKey) {
 		f.cursor = f.nextEnabled(f.cursor, -1)
 	case tcell.KeyDown, tcell.KeyRight:
 		f.cursor = f.nextEnabled(f.cursor, 1)
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if f.filterable && len(f.query) > 0 {
+			f.query = f.query[:len(f.query)-1]
+			f.ensureVisibleCursor()
+		}
 	case tcell.KeyRune:
-		if event.Rune() != ' ' {
+		if f.filterable {
+			f.query = append(f.query, string(event.Rune()))
+			f.ensureVisibleCursor()
+			return
+		}
+		switch event.Rune() {
+		case 'h', 'k':
+			f.cursor = f.nextEnabled(f.cursor, -1)
+			return
+		case 'j', 'l':
+			f.cursor = f.nextEnabled(f.cursor, 1)
+			return
+		case ' ':
+		default:
 			return
 		}
 		fallthrough
@@ -208,7 +274,43 @@ func (f *SelectField) handle(event *tcell.EventKey) {
 	}
 }
 func (f *SelectField) nextEnabled(from, direction int) int {
-	return nextEnabledChoice(f.choices, from, direction)
+	visible := f.visibleChoices()
+	if len(visible) == 0 {
+		return -1
+	}
+	position := -1
+	for index, choiceIndex := range visible {
+		if choiceIndex == from {
+			position = index
+			break
+		}
+	}
+	for offset := 1; offset <= len(visible); offset++ {
+		index := (position + direction*offset + len(visible)*2) % len(visible)
+		choiceIndex := visible[index]
+		if !f.choices[choiceIndex].Disabled {
+			return choiceIndex
+		}
+	}
+	return -1
+}
+func (f *SelectField) visibleChoices() []int {
+	query := strings.ToLower(strings.TrimSpace(strings.Join(f.query, "")))
+	visible := make([]int, 0, len(f.choices))
+	for index, choice := range f.choices {
+		if query == "" || strings.Contains(strings.ToLower(choice.Value+" "+choice.Label+" "+choice.Description), query) {
+			visible = append(visible, index)
+		}
+	}
+	return visible
+}
+func (f *SelectField) ensureVisibleCursor() {
+	for _, index := range f.visibleChoices() {
+		if index == f.cursor && !f.choices[index].Disabled {
+			return
+		}
+	}
+	f.cursor = f.nextEnabled(-1, 1)
 }
 func (f *SelectField) validate() error {
 	if f.required && f.selected < 0 {
@@ -221,8 +323,12 @@ func (f *SelectField) validate() error {
 func (f *SelectField) draw(frame *Frame, y, width int, focused bool, theme InlineTheme) int {
 	drawThemedLabel(frame, y, width, f.label, f.required, focused, theme)
 	rows := 1
+	visible := f.visibleChoices()
 	if focused {
-		rows = max(len(f.choices), 1)
+		rows = max(len(visible), 1)
+		if f.filterable {
+			rows++
+		}
 	}
 	borderStyle := theme.Border
 	if focused {
@@ -240,23 +346,37 @@ func (f *SelectField) draw(frame *Frame, y, width int, focused bool, theme Inlin
 		drawClipped(frame, 2, y+2, label, max(width-5, 0), style)
 		drawRight(frame, y+2, max(width-2, 0), theme.Glyphs.Dropdown, theme.Muted)
 	} else {
-		for index, choice := range f.choices {
+		choiceY := y + 2
+		if f.filterable {
+			query := strings.Join(f.query, "")
+			if query == "" {
+				query = "Type to filter…"
+			}
+			drawClipped(frame, 2, choiceY, "/ "+query, max(width-4, 0), theme.Muted)
+			choiceY++
+		}
+		if len(visible) == 0 {
+			drawClipped(frame, 2, choiceY, "No matching options", max(width-4, 0), theme.Muted)
+		}
+		for row, index := range visible {
+			choice := f.choices[index]
 			marker := theme.Glyphs.Unselected
 			if index == f.selected {
 				marker = theme.Glyphs.Selected
 			}
-			style := theme.Text
-			if choice.Disabled {
-				style = theme.Muted
-			}
+			style := choiceStyle(choice, theme)
 			if index == f.cursor {
-				drawClipped(frame, 0, y+2+index, theme.Glyphs.Focus, 1, theme.Accent)
+				drawClipped(frame, 0, choiceY+row, theme.Glyphs.Focus, 1, theme.Accent)
 				style = style.Bold(true)
 			}
-			drawClipped(frame, 2, y+2+index, marker+" "+choice.Label, max(width-4, 0), style)
+			chip := choice.Label
+			if marker != "" {
+				chip = marker + " " + chip
+			}
+			drawClipped(frame, 2, choiceY+row, chip, max(width-4, 0), style)
 			if choice.Description != "" {
-				start := 4 + displayWidth(choice.Label)
-				drawClipped(frame, start, y+2+index, choice.Description, max(width-start-2, 0), theme.Muted)
+				start := 3 + displayWidth(chip)
+				drawClipped(frame, start, choiceY+row, choice.Description, max(width-start-2, 0), theme.Muted)
 			}
 		}
 	}
@@ -276,7 +396,10 @@ func (f *SelectField) summary() string {
 func (f *SelectField) height(focused bool) int {
 	rows := 1
 	if focused {
-		rows = max(len(f.choices), 1)
+		rows = max(len(f.visibleChoices()), 1)
+		if f.filterable {
+			rows++
+		}
 	}
 	height := rows + 3
 	if f.err != nil {
@@ -327,6 +450,22 @@ func (f *MultiSelectField) MaxSelected(value int) *MultiSelectField {
 	return f
 }
 
+// SetSelectedValues replaces the current selection with choices matching the
+// supplied values. Unknown values are ignored.
+func (f *MultiSelectField) SetSelectedValues(values ...string) *MultiSelectField {
+	wanted := make(map[string]bool, len(values))
+	for _, value := range values {
+		wanted[value] = true
+	}
+	f.selected = make(map[int]bool)
+	for index, choice := range f.choices {
+		if wanted[choice.Value] {
+			f.selected[index] = true
+		}
+	}
+	return f
+}
+
 // SetIndicator selects a built-in marker preset.
 func (f *MultiSelectField) SetIndicator(indicator MultiSelectIndicator) *MultiSelectField {
 	f.indicator = indicator
@@ -372,7 +511,15 @@ func (f *MultiSelectField) handle(event *tcell.EventKey) {
 	case tcell.KeyDown, tcell.KeyRight:
 		f.cursor = f.nextEnabled(f.cursor, 1)
 	case tcell.KeyRune:
-		if event.Rune() == ' ' && f.cursor >= 0 {
+		switch event.Rune() {
+		case 'h', 'k':
+			f.cursor = f.nextEnabled(f.cursor, -1)
+		case 'j', 'l':
+			f.cursor = f.nextEnabled(f.cursor, 1)
+		case ' ':
+			if f.cursor < 0 {
+				return
+			}
 			if f.selected[f.cursor] {
 				delete(f.selected, f.cursor)
 			} else if f.maximum == 0 || len(f.selected) < f.maximum {
@@ -417,11 +564,9 @@ func (f *MultiSelectField) draw(frame *Frame, y, width int, focused bool, theme 
 		for index, choice := range f.choices {
 			selected := f.selected[index]
 			marker := f.indicatorMarker(selected, choice.Disabled, theme)
-			style := theme.Text
-			if choice.Disabled {
-				style = theme.Muted
-			} else if f.indicator == IndicatorNone && selected {
-				style = theme.Accent.Reverse(true)
+			style := choiceStyle(choice, theme)
+			if !choice.Disabled && f.indicator == IndicatorNone && selected {
+				style = style.Reverse(true)
 			}
 			if index == f.cursor {
 				drawClipped(frame, 0, y+2+index, theme.Glyphs.Focus, 1, theme.Accent)
