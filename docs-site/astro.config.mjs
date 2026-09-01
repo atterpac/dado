@@ -38,6 +38,7 @@ export default defineConfig({
 						{ label: 'Introduction', slug: 'guides/introduction' },
 						{ label: 'Installation', slug: 'guides/installation' },
 						{ label: 'Quick Start', slug: 'guides/quick-start' },
+						{ label: 'Inline Rendering', slug: 'guides/inline-rendering' },
 					],
 				},
 				{

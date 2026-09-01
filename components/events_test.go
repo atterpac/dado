@@ -422,6 +422,27 @@ func TestMultiSelect_ChangeOnToggle(t *testing.T) {
 	assert.Equal(t, "a", events[0].NewValue[0].Value)
 }
 
+func TestSelectAndMultiSelectSupportHJKLMovement(t *testing.T) {
+	t.Parallel()
+	selectField := NewSelect("select").SetOptions([]string{"a", "b", "c"}).SetDefault("a").SetExpanded(true)
+	for _, movement := range []struct {
+		key  rune
+		want int
+	}{{'j', 1}, {'l', 2}, {'k', 1}, {'h', 0}} {
+		selectField.HandleKey(tcell.NewEventKey(tcell.KeyRune, movement.key, tcell.ModNone))
+		assert.Equal(t, movement.want, selectField.selected)
+	}
+
+	multi := NewMultiSelect("multi").SetOptions([]string{"a", "b", "c"})
+	for _, movement := range []struct {
+		key  rune
+		want int
+	}{{'j', 1}, {'l', 2}, {'k', 1}, {'h', 0}} {
+		multi.HandleKey(tcell.NewEventKey(tcell.KeyRune, movement.key, tcell.ModNone))
+		assert.Equal(t, movement.want, multi.cursor)
+	}
+}
+
 // TestEventOrdering tests that events are received in order.
 func TestEventOrdering(t *testing.T) {
 	field := NewTextField("test")

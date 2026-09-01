@@ -314,12 +314,12 @@ func (s *Select) HandleKey(ev *tcell.EventKey) bool {
 			return true
 		}
 		switch ev.Rune() {
-		case 'j':
+		case 'j', 'l':
 			if s.expanded && s.selected < len(s.options)-1 {
 				s.selected++
 			}
 			return true
-		case 'k':
+		case 'k', 'h':
 			if s.expanded && s.selected > 0 {
 				s.selected--
 			}
@@ -695,12 +695,12 @@ func (m *MultiSelect) HandleKey(ev *tcell.EventKey) bool {
 			m.selected[m.cursor] = !m.selected[m.cursor]
 			m.emitChange(oldSelected, m.SelectedOptions())
 			return true
-		case 'j':
+		case 'j', 'l':
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
 			return true
-		case 'k':
+		case 'k', 'h':
 			if m.cursor > 0 {
 				m.cursor--
 			}

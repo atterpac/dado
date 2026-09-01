@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	ui "github.com/atterpac/dado/inline"
+	"github.com/gdamore/tcell/v2"
 )
 
 // Run is the main entry point for the CLI.
@@ -22,10 +22,10 @@ func Run() {
 	case "help", "-h", "--help":
 		PrintUsage()
 	case "version", "-v", "--version":
-		ui.PrintVersion()
+		lines := append(logoLines(), line(styled("  v"+cliVersion, cliMuted)), blank())
+		renderCLILines(lines)
 	default:
-		ui.PrintError(fmt.Sprintf("Unknown command: %s", os.Args[1]))
-		fmt.Println()
+		renderCLILines([]cliLine{errorLine(fmt.Sprintf("Unknown command: %s", os.Args[1])), blank()})
 		PrintUsage()
 		os.Exit(1)
 	}
@@ -33,23 +33,17 @@ func Run() {
 
 // PrintUsage prints the main help message.
 func PrintUsage() {
-	ui.PrintLogo()
-	fmt.Printf("  %s%sTUI application scaffolding tool%s\n\n", ui.Dim, ui.White, ui.Reset)
-
-	fmt.Printf("  %s%sUSAGE%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	fmt.Printf("    %sdado%s <command> [arguments]\n\n", ui.Cyan, ui.Reset)
-
-	fmt.Printf("  %s%sCOMMANDS%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	ui.PrintCommand("theme", "list|preview", "Manage themes")
-	ui.PrintCommand("component", "list", "Browse available components")
-	ui.PrintCommand("help", "", "Show this help message")
-	ui.PrintCommand("version", "", "Show version")
-	fmt.Println()
-
-	fmt.Printf("  %s%sEXAMPLES%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	fmt.Printf("    %s$%s dado theme preview nord\n", ui.Dim, ui.Reset)
-	fmt.Println()
-
-	fmt.Printf("  %s%sLEARN MORE%s\n", ui.Bold, ui.BrightWhite, ui.Reset)
-	fmt.Printf("    %shttps://github.com/atterpac/dado%s\n\n", ui.Underline+ui.Blue, ui.Reset)
+	lines := append(logoLines(),
+		line(styled("  TUI application scaffolding tool", cliMuted)), blank(),
+		sectionLine("USAGE"), line(styled("    dado", cliAccent), text(" <command> [arguments]")), blank(),
+		sectionLine("COMMANDS"),
+		commandLine("theme", "list|preview", "Manage themes"),
+		commandLine("component", "list", "Browse available components"),
+		commandLine("help", "", "Show this help message"),
+		commandLine("version", "", "Show version"), blank(),
+		sectionLine("EXAMPLES"), line(styled("    $", cliMuted), text(" dado theme preview nord")), blank(),
+		sectionLine("LEARN MORE"),
+		line(styled("    https://github.com/atterpac/dado", tcell.StyleDefault.Foreground(tcell.ColorBlue).Underline(true))), blank(),
+	)
+	renderCLILines(lines)
 }
