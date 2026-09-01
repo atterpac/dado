@@ -652,6 +652,7 @@ type Form struct {
 	title                             string
 	fields                            []FormField
 	focus                             int
+	focusChanged                      func(int, FormField)
 	submitted, cancelled, interrupted bool
 	quitOnQ                           bool
 	header                            FrameProvider
@@ -660,8 +661,15 @@ type Form struct {
 	theme                             InlineTheme
 }
 
-func NewForm(title string) *Form                 { return &Form{title: title, theme: RoundedInlineTheme()} }
-func (f *Form) Add(fields ...FormField) *Form    { f.fields = append(f.fields, fields...); return f }
+func NewForm(title string) *Form { return &Form{title: title, theme: RoundedInlineTheme()} }
+func (f *Form) Add(fields ...FormField) *Form {
+	wasEmpty := len(f.fields) == 0
+	f.fields = append(f.fields, fields...)
+	if wasEmpty {
+		f.notifyFocusChange()
+	}
+	return f
+}
 func (f *Form) SetTheme(theme InlineTheme) *Form { f.theme = normalizedInlineTheme(theme); return f }
 
 // SetHeader renders another inline component above the form. A nil provider
@@ -670,6 +678,14 @@ func (f *Form) SetHeader(header FrameProvider) *Form { f.header = header; return
 
 // SetHeaderGap controls the blank rows between the header and form.
 func (f *Form) SetHeaderGap(rows int) *Form { f.headerGap = max(rows, 0); return f }
+
+// OnFocusChange calls callback with the newly focused field. The current field
+// is reported immediately when callback is set on a non-empty form.
+func (f *Form) OnFocusChange(callback func(int, FormField)) *Form {
+	f.focusChanged = callback
+	f.notifyFocusChange()
+	return f
+}
 
 // QuitOnQ makes q interrupt the form when the focused field is not accepting
 // text. Text fields and filterable selects continue to receive q as input.
@@ -738,23 +754,38 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 			return
 		}
 	case tcell.KeyTab:
-		f.focus = (f.focus + 1) % len(f.fields)
+		f.setFocus((f.focus + 1) % len(f.fields))
 		return
 	case tcell.KeyBacktab:
-		f.focus = (f.focus - 1 + len(f.fields)) % len(f.fields)
+		f.setFocus((f.focus - 1 + len(f.fields)) % len(f.fields))
 		return
 	case tcell.KeyEnter:
 		if _, selectField := f.fields[f.focus].(*SelectField); selectField {
 			f.fields[f.focus].handle(event)
 		}
 		if f.focus < len(f.fields)-1 {
-			f.focus++
+			f.setFocus(f.focus + 1)
 			return
 		}
 		f.submit()
 		return
 	}
 	f.fields[f.focus].handle(event)
+}
+
+func (f *Form) setFocus(index int) {
+	if index == f.focus {
+		return
+	}
+	f.focus = index
+	f.notifyFocusChange()
+}
+
+func (f *Form) notifyFocusChange() {
+	if f.focusChanged == nil || f.focus < 0 || f.focus >= len(f.fields) || nilFormField(f.fields[f.focus]) {
+		return
+	}
+	f.focusChanged(f.focus, f.fields[f.focus])
 }
 
 func formFieldAcceptsText(field FormField) bool {
@@ -770,7 +801,7 @@ func formFieldAcceptsText(field FormField) bool {
 func (f *Form) submit() {
 	for index, field := range f.fields {
 		if field.validate() != nil {
-			f.focus = index
+			f.setFocus(index)
 			return
 		}
 	}

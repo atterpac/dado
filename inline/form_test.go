@@ -264,6 +264,25 @@ func TestFormRendersStepperHeader(t *testing.T) {
 	assert.Contains(t, plain, "Connection")
 }
 
+func TestFormReportsFocusChanges(t *testing.T) {
+	t.Parallel()
+	form := NewForm("Focus").Add(
+		NewTextField("one", "One"),
+		NewTextField("two", "Two"),
+		NewTextField("three", "Three"),
+	)
+	var focused []string
+	form.OnFocusChange(func(_ int, field FormField) {
+		focused = append(focused, field.ID())
+	})
+
+	form.HandleKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	form.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	form.HandleKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModShift))
+
+	assert.Equal(t, []string{"one", "two", "three", "two"}, focused)
+}
+
 func TestFormValidationFocusesFirstInvalidField(t *testing.T) {
 	t.Parallel()
 	name := NewTextField("name", "Name").Required()

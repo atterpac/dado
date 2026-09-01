@@ -194,11 +194,43 @@ func runMultiSelectDemo(ctx context.Context, renderer *inline.Renderer, options 
 }
 
 func runFormDemo(ctx context.Context, renderer *inline.Renderer, options demoOptions) error {
-	form := inline.NewForm("Create release").SetTheme(options.theme).Add(
-		inline.NewTextField("name", "Release name").Required().SetPlaceholder("v1.0.0"),
-		inline.NewSelectField("channel", "Channel", inline.NewChoice("stable", "Stable"), inline.NewChoice("preview", "Preview")).Required(),
-		inline.NewMultiSelectField("targets", "Targets", inline.NewChoice("linux", "Linux"), inline.NewChoice("darwin", "macOS"), inline.NewChoice("windows", "Windows")).MinSelected(1).SetIndicator(options.indicator),
+	stepper := inline.NewStepper(
+		"",
+		inline.WithStepOrientation(inline.StepHorizontal),
+		inline.WithStepperTheme(options.theme.Status),
 	)
+	steps := []struct{ id, label string }{
+		{"details", "Details"},
+		{"configuration", "Configuration"},
+		{"review", "Review"},
+	}
+	for _, step := range steps {
+		if err := stepper.Add(step.id, step.label); err != nil {
+			return err
+		}
+	}
+	activeStep := -1
+	form := inline.NewForm("Create release").
+		SetTheme(options.theme).
+		SetHeader(stepper).
+		SetHeaderGap(1).
+		Add(
+			inline.NewTextField("name", "Release name").Required().SetPlaceholder("v1.0.0"),
+			inline.NewSelectField("channel", "Channel", inline.NewChoice("stable", "Stable"), inline.NewChoice("preview", "Preview")).Required(),
+			inline.NewMultiSelectField("targets", "Targets", inline.NewChoice("linux", "Linux"), inline.NewChoice("darwin", "macOS"), inline.NewChoice("windows", "Windows")).MinSelected(1).SetIndicator(options.indicator),
+		).
+		OnFocusChange(func(index int, _ inline.FormField) {
+			if index < activeStep {
+				for reset := len(steps) - 1; reset > index; reset-- {
+					_ = stepper.Activate(steps[reset].id)
+				}
+			}
+			if activeStep >= 0 && index == activeStep+1 {
+				_ = stepper.Complete(steps[activeStep].id)
+			}
+			_ = stepper.Activate(steps[index].id)
+			activeStep = index
+		})
 	return runFormSession(ctx, renderer, options, form, "v1.0.0\r\x1b[B\r \x1b[B \r")
 }
 
