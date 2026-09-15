@@ -15,6 +15,9 @@ var (
 	// interactive application exit instead of navigating back from the form. It
 	// unwraps to ErrFormCancelled so callers can handle all aborted forms alike.
 	ErrFormInterrupted error = formInterruptedError{}
+	// ErrFormPrevious is returned when boundary navigation is enabled and the
+	// user presses Shift+Tab on the first field.
+	ErrFormPrevious = errors.New("inline: navigate to previous form")
 	// ErrFormHasNoFields is returned when a form has nothing to edit.
 	ErrFormHasNoFields = errors.New("inline: form has no fields")
 	// ErrNilFormField is returned when a form contains a nil field.
@@ -71,8 +74,86 @@ func choiceStyle(choice Choice, theme InlineTheme) tcell.Style {
 	}
 }
 
+// choiceViewport keeps a cursor-positioned window over a list of choices. The
+// positions passed to it are relative to the current list, which lets Select
+// reuse it after filtering while MultiSelect uses choice indices directly.
+type choiceViewport struct {
+	maximum int
+	offset  int
+}
+
+func (v *choiceViewport) setMaximum(maximum, cursorPosition, total int) {
+	v.maximum = max(maximum, 0)
+	v.keepVisible(cursorPosition, total)
+}
+
+func (v *choiceViewport) keepVisible(cursorPosition, total int) {
+	if v.maximum <= 0 || total <= v.maximum {
+		v.offset = 0
+		return
+	}
+	limit := min(v.maximum, total)
+	v.offset = min(max(v.offset, 0), total-limit)
+	if cursorPosition < 0 || cursorPosition >= total {
+		return
+	}
+	if cursorPosition < v.offset {
+		v.offset = cursorPosition
+	} else if cursorPosition >= v.offset+limit {
+		v.offset = cursorPosition - limit + 1
+	}
+}
+
+func (v *choiceViewport) bounds(total int) (start, end int, clipped bool) {
+	if total <= 0 {
+		v.offset = 0
+		return 0, 0, false
+	}
+	if v.maximum <= 0 || total <= v.maximum {
+		v.offset = 0
+		return 0, total, false
+	}
+	limit := min(v.maximum, total)
+	v.offset = min(max(v.offset, 0), total-limit)
+	return v.offset, v.offset + limit, true
+}
+
+func (v *choiceViewport) layout(total int) (start, end, rows int, clipped bool) {
+	start, end, clipped = v.bounds(total)
+	rows = max(end-start, 1)
+	if clipped {
+		rows++
+	}
+	return
+}
+
+func choicePosition(indices []int, choiceIndex int) int {
+	for position, index := range indices {
+		if index == choiceIndex {
+			return position
+		}
+	}
+	return -1
+}
+
+func choiceRange(start, end, total int) string {
+	return fmt.Sprintf("%d–%d of %d", start+1, end, total)
+}
+
+func drawChoiceRange(frame *Frame, y, width int, text string, style tcell.Style) {
+	available := max(width-4, 0)
+	x := max(2, width-2-displayWidth(text))
+	drawClipped(frame, x, y, text, min(displayWidth(text), available), style)
+}
+
 // FormResult contains typed values keyed by field ID.
 type FormResult map[string]any
+
+// FormKeyHint describes one key and action in a Form footer.
+type FormKeyHint struct {
+	Key   string
+	Label string
+}
 
 // FormField is a field that can participate in a Form. The private methods
 // intentionally keep the first version of the field contract closed.
@@ -211,6 +292,7 @@ type SelectField struct {
 	choices    []Choice
 	cursor     int
 	selected   int
+	viewport   choiceViewport
 	required   bool
 	filterable bool
 	query      []string
@@ -224,6 +306,14 @@ func NewSelectField(id, label string, choices ...Choice) *SelectField {
 }
 func (f *SelectField) ID() string             { return f.id }
 func (f *SelectField) Required() *SelectField { f.required = true; return f }
+
+// MaxVisibleChoices bounds the number of choices rendered while the field is
+// focused. Values less than one retain the unbounded behavior.
+func (f *SelectField) MaxVisibleChoices(maximum int) *SelectField {
+	visible := f.visibleChoices()
+	f.viewport.setMaximum(maximum, choicePosition(visible, f.cursor), len(visible))
+	return f
+}
 
 // Filterable enables incremental, case-insensitive filtering by choice value,
 // label, and description. Typing updates the query and Backspace removes it.
@@ -246,8 +336,10 @@ func (f *SelectField) handle(event *tcell.EventKey) {
 	switch event.Key() {
 	case tcell.KeyUp, tcell.KeyLeft:
 		f.cursor = f.nextEnabled(f.cursor, -1)
+		f.keepCursorVisible()
 	case tcell.KeyDown, tcell.KeyRight:
 		f.cursor = f.nextEnabled(f.cursor, 1)
+		f.keepCursorVisible()
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		if f.filterable && len(f.query) > 0 {
 			f.query = f.query[:len(f.query)-1]
@@ -262,9 +354,11 @@ func (f *SelectField) handle(event *tcell.EventKey) {
 		switch event.Rune() {
 		case 'h', 'k':
 			f.cursor = f.nextEnabled(f.cursor, -1)
+			f.keepCursorVisible()
 			return
 		case 'j', 'l':
 			f.cursor = f.nextEnabled(f.cursor, 1)
+			f.keepCursorVisible()
 			return
 		case ' ':
 		default:
@@ -309,12 +403,19 @@ func (f *SelectField) visibleChoices() []int {
 	return visible
 }
 func (f *SelectField) ensureVisibleCursor() {
-	for _, index := range f.visibleChoices() {
+	visible := f.visibleChoices()
+	for position, index := range visible {
 		if index == f.cursor && !f.choices[index].Disabled {
+			f.viewport.keepVisible(position, len(visible))
 			return
 		}
 	}
 	f.cursor = f.nextEnabled(-1, 1)
+	f.viewport.keepVisible(choicePosition(visible, f.cursor), len(visible))
+}
+func (f *SelectField) keepCursorVisible() {
+	visible := f.visibleChoices()
+	f.viewport.keepVisible(choicePosition(visible, f.cursor), len(visible))
 }
 func (f *SelectField) validate() error {
 	if f.required && f.selected < 0 {
@@ -328,8 +429,10 @@ func (f *SelectField) draw(frame *Frame, y, width int, focused bool, theme Inlin
 	drawThemedLabel(frame, y, width, f.label, f.required, focused, theme)
 	rows := 1
 	visible := f.visibleChoices()
+	start, end, clipped := 0, len(visible), false
 	if focused {
-		rows = max(len(visible), 1)
+		f.keepCursorVisible()
+		start, end, rows, clipped = f.viewport.layout(len(visible))
 		if f.filterable {
 			rows++
 		}
@@ -362,7 +465,7 @@ func (f *SelectField) draw(frame *Frame, y, width int, focused bool, theme Inlin
 		if len(visible) == 0 {
 			drawClipped(frame, 2, choiceY, "No matching options", max(width-4, 0), theme.Muted)
 		}
-		for row, index := range visible {
+		for row, index := range visible[start:end] {
 			choice := f.choices[index]
 			marker := theme.Glyphs.Unselected
 			if index == f.selected {
@@ -383,6 +486,10 @@ func (f *SelectField) draw(frame *Frame, y, width int, focused bool, theme Inlin
 				drawClipped(frame, start, choiceY+row, choice.Description, max(width-start-2, 0), theme.Muted)
 			}
 		}
+		if clipped {
+			rangeY := choiceY + max(end-start, 1)
+			drawChoiceRange(frame, rangeY, width, choiceRange(start, end, len(visible)), theme.Muted)
+		}
 	}
 	if f.err != nil {
 		drawClipped(frame, 2, y+height, theme.Glyphs.Error+" "+f.err.Error(), max(width-2, 0), theme.Error)
@@ -400,7 +507,8 @@ func (f *SelectField) summary() string {
 func (f *SelectField) height(focused bool) int {
 	rows := 1
 	if focused {
-		rows = max(len(f.visibleChoices()), 1)
+		visible := f.visibleChoices()
+		_, _, rows, _ = f.viewport.layout(len(visible))
 		if f.filterable {
 			rows++
 		}
@@ -433,6 +541,7 @@ type MultiSelectField struct {
 	choices          []Choice
 	cursor           int
 	selected         map[int]bool
+	viewport         choiceViewport
 	minimum, maximum int
 	err              error
 	indicator        MultiSelectIndicator
@@ -451,6 +560,13 @@ func (f *MultiSelectField) MinSelected(value int) *MultiSelectField {
 }
 func (f *MultiSelectField) MaxSelected(value int) *MultiSelectField {
 	f.maximum = max(value, 0)
+	return f
+}
+
+// MaxVisibleChoices bounds the number of choices rendered while the field is
+// focused. Values less than one retain the unbounded behavior.
+func (f *MultiSelectField) MaxVisibleChoices(maximum int) *MultiSelectField {
+	f.viewport.setMaximum(maximum, f.cursor, len(f.choices))
 	return f
 }
 
@@ -512,14 +628,18 @@ func (f *MultiSelectField) handle(event *tcell.EventKey) {
 	switch event.Key() {
 	case tcell.KeyUp, tcell.KeyLeft:
 		f.cursor = f.nextEnabled(f.cursor, -1)
+		f.viewport.keepVisible(f.cursor, len(f.choices))
 	case tcell.KeyDown, tcell.KeyRight:
 		f.cursor = f.nextEnabled(f.cursor, 1)
+		f.viewport.keepVisible(f.cursor, len(f.choices))
 	case tcell.KeyRune:
 		switch event.Rune() {
 		case 'h', 'k':
 			f.cursor = f.nextEnabled(f.cursor, -1)
+			f.viewport.keepVisible(f.cursor, len(f.choices))
 		case 'j', 'l':
 			f.cursor = f.nextEnabled(f.cursor, 1)
+			f.viewport.keepVisible(f.cursor, len(f.choices))
 		case ' ':
 			if f.cursor < 0 {
 				return
@@ -547,8 +667,10 @@ func (f *MultiSelectField) validate() error {
 func (f *MultiSelectField) draw(frame *Frame, y, width int, focused bool, theme InlineTheme) int {
 	drawThemedLabel(frame, y, width, f.label, f.minimum > 0, focused, theme)
 	rows := 1
+	start, end, clipped := 0, len(f.choices), false
 	if focused {
-		rows = max(len(f.choices), 1)
+		f.viewport.keepVisible(f.cursor, len(f.choices))
+		start, end, rows, clipped = f.viewport.layout(len(f.choices))
 	}
 	borderStyle := theme.Border
 	if focused {
@@ -565,7 +687,8 @@ func (f *MultiSelectField) draw(frame *Frame, y, width int, focused bool, theme 
 		}
 		drawClipped(frame, 2, y+2, value, max(width-4, 0), style)
 	} else {
-		for index, choice := range f.choices {
+		for row, choice := range f.choices[start:end] {
+			index := start + row
 			selected := f.selected[index]
 			marker := f.indicatorMarker(selected, choice.Disabled, theme)
 			style := choiceStyle(choice, theme)
@@ -573,14 +696,18 @@ func (f *MultiSelectField) draw(frame *Frame, y, width int, focused bool, theme 
 				style = style.Reverse(true)
 			}
 			if index == f.cursor {
-				drawClipped(frame, 0, y+2+index, theme.Glyphs.Focus, 1, theme.Accent)
+				drawClipped(frame, 0, y+2+row, theme.Glyphs.Focus, 1, theme.Accent)
 				style = style.Bold(true)
 			}
 			chip := choice.Label
 			if marker != "" {
 				chip = marker + " " + chip
 			}
-			drawClipped(frame, 2, y+2+index, chip, max(width-4, 0), style)
+			drawClipped(frame, 2, y+2+row, chip, max(width-4, 0), style)
+		}
+		if clipped {
+			rangeY := y + 2 + max(end-start, 1)
+			drawChoiceRange(frame, rangeY, width, choiceRange(start, end, len(f.choices)), theme.Muted)
 		}
 	}
 	if f.err != nil {
@@ -638,7 +765,7 @@ func (f *MultiSelectField) summary() string {
 func (f *MultiSelectField) height(focused bool) int {
 	rows := 1
 	if focused {
-		rows = max(len(f.choices), 1)
+		_, _, rows, _ = f.viewport.layout(len(f.choices))
 	}
 	height := rows + 3
 	if f.err != nil {
@@ -649,16 +776,17 @@ func (f *MultiSelectField) height(focused bool) int {
 
 // Form composes fields, focus traversal, validation, submission, and summary rendering.
 type Form struct {
-	title                             string
-	fields                            []FormField
-	focus                             int
-	focusChanged                      func(int, FormField)
-	submitted, cancelled, interrupted bool
-	quitOnQ                           bool
-	header                            FrameProvider
-	headerGap                         int
-	result                            FormResult
-	theme                             InlineTheme
+	title                                       string
+	fields                                      []FormField
+	focus                                       int
+	focusChanged                                func(int, FormField)
+	submitted, cancelled, interrupted, previous bool
+	quitOnQ, navigateAtBoundaries               bool
+	keyHintOverride                             []FormKeyHint
+	header                                      FrameProvider
+	headerGap                                   int
+	result                                      FormResult
+	theme                                       InlineTheme
 }
 
 func NewForm(title string) *Form { return &Form{title: title, theme: RoundedInlineTheme()} }
@@ -690,6 +818,21 @@ func (f *Form) OnFocusChange(callback func(int, FormField)) *Form {
 // QuitOnQ makes q interrupt the form when the focused field is not accepting
 // text. Text fields and filterable selects continue to receive q as input.
 func (f *Form) QuitOnQ(enabled bool) *Form { f.quitOnQ = enabled; return f }
+
+// NavigateAtBoundaries makes Tab submit from the last field and Shift+Tab exit
+// from the first field with ErrFormPrevious. Disabled forms retain wrapping
+// Tab navigation.
+func (f *Form) NavigateAtBoundaries(enabled bool) *Form {
+	f.navigateAtBoundaries = enabled
+	return f
+}
+
+// SetKeyHints replaces the contextual footer hints. Calling it with no hints
+// restores the automatically generated hints.
+func (f *Form) SetKeyHints(hints ...FormKeyHint) *Form {
+	f.keyHintOverride = append([]FormKeyHint(nil), hints...)
+	return f
+}
 
 func (f *Form) validateStructure() error {
 	if len(f.fields) == 0 {
@@ -734,9 +877,13 @@ func (f *Form) Result() FormResult {
 	}
 	return result
 }
-func (f *Form) Done() bool { return f.submitted || f.cancelled }
+func (f *Form) Done() bool { return f.submitted || f.cancelled || f.previous }
 func (f *Form) HandleKey(event *tcell.EventKey) {
 	if f.Done() || event == nil || f.validateStructure() != nil {
+		return
+	}
+	if event.Key() == tcell.KeyTab && event.Modifiers()&tcell.ModShift != 0 {
+		f.handlePreviousField()
 		return
 	}
 	switch event.Key() {
@@ -754,15 +901,18 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 			return
 		}
 	case tcell.KeyTab:
+		if f.navigateAtBoundaries && f.focus == len(f.fields)-1 {
+			f.commitFocusedSelect()
+			f.submit()
+			return
+		}
 		f.setFocus((f.focus + 1) % len(f.fields))
 		return
 	case tcell.KeyBacktab:
-		f.setFocus((f.focus - 1 + len(f.fields)) % len(f.fields))
+		f.handlePreviousField()
 		return
 	case tcell.KeyEnter:
-		if _, selectField := f.fields[f.focus].(*SelectField); selectField {
-			f.fields[f.focus].handle(event)
-		}
+		f.commitFocusedSelect()
 		if f.focus < len(f.fields)-1 {
 			f.setFocus(f.focus + 1)
 			return
@@ -771,6 +921,20 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 		return
 	}
 	f.fields[f.focus].handle(event)
+}
+
+func (f *Form) commitFocusedSelect() {
+	if field, ok := f.fields[f.focus].(*SelectField); ok {
+		field.handle(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	}
+}
+
+func (f *Form) handlePreviousField() {
+	if f.navigateAtBoundaries && f.focus == 0 {
+		f.previous = true
+		return
+	}
+	f.setFocus((f.focus - 1 + len(f.fields)) % len(f.fields))
 }
 
 func (f *Form) setFocus(index int) {
@@ -828,6 +992,11 @@ func (f *Form) formFrame(width int) *Frame {
 	if f.submitted {
 		return f.summaryFrame(width)
 	}
+	if f.previous {
+		frame := NewFrame(max(width, 0), 1)
+		drawClipped(frame, 0, 0, "Returning to previous form", width, f.theme.Muted)
+		return frame
+	}
 	if f.cancelled {
 		frame := NewFrame(max(width, 0), 1)
 		drawClipped(frame, 0, 0, "Form cancelled", width, f.theme.Status.CancelledStyle)
@@ -840,7 +1009,9 @@ func (f *Form) formFrame(width int) *Frame {
 	for index, field := range f.fields {
 		height += field.height(index == f.focus) + f.theme.FieldGap
 	}
-	height++
+	hints := f.keyHints()
+	hintRows := keyHintsHeight(width, hints)
+	height += hintRows
 	frame := NewFrame(max(width, 0), height)
 	y := 0
 	if f.title != "" {
@@ -852,7 +1023,7 @@ func (f *Form) formFrame(width int) *Frame {
 		y += field.draw(frame, y, width, index == f.focus, f.theme)
 		y += f.theme.FieldGap
 	}
-	drawKeyHints(frame, height-1, width, f.theme)
+	drawKeyHints(frame, height-hintRows, width, f.theme, hints)
 	return frame
 }
 func (f *Form) summaryFrame(width int) *Frame {
@@ -896,16 +1067,59 @@ func drawBox(frame *Frame, y, width, height int, border BorderSet, style tcell.S
 	drawClipped(frame, 1, y+height-1, strings.Repeat(border.Horizontal, max(width-2, 0)), max(width-2, 0), style)
 }
 
-func drawKeyHints(frame *Frame, y, width int, theme InlineTheme) {
+func (f *Form) keyHints() []FormKeyHint {
+	if len(f.keyHintOverride) > 0 {
+		return append([]FormKeyHint(nil), f.keyHintOverride...)
+	}
+	hints := make([]FormKeyHint, 0, 7)
+	switch f.fields[f.focus].(type) {
+	case *SelectField:
+		hints = append(hints, FormKeyHint{"↑/↓", "Move"})
+	case *MultiSelectField:
+		hints = append(hints, FormKeyHint{"↑/↓", "Move"}, FormKeyHint{"Space", "Toggle"})
+	}
+	if f.navigateAtBoundaries {
+		hints = append(hints, FormKeyHint{"Tab", "Next"}, FormKeyHint{"Shift+Tab", "Previous"})
+	} else if len(f.fields) > 1 {
+		hints = append(hints, FormKeyHint{"Tab", "Next field"}, FormKeyHint{"Shift+Tab", "Previous field"})
+	}
+	if f.focus == len(f.fields)-1 {
+		hints = append(hints, FormKeyHint{"Enter", "Submit"})
+	} else {
+		hints = append(hints, FormKeyHint{"Enter", "Next field"})
+	}
+	hints = append(hints, FormKeyHint{"Esc", "Cancel"})
+	return hints
+}
+
+func keyHintsHeight(width int, hints []FormKeyHint) int {
+	if width <= 0 || len(hints) == 0 {
+		return 0
+	}
+	rows, x := 1, 0
+	for _, hint := range hints {
+		hintWidth := displayWidth("["+hint.Key+"]") + 1 + displayWidth(hint.Label)
+		if x > 0 && x+hintWidth > width {
+			rows++
+			x = 0
+		}
+		x += hintWidth + 2
+	}
+	return rows
+}
+
+func drawKeyHints(frame *Frame, y, width int, theme InlineTheme, hints []FormKeyHint) {
 	x := 0
-	for _, hint := range []struct{ key, label string }{{"Tab", "Next"}, {"Shift+Tab", "Previous"}, {"Enter", "Submit"}, {"Esc", "Cancel"}} {
-		piece := "[" + hint.key + "]"
+	for _, hint := range hints {
+		piece := "[" + hint.Key + "]"
+		hintWidth := displayWidth(piece) + 1 + displayWidth(hint.Label)
+		if x > 0 && x+hintWidth > width {
+			y++
+			x = 0
+		}
 		drawClipped(frame, x, y, piece, max(width-x, 0), theme.Accent.Bold(true))
 		x += displayWidth(piece) + 1
-		drawClipped(frame, x, y, hint.label, max(width-x, 0), theme.Muted)
-		x += displayWidth(hint.label) + 2
-		if x >= width {
-			return
-		}
+		drawClipped(frame, x, y, hint.Label, max(width-x, 0), theme.Muted)
+		x += displayWidth(hint.Label) + 2
 	}
 }

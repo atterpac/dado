@@ -109,6 +109,9 @@ func (s *Session) Run(ctx context.Context, form *Form) (result FormResult, runEr
 		}
 		return nil, ErrFormCancelled
 	}
+	if form.previous {
+		return nil, ErrFormPrevious
+	}
 	return form.Result(), nil
 }
 
