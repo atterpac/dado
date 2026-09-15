@@ -902,6 +902,7 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 		}
 	case tcell.KeyTab:
 		if f.navigateAtBoundaries && f.focus == len(f.fields)-1 {
+			f.commitFocusedSelect()
 			f.submit()
 			return
 		}
@@ -911,9 +912,7 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 		f.handlePreviousField()
 		return
 	case tcell.KeyEnter:
-		if _, selectField := f.fields[f.focus].(*SelectField); selectField {
-			f.fields[f.focus].handle(event)
-		}
+		f.commitFocusedSelect()
 		if f.focus < len(f.fields)-1 {
 			f.setFocus(f.focus + 1)
 			return
@@ -922,6 +921,12 @@ func (f *Form) HandleKey(event *tcell.EventKey) {
 		return
 	}
 	f.fields[f.focus].handle(event)
+}
+
+func (f *Form) commitFocusedSelect() {
+	if field, ok := f.fields[f.focus].(*SelectField); ok {
+		field.handle(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	}
 }
 
 func (f *Form) handlePreviousField() {

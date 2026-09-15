@@ -473,6 +473,25 @@ func TestFormBoundaryTabAdvancesAndSubmits(t *testing.T) {
 	assert.Equal(t, "b", form.Result()["second"])
 }
 
+func TestFormBoundaryTabCommitsHighlightedSelectChoice(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, initial string
+	}{{"unselected", ""}, {"replaces stale selection", "a"}} {
+		t.Run(test.name, func(t *testing.T) {
+			field := NewSelectField("choice", "Choice", NewChoice("a", "Alpha"), NewChoice("b", "Beta")).Required()
+			form := NewForm("Boundary").NavigateAtBoundaries(true).Add(field)
+			if test.initial != "" {
+				form.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+			}
+			form.HandleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+			form.HandleKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+			require.True(t, form.submitted)
+			assert.Equal(t, "b", form.Result()["choice"])
+		})
+	}
+}
+
 func TestFormBoundaryShiftTabSignalsPrevious(t *testing.T) {
 	t.Parallel()
 	form := NewForm("Boundary").NavigateAtBoundaries(true).Add(NewTextField("name", "Name"))
