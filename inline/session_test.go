@@ -53,6 +53,24 @@ func TestSessionEscapeCancels(t *testing.T) {
 	assert.ErrorIs(t, err, ErrFormCancelled)
 }
 
+func TestSessionReturnsPreviousFormSignal(t *testing.T) {
+	t.Parallel()
+	form := NewForm("Previous").NavigateAtBoundaries(true).Add(NewTextField("name", "Name"))
+	renderer := NewRenderer(WithOutput(io.Discard), WithTerminalOutput(false))
+	_, err := NewSession(renderer, WithSessionInput(bytes.NewBufferString("\x1b[Z")), WithSessionWidth(30)).Run(context.Background(), form)
+	assert.ErrorIs(t, err, ErrFormPrevious)
+	assert.NotErrorIs(t, err, ErrFormCancelled)
+}
+
+func TestSessionBoundaryTabSubmits(t *testing.T) {
+	t.Parallel()
+	form := NewForm("Submit").NavigateAtBoundaries(true).Add(NewTextField("name", "Name"))
+	renderer := NewRenderer(WithOutput(io.Discard), WithTerminalOutput(false))
+	result, err := NewSession(renderer, WithSessionInput(bytes.NewBufferString("dado\t")), WithSessionWidth(30)).Run(context.Background(), form)
+	require.NoError(t, err)
+	assert.Equal(t, "dado", result["name"])
+}
+
 func TestFormQuitOnQPreservesTextInput(t *testing.T) {
 	t.Parallel()
 	menu := NewForm("Menu").QuitOnQ(true).Add(NewSelectField("choice", "Choice", NewChoice("one", "One")))
